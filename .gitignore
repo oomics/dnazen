@@ -1,0 +1,16 @@
+.vscode
+
+# pip
+build
+dist
+
+# pixi environments
+.pixi
+*.egg-info
+
+*.so
+
+.venv
+__pycache__
+
+tests/*_test

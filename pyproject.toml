@@ -1,0 +1,40 @@
+[project]
+authors = [{name = "harnvo", email = "120090070@link.cuhk.edu.cn"}]
+dependencies = [ 
+    "transformers[torch]>=4.48.0,<5", 
+    "torch>=2.4", 
+    "deepspeed==0.16",
+    "einops==0.8",
+    "accelerate>=0.26.0", "scikit-learn>=1.6.1,<2",
+]
+description = "Ngram utilities for Large Language Model Pre-training."
+name = "dnazen"
+requires-python = ">= 3.11"
+version = "0.1.0"
+
+[project.optional-dependencies]
+dev = ["pybind11", "pybind11_stubgen", "pytest", "ruff>=0.9.1,<0.10", "matplotlib"]
+
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = [
+    "hatchling", 
+    "setuptools>=42",
+    "pybind11",
+    "cmake",
+]
+
+[system-requirements]
+cuda = ">=11.8"
+
+[tool.pixi.project]
+channels = ["https://prefix.dev/conda-forge"]
+platforms = ["linux-64"]
+
+[tool.pixi.environments]
+dev = ["dev"]
+
+[tool.pixi.dependencies]
+pip = ">=24.3.1,<25"
+matplotlib = "*"
+
