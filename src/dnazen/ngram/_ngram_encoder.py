@@ -40,7 +40,7 @@ class NgramEncoder:
     def _get_ngram_id(self, tokens: tuple[int, ...]) -> int | None:
         return self._vocab.get(tokens, None)
 
-    def encode(self, token_ids: torch.Tensor) -> EncodedNgram:
+    def encode(self, token_ids: torch.Tensor, pad_token_id: int=3) -> EncodedNgram:
         """
         Encode token ids into ngram ids and it's position matrix.
 
@@ -51,15 +51,14 @@ class NgramEncoder:
         assert token_ids.dim() == 1
 
         token_ids_list = token_ids.tolist()
-        # Trim trailing zeros
-        while token_ids_list and token_ids_list[-1] == 0:
-            token_ids_list.pop()
-
         token_len = len(token_ids_list)
+        # Trim trailing pad tokens
+        while token_ids_list and token_ids_list[-1] == pad_token_id:
+            token_ids_list.pop()
 
         _cur_ngram_id_idx = 0  # index to ngram_ids
         ret_val: EncodedNgram = {
-            "ngram_ids": torch.zeros(self._max_ngrams),
+            "ngram_ids": torch.zeros(self._max_ngrams, dtype=torch.int),
             "ngram_position_matrix": torch.zeros(
                 token_len, self._max_ngrams, dtype=torch.bool
             ),

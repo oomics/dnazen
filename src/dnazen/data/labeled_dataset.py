@@ -31,6 +31,7 @@ class LabeledDataset(Dataset):
         ngram_encoder: NgramEncoder | None,
     ):
         super().__init__()
+        PAD: int = tokenizer.convert_tokens_to_ids("[PAD]")
 
         with open(data_path, "r") as f:
             data = list(csv.reader(f))[1:]
@@ -48,7 +49,6 @@ class LabeledDataset(Dataset):
         else:
             raise ValueError("Data format not supported.")
 
-        print("[debug] model max length=", tokenizer.model_max_length)
         outputs = tokenizer(
             texts,
             return_tensors="pt",
@@ -69,7 +69,7 @@ class LabeledDataset(Dataset):
         self.ngram_position_matrix_list: list[torch.Tensor] = []
 
         for i in range(self.input_ids.size(0)):
-            ngram_encoder_outputs = ngram_encoder.encode(self.input_ids[i])
+            ngram_encoder_outputs = ngram_encoder.encode(self.input_ids[i], pad_token_id=PAD)
             self.ngram_id_list.append(ngram_encoder_outputs["ngram_ids"])
             self.ngram_position_matrix_list.append(
                 ngram_encoder_outputs["ngram_position_matrix"]

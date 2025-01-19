@@ -191,7 +191,7 @@ class DnaNgramFinder {
         this->config = config;
     }
 
-    std::unordered_map<Token_t, size_t> &get_words() {
+    std::unordered_map<Token_t, size_t> &get_tokens() {
         return this->token_dict;
     }
     NgramMap_t &get_ngrams() { return this->ngrams; }
@@ -203,7 +203,7 @@ class DnaNgramFinder {
      * before being added to the list.
      *
      * @param ngram_list A reference to a vector of TokenSeq_t where the
-     * n-grams' token sequences will be stored.
+     * n-grams' token sequences will be stored. It SHOULD BE EMPTY.
      *
      * @return List of ngrams. the ngram is a list with the last value being
      * it's frequency. Format: [<id1>, <id2>, ..., <idn>, <freq>]

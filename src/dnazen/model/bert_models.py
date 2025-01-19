@@ -93,9 +93,10 @@ class BertModel(BertPreTrainedModel):
         token_type_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         ngram_attention_mask: Optional[torch.Tensor] = None,
+        ngram_position_matrix: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         output_all_encoded_layers: Optional[bool] = False,
-        masked_tokens_mask: Optional[torch.Tensor] = None,
+        # masked_tokens_mask: Optional[torch.Tensor] = None,
         **kwargs
     ) -> Tuple[Union[List[torch.Tensor], torch.Tensor], Optional[torch.Tensor]]:
         if attention_mask is None:
@@ -107,55 +108,34 @@ class BertModel(BertPreTrainedModel):
 
         embedding_output = self.embeddings(input_ids, token_type_ids, position_ids)
         ngram_embedding_output = self.ngram_embeddings(
-            input_ids,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids
+            ngram_input_ids,
+            # token_type_ids=token_type_ids,
+            # position_ids=position_ids
         )
 
-        subset_mask = []
-        first_col_mask = []
+        # subset_mask = []
+        # first_col_mask = []
 
-        if masked_tokens_mask is None:
-            subset_mask = None
-        else:
-            first_col_mask = torch.zeros_like(masked_tokens_mask)
-            first_col_mask[:, 0] = True
-            subset_mask = masked_tokens_mask | first_col_mask
-
-        encoder_outputs = self.encoder.forward(
+        # if masked_tokens_mask is None:
+        #     subset_mask = None
+        # else:
+        #     first_col_mask = torch.zeros_like(masked_tokens_mask)
+        #     first_col_mask[:, 0] = True
+        #     subset_mask = masked_tokens_mask | first_col_mask
+        encoder_outputs = self.encoder(
             hidden_states=embedding_output,
             ngram_hidden_states=ngram_embedding_output,
             attention_mask=attention_mask,
             ngram_attention_mask=ngram_attention_mask,
+            ngram_position_matrix=ngram_position_matrix,
             output_all_encoded_layers=output_all_encoded_layers,
-            subset_mask=subset_mask,
+            # subset_mask=subset_mask,
         )
-        
-        #     embedding_output,
-        #     attention_mask,
-        #     output_all_encoded_layers=output_all_encoded_layers,
-        #     subset_mask=subset_mask,
-        # )
 
-        if masked_tokens_mask is None:
-            sequence_output = encoder_outputs[-1]
-            pooled_output = (
-                self.pooler(sequence_output) if self.pooler is not None else None
-            )
-        else:
-            # TD [2022-03-01]: the indexing here is very tricky.
-            attention_mask_bool = attention_mask.bool()
-            subset_idx = subset_mask[attention_mask_bool]  # type: ignore
-            sequence_output = encoder_outputs[-1][
-                masked_tokens_mask[attention_mask_bool][subset_idx]
-            ]
-            if self.pooler is not None:
-                pool_input = encoder_outputs[-1][
-                    first_col_mask[attention_mask_bool][subset_idx]
-                ]
-                pooled_output = self.pooler(pool_input, pool=False)
-            else:
-                pooled_output = None
+        sequence_output = encoder_outputs[-1]
+        pooled_output = (
+            self.pooler(sequence_output) if self.pooler is not None else None
+        )
 
         if not output_all_encoded_layers:
             encoder_outputs = sequence_output
@@ -223,8 +203,11 @@ class BertForMaskedLM(BertPreTrainedModel, GenerationMixin):
 
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor,
+        ngram_input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
+        ngram_attention_mask: Optional[torch.Tensor] = None,
+        ngram_position_matrix: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -250,10 +233,10 @@ class BertForMaskedLM(BertPreTrainedModel, GenerationMixin):
         if (input_ids is not None) == (inputs_embeds is not None):
             raise ValueError("Must specify either input_ids or input_embeds!")
 
-        if labels is None:
-            masked_tokens_mask = None
-        else:
-            masked_tokens_mask = labels > 0
+        # if labels is None:
+        #     masked_tokens_mask = None
+        # else:
+        #     masked_tokens_mask = labels > 0
 
         return_dict = (
             return_dict if return_dict is not None else self.config.use_return_dict
@@ -261,7 +244,10 @@ class BertForMaskedLM(BertPreTrainedModel, GenerationMixin):
 
         outputs = self.bert(
             input_ids,
+            ngram_input_ids,
             attention_mask=attention_mask,
+            ngram_attention_mask=ngram_attention_mask,
+            ngram_position_matrix=ngram_position_matrix,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
@@ -271,7 +257,7 @@ class BertForMaskedLM(BertPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            masked_tokens_mask=masked_tokens_mask,
+            # masked_tokens_mask=masked_tokens_mask,
         )
 
         sequence_output = outputs[0]
@@ -281,20 +267,19 @@ class BertForMaskedLM(BertPreTrainedModel, GenerationMixin):
         if labels is not None:
             # Compute loss
             loss_fct = nn.CrossEntropyLoss()
-            masked_token_idx = torch.nonzero(
-                labels.flatten() > 0, as_tuple=False
-            ).flatten()
-            loss = loss_fct(prediction_scores, labels.flatten()[masked_token_idx])
+            
+            labels = torch.where(labels <= 0, torch.tensor(-100).to(labels.device), labels)
+            loss = loss_fct(prediction_scores, labels)
 
-            assert input_ids is not None, "Coding error; please open an issue"
-            batch, seqlen = input_ids.shape[:2]
-            prediction_scores = rearrange(
-                index_put_first_axis(
-                    prediction_scores, masked_token_idx, batch * seqlen
-                ),
-                "(b s) d -> b s d",
-                b=batch,
-            )
+            # assert input_ids is not None, "Coding error; please open an issue"
+            # batch, seqlen = input_ids.shape[:2]
+            # prediction_scores = rearrange(
+            #     index_put_first_axis(
+            #         prediction_scores, masked_token_idx, batch * seqlen
+            #     ),
+            #     "(b s) d -> b s d",
+            #     b=batch,
+            # )
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
@@ -392,6 +377,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
         ngram_input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         ngram_attention_mask: Optional[torch.Tensor] = None,
+        ngram_position_matrix: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -412,11 +398,12 @@ class BertForSequenceClassification(BertPreTrainedModel):
             return_dict if return_dict is not None else self.config.use_return_dict
         )
 
-        outputs = self.bert.forward(
+        outputs = self.bert(
             input_ids,
             ngram_input_ids,
             attention_mask=attention_mask,
             ngram_attention_mask=ngram_attention_mask,
+            ngram_position_matrix=ngram_position_matrix,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
