@@ -26,11 +26,18 @@ class MlmDataset(Dataset):
         self,
         data_path: str,
         tokenizer: PreTrainedTokenizer,
-        ngram_encoder: NgramEncoder | None,
+        ngram_encoder: NgramEncoder,
         mlm_prob: float = 0.15,
     ):
         super().__init__()
         PAD: int = tokenizer.convert_tokens_to_ids("[PAD]")
+        CLS = tokenizer.convert_tokens_to_ids("[CLS]")
+        SEP = tokenizer.convert_tokens_to_ids("[SEP]")
+        MASK= tokenizer.convert_tokens_to_ids("[MASK]")
+
+        # meta-data
+        self.ngram_vocab_size = ngram_encoder.get_vocab_size()
+        self.max_num_ngrams = ngram_encoder._max_ngrams
 
         with open(data_path, "r") as f:
             texts = f.readlines()
@@ -47,9 +54,7 @@ class MlmDataset(Dataset):
         self.input_ids = torch.empty_like(outputs["input_ids"])
         self.labels    = torch.empty_like(outputs["input_ids"])
         
-        CLS = tokenizer.convert_tokens_to_ids("[CLS]")
-        SEP = tokenizer.convert_tokens_to_ids("[SEP]")
-        MASK= tokenizer.convert_tokens_to_ids("[MASK]")
+
         vocab_list=list(
             tokenizer
             .get_vocab()
@@ -91,6 +96,8 @@ class MlmDataset(Dataset):
         path: str
     ):
         torch.save({
+            "ngram_vocab_size": self.ngram_vocab_size,
+            "max_num_ngrams": self.max_num_ngrams,
             'num_classes': self.num_classes,
             'input_ids': self.input_ids,
             'labels': self.labels,
@@ -98,6 +105,24 @@ class MlmDataset(Dataset):
             'ngram_id_list': self.ngram_id_list,
             'ngram_position_matrix_list': self.ngram_position_matrix_list
         }, path)
+
+    @classmethod
+    def from_file(
+        cls,
+        path: str,
+    ):
+        data = torch.load(path)
+        dataset = cls.__new__(cls)
+        dataset.max_num_ngrams = data['max_num_ngrams']
+        dataset.ngram_vocab_size = data['ngram_vocab_size']
+        
+        dataset.num_classes = data['num_classes']
+        dataset.input_ids = data['input_ids']
+        dataset.labels = data['labels']
+        dataset.attention_mask = data['attention_mask']
+        dataset.ngram_id_list = data['ngram_id_list']
+        dataset.ngram_position_matrix_list = data['ngram_position_matrix_list']
+        return dataset
         
     def __len__(self):
         return self.input_ids.size(0)
@@ -112,21 +137,6 @@ class MlmDataset(Dataset):
             "ngram_position_matrix": self.ngram_position_matrix_list[index],
         }
     
-    @classmethod
-    def from_file(
-        cls,
-        path: str,
-    ):
-        data = torch.load(path)
-        dataset = cls.__new__(cls)
-        dataset.num_classes = data['num_classes']
-        dataset.input_ids = data['input_ids']
-        dataset.labels = data['labels']
-        dataset.attention_mask = data['attention_mask']
-        dataset.ngram_id_list = data['ngram_id_list']
-        dataset.ngram_position_matrix_list = data['ngram_position_matrix_list']
-        return dataset
-
     @staticmethod
     def _create_mlm_predictions(
         token_seq: torch.Tensor,
