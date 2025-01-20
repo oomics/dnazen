@@ -106,7 +106,7 @@ class MlmDataset(Dataset):
         return {
             "input_ids": self.input_ids[index],
             # "labels": self.labels[index],
-            "labels": F.one_hot(self.labels[index], num_classes=self.num_classes).to(dtype=torch.float),
+            "labels": self.labels[index],
             "attention_mask": self.attention_mask[index],
             "ngram_input_ids": self.ngram_id_list[index],
             "ngram_position_matrix": self.ngram_position_matrix_list[index],

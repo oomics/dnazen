@@ -267,9 +267,10 @@ class BertForMaskedLM(BertPreTrainedModel, GenerationMixin):
         if labels is not None:
             # Compute loss
             loss_fct = nn.CrossEntropyLoss()
+            # # hotfix: make 0 -100
+            # labels = torch.where(labels < 0, -100, labels)
             
-            labels = torch.where(labels <= 0, torch.tensor(-100).to(labels.device), labels)
-            loss = loss_fct(prediction_scores, labels)
+            loss = loss_fct(prediction_scores.reshape(-1, self.config.vocab_size), labels.reshape(-1))
 
             # assert input_ids is not None, "Coding error; please open an issue"
             # batch, seqlen = input_ids.shape[:2]
