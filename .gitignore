@@ -1,6 +1,9 @@
 .vscode
 *cache*
 
+# transforemers
+checkpoint*
+
 # pip
 build
 dist
