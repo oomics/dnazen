@@ -69,7 +69,9 @@ class LabeledDataset(Dataset):
         self.ngram_position_matrix_list: list[torch.Tensor] = []
 
         for i in range(self.input_ids.size(0)):
-            ngram_encoder_outputs = ngram_encoder.encode(self.input_ids[i], pad_token_id=PAD)
+            ngram_encoder_outputs = ngram_encoder.encode(
+                self.input_ids[i], pad_token_id=PAD
+            )
             self.ngram_id_list.append(ngram_encoder_outputs["ngram_ids"])
             self.ngram_position_matrix_list.append(
                 ngram_encoder_outputs["ngram_position_matrix"]

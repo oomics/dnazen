@@ -1,33 +1,25 @@
-import copy
 import logging
-import math
 import warnings
 from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
-from einops import rearrange
 from torch.nn.modules.utils import consume_prefix_in_state_dict_if_present
-from transformers.activations import ACT2FN
 from transformers.modeling_outputs import MaskedLMOutput, SequenceClassifierOutput
 from transformers.models.bert.modeling_bert import BertPreTrainedModel
 from transformers.generation.utils import GenerationMixin
 
-from .bert_padding import (
-    index_first_axis,
-    index_put_first_axis,
-    pad_input,
-    unpad_input,
-    unpad_input_only,
-)
 from .bert_layers import (
     ZenNgramEmbeddings,
-    BertOnlyMLMHead, BertEmbeddings, BertEncoder, BertPooler
+    BertOnlyMLMHead,
+    BertEmbeddings,
+    BertEncoder,
+    BertPooler,
 )
 
 try:
     from .flash_attn_triton import flash_attn_qkvpacked_func
-except ImportError as e:
+except ImportError:
     flash_attn_qkvpacked_func = None
 
 logger = logging.getLogger(__name__)
@@ -97,7 +89,7 @@ class BertModel(BertPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         output_all_encoded_layers: Optional[bool] = False,
         # masked_tokens_mask: Optional[torch.Tensor] = None,
-        **kwargs
+        **kwargs,
     ) -> Tuple[Union[List[torch.Tensor], torch.Tensor], Optional[torch.Tensor]]:
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
@@ -144,7 +136,6 @@ class BertModel(BertPreTrainedModel):
             return encoder_outputs, pooled_output
 
         return encoder_outputs, None
-
 
 
 class BertForMaskedLM(BertPreTrainedModel, GenerationMixin):
@@ -269,8 +260,11 @@ class BertForMaskedLM(BertPreTrainedModel, GenerationMixin):
             loss_fct = nn.CrossEntropyLoss()
             # # hotfix: make 0 -100
             # labels = torch.where(labels < 0, -100, labels)
-            
-            loss = loss_fct(prediction_scores.reshape(-1, self.config.vocab_size), labels.reshape(-1))
+
+            loss = loss_fct(
+                prediction_scores.reshape(-1, self.config.vocab_size),
+                labels.reshape(-1),
+            )
 
             # assert input_ids is not None, "Coding error; please open an issue"
             # batch, seqlen = input_ids.shape[:2]
@@ -316,6 +310,7 @@ class BertForMaskedLM(BertPreTrainedModel, GenerationMixin):
         input_ids = torch.cat([input_ids, dummy_token], dim=1)
 
         return {"input_ids": input_ids, "attention_mask": attention_mask}
+
 
 class BertForSequenceClassification(BertPreTrainedModel):
     """Bert Model transformer with a sequence classification/regression head.

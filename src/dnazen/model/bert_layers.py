@@ -29,24 +29,18 @@ import copy
 import logging
 import math
 import warnings
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Union
 from typing_extensions import deprecated
 
 import torch
 import torch.nn as nn
 from torch.nn.functional import scaled_dot_product_attention
 from einops import rearrange
-from torch.nn.modules.utils import consume_prefix_in_state_dict_if_present
 from transformers.activations import ACT2FN
-from transformers.modeling_outputs import MaskedLMOutput, SequenceClassifierOutput
-from transformers.models.bert.modeling_bert import BertPreTrainedModel
-from transformers.generation.utils import GenerationMixin
 
 from .bert_padding import (
     index_first_axis,
-    index_put_first_axis,
     pad_input,
-    unpad_input,
     unpad_input_only,
 )
 
@@ -54,10 +48,11 @@ from .bert_config import ZenConfig, BertConfig
 
 try:
     from .flash_attn_triton import flash_attn_qkvpacked_func
-except ImportError as e:
+except ImportError:
     flash_attn_qkvpacked_func = None
 
 logger = logging.getLogger(__name__)
+
 
 class ZenNgramEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings.
@@ -128,7 +123,7 @@ class ZenNgramEmbeddings(nn.Module):
             else:
                 token_type_ids = torch.zeros(
                     input_shape, dtype=torch.long, device=self.position_ids.device
-                ) # type: ignore
+                )  # type: ignore
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -226,6 +221,7 @@ class BertEmbeddings(nn.Module):
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
+
 
 @deprecated("Unpadding would be removed in the next iteration.")
 class BertUnpadSelfAttention(nn.Module):
@@ -326,6 +322,7 @@ class BertUnpadSelfAttention(nn.Module):
         attention = unpad_input_only(attention, torch.squeeze(attn_mask) == 1)
         return rearrange(attention, "nnz h d -> nnz (h d)")
 
+
 class BertSelfAttention(nn.Module):
     """Performs multi-headed self attention on a batch of unpadded sequences.
     If Triton is installed, this module uses Flash Attention to greatly improve throughput.
@@ -339,7 +336,7 @@ class BertSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         # self.training = True
-        
+
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(
             config, "embedding_size"
         ):
@@ -354,7 +351,7 @@ class BertSelfAttention(nn.Module):
         # self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self._p_dropout = config.attention_probs_dropout_prob
         self.Wqkv = nn.Linear(self.all_head_size, 3 * config.hidden_size)
-        
+
         if self._p_dropout or flash_attn_qkvpacked_func is None:
             self.attn_impl = self._pytorch_attn
         else:
@@ -365,7 +362,7 @@ class BertSelfAttention(nn.Module):
             warnings.warn(
                 "Unable to import Triton; defaulting MosaicBERT attention implementation to pytorch (this will reduce throughput when using this model)."
             )
-    
+
     @property
     def p_dropout(self):
         return self._p_dropout if self.training else 0
@@ -381,14 +378,16 @@ class BertSelfAttention(nn.Module):
         # k = qkv[:, :, 1, :, :].permute(0, 2, 3, 1)  # b h d s
         k = qkv[:, :, 1, :, :].permute(0, 2, 1, 3)  # b h s d
         v = qkv[:, :, 2, :, :].permute(0, 2, 1, 3)  # b h s d
-        
+
         attention = scaled_dot_product_attention(
-            q,k,v,
+            q,
+            k,
+            v,
             attn_mask=bias,
             dropout_p=self.p_dropout,
         ).permute(0, 2, 1, 3)
         return attention
-        
+
         # attention_scores = torch.matmul(q, k) / math.sqrt(self.attention_head_size)
         # attention_scores = attention_scores + bias
         # attention_probs = nn.functional.softmax(attention_scores, dim=-1)
@@ -407,7 +406,7 @@ class BertSelfAttention(nn.Module):
         qkv = qkv.to(torch.float16)
         bias_dtype = bias.dtype
         bias = bias.to(torch.float16)
-        attention = flash_attn_qkvpacked_func(qkv, bias) # type: ignore
+        attention = flash_attn_qkvpacked_func(qkv, bias)  # type: ignore
         attention = attention.to(orig_dtype)
         bias = bias.to(bias_dtype)
         return attention
@@ -444,12 +443,13 @@ class BertSelfAttention(nn.Module):
         qkv = rearrange(
             qkv, "b s (t h d) -> b s t h d", t=3, h=self.num_attention_heads
         )
-        
+
         attention = self.attn_impl(qkv, bias)
 
         # attn_mask is 1 for attend and 0 for don't
         # attention = unpad_input_only(attention, torch.squeeze(attn_mask) == 1)
         return rearrange(attention, "b s h d -> b s (h d)")
+
 
 # Copy of transformer's library BertSelfOutput that will not be caught by surgery methods looking for HF BERT modules.
 class BertSelfOutput(nn.Module):
@@ -475,6 +475,7 @@ class BertSelfOutput(nn.Module):
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
+
 
 @deprecated("Unpadding would be removed in the next iteration.")
 class BertUnpadAttention(nn.Module):
@@ -543,10 +544,9 @@ class BertAttention(nn.Module):
             attn_mask: None or (batch, max_seqlen_in_batch)
             bias: None or (batch, heads, max_seqlen_in_batch, max_seqlen_in_batch)
         """
-        self_output = self.self(
-            input_tensor, bias
-        )
+        self_output = self.self(input_tensor, bias)
         return self.output(self_output, input_tensor)
+
 
 class BertGatedLinearUnitMLP(nn.Module):
     """Applies the FFN at the end of each Mosaic BERT layer.
@@ -582,7 +582,7 @@ class BertGatedLinearUnitMLP(nn.Module):
         # compute the activation
         hidden_states = self.gated_layers(hidden_states)
         gated = hidden_states[:, :, : self.config.intermediate_size]
-        non_gated = hidden_states[:,:, self.config.intermediate_size :]
+        non_gated = hidden_states[:, :, self.config.intermediate_size :]
         hidden_states = self.act(gated) * non_gated
         hidden_states = self.dropout(hidden_states)
         # multiply by the second matrix
@@ -617,11 +617,10 @@ class BertLayer(nn.Module):
             hidden_states: (batch, seq_len, dim)
             bias: None or (batch, heads, max_seqlen_in_batch, max_seqlen_in_batch)
         """
-        attention_output = self.attention(
-            hidden_states, bias
-        )
+        attention_output = self.attention(hidden_states, bias)
         layer_output = self.mlp(attention_output)
         return layer_output
+
 
 class BertEncoder(nn.Module):
     """A stack of BERT layers providing the backbone of Mosaic BERT.
@@ -717,7 +716,7 @@ class BertEncoder(nn.Module):
             dtype=torch.float32
         )  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
-        
+
         extended_ngram_attention_mask = ngram_attention_mask.unsqueeze(1).unsqueeze(2)
         extended_ngram_attention_mask = extended_ngram_attention_mask.to(
             dtype=torch.float32
@@ -753,16 +752,13 @@ class BertEncoder(nn.Module):
                     ngram_hidden_states,
                     bias=extended_ngram_attention_mask,
                 )
-            
+
             _dtype = hidden_states.dtype
-            hidden_states = (
-                hidden_states +
-                torch.bmm(
-                    ngram_position_matrix.to(dtype=_dtype),
-                    ngram_hidden_states.to(dtype=_dtype),
-                )
+            hidden_states = hidden_states + torch.bmm(
+                ngram_position_matrix.to(dtype=_dtype),
+                ngram_hidden_states.to(dtype=_dtype),
             )
-            
+
             if output_all_encoded_layers:
                 all_encoder_layers.append(hidden_states)
         # Pad inputs and mask. It will insert back zero-padded tokens.
@@ -809,6 +805,7 @@ class BertPredictionHeadTransform(nn.Module):
         hidden_states = self.transform_act_fn(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
         return hidden_states
+
 
 ###################
 # Bert Heads

@@ -3,7 +3,6 @@ import json
 import warnings
 
 import torch
-from tokenizers import Tokenizer
 
 from ._find_ngram import find_ngrams, NgramFinderConfig
 
@@ -40,7 +39,7 @@ class NgramEncoder:
     def _get_ngram_id(self, tokens: tuple[int, ...]) -> int | None:
         return self._vocab.get(tokens, None)
 
-    def encode(self, token_ids: torch.Tensor, pad_token_id: int=3) -> EncodedNgram:
+    def encode(self, token_ids: torch.Tensor, pad_token_id: int = 3) -> EncodedNgram:
         """
         Encode token ids into ngram ids and it's position matrix.
 
@@ -156,10 +155,10 @@ class NgramEncoder:
     def get_vocab_size(self):
         return len(self._vocab)
 
-    def get_id(self)->int:
+    def get_id(self) -> int:
         """
         Get the unique identifier of ngram encoder.
-        
+
         The identifier is soloy based on the ngram vocabulary.
         """
         return hash(frozenset(self._vocab.items()))
