@@ -155,3 +155,11 @@ class NgramEncoder:
 
     def get_vocab_size(self):
         return len(self._vocab)
+
+    def get_id(self)->int:
+        """
+        Get the unique identifier of ngram encoder.
+        
+        The identifier is soloy based on the ngram vocabulary.
+        """
+        return hash(frozenset(self._vocab.items()))

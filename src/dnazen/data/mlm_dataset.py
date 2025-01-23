@@ -1,6 +1,8 @@
 from typing import TypedDict
 # from random import choice
 import random
+import os
+import json
 
 from tqdm import tqdm
 import csv
@@ -8,7 +10,7 @@ import torch
 from torch.nn import functional as F
 from torch.utils.data import Dataset
 from datasets import load_dataset
-from transformers import PreTrainedTokenizer
+from transformers import PreTrainedTokenizer, AutoTokenizer
 
 from dnazen.ngram import NgramEncoder
 
@@ -19,26 +21,95 @@ class MlmData(TypedDict):
     ngram_attention_mask: torch.Tensor
     ngram_position_matrix: torch.Tensor
     labels: torch.Tensor
+
+# --- utils ---
+
+def _save_core_ngrams(
+    path: str,
+    core_ngrams: set[tuple[int, ...]],
+):
+    core_ngrams_ = [
+        list(ngram) for ngram in list(core_ngrams)
+    ]
     
+    with open(path, "w") as f:
+        json.dump(core_ngrams_, f)
+
+def _load_core_ngrams(
+    path: str,
+):
+    with open(path, "r") as f:
+        ngrams = json.load(f)
+
+    return set(
+        tuple(ngram) for ngram in ngrams
+    )
 
 class MlmDataset(Dataset):
+    """
+    Dataset for mlm task.
+    
+    Do masking when sampling.
+    """
+    NGRAM_ENCODER_FNAME = "ngram_encoder.json"
+    TOKENIZER_DIR = "tokenizer"
+    DATA_FNAME = "data.pt"
+    CORE_NGRAMS_FNAME = "core_ngrams.txt"
+
     def __init__(
         self,
+        tokens: torch.Tensor,
+        attn_mask: torch.Tensor,
+        tokenizer: PreTrainedTokenizer,
+        ngram_encoder: NgramEncoder,
+        core_ngrams: set[tuple[int, ...]],
+        mlm_prob: float = 0.15,
+    ):
+        """Initialize a Mlm dataset.
+
+        Args:
+            tokens (torch.Tensor): tokens from a tokenizer
+            attn_mask (torch.Tensor): attention mask from a tokenizer.
+            tokenizer (PreTrainedTokenizer): tokenizer from `transformers`.
+            ngram_encoder (NgramEncoder): a ngram encoder for encoding.
+            mlm_prob (float, optional): The proportion of masked tokens. Defaults to 0.15.
+        """
+        super().__init__()
+        self.ngram_encoder = ngram_encoder
+        self.tokenizer = tokenizer
+        self.core_ngrams = core_ngrams
+        
+        # tokenizer things
+        self.CLS: int = tokenizer.convert_tokens_to_ids("[CLS]")
+        self.SEP: int = tokenizer.convert_tokens_to_ids("[SEP]")
+        self.PAD: int = tokenizer.convert_tokens_to_ids("[PAD]")
+        self.MASK:int = tokenizer.convert_tokens_to_ids("[MASK]")
+        
+        self.core_ngram_min_len = 128
+        self.core_ngram_max_len = 0
+        for ngram in core_ngrams:
+            self.core_ngram_min_len = min(self.core_ngram_min_len, len(ngram))
+            self.core_ngram_max_len = max(self.core_ngram_max_len, len(ngram))
+        print("minimum core ngram len=", self.core_ngram_min_len)
+        print("maximum core ngram len=", self.core_ngram_max_len)
+
+        self.mlm_prob = mlm_prob
+        self.tokens = tokens
+        self.attn_mask = attn_mask
+    
+    @property
+    def ngram_vocab_size(self):
+        return self.ngram_encoder.get_vocab_size()
+
+    @classmethod
+    def from_raw_data(
+        cls,
         data_path: str,
         tokenizer: PreTrainedTokenizer,
         ngram_encoder: NgramEncoder,
+        core_ngrams: set[tuple[int, ...]],
         mlm_prob: float = 0.15,
     ):
-        super().__init__()
-        PAD: int = tokenizer.convert_tokens_to_ids("[PAD]")
-        CLS = tokenizer.convert_tokens_to_ids("[CLS]")
-        SEP = tokenizer.convert_tokens_to_ids("[SEP]")
-        MASK= tokenizer.convert_tokens_to_ids("[MASK]")
-
-        # meta-data
-        self.ngram_vocab_size = ngram_encoder.get_vocab_size()
-        self.max_num_ngrams = ngram_encoder._max_ngrams
-
         with open(data_path, "r") as f:
             texts = f.readlines()
 
@@ -47,116 +118,128 @@ class MlmDataset(Dataset):
             texts,
             return_tensors="pt",
             padding="longest",
-            max_length=tokenizer.model_max_length,
             truncation=True,
         )
-        self.num_classes = len(tokenizer.get_vocab().values())
-        self.input_ids = torch.empty_like(outputs["input_ids"])
-        self.labels    = torch.empty_like(outputs["input_ids"])
-        
-
-        vocab_list=list(
-            tokenizer
-            .get_vocab()
-            .values()
+        tokens = outputs["input_ids"]
+        attn_mask = outputs["attention_mask"]
+        return cls(
+            tokens=tokens,
+            attn_mask=attn_mask,
+            tokenizer=tokenizer,
+            ngram_encoder=ngram_encoder,
+            core_ngrams=core_ngrams,
+            mlm_prob=mlm_prob,
         )
-        for idx in tqdm(range(self.input_ids.size(0)), desc="masking"):
-            input_ids_, labels_ = MlmDataset._create_mlm_predictions(
-                outputs["input_ids"][idx], 
-                mlm_prob=mlm_prob,
-                # max_pred_per_seq=int(512 * mlm_prob),
-                # tokenizer=tokenizer,
-                cls_token=CLS,
-                sep_token=SEP,
-                mask_token=MASK,
-                vocab_list=vocab_list
-            )
-            self.input_ids[idx] = input_ids_
-            self.labels[idx] = labels_
-
-        self.attention_mask: torch.Tensor = outputs["attention_mask"]  # type: ignore
-
-        if ngram_encoder is None:
-            self.ngram_id_list = None
-            self.ngram_position_matrix_list = None
-            return
-        else:
-            self.ngram_id_list: list[torch.Tensor] = []
-            self.ngram_position_matrix_list: list[torch.Tensor] = []
-
-        for i in tqdm(range(self.input_ids.size(0)), desc="ngram matching"):
-            ngram_encoder_outputs = ngram_encoder.encode(self.input_ids[i], pad_token_id=PAD)
-            self.ngram_id_list.append(ngram_encoder_outputs["ngram_ids"])
-            self.ngram_position_matrix_list.append(
-                ngram_encoder_outputs["ngram_position_matrix"]
-            )
 
     def save(
         self,
-        path: str
+        save_dir: str
     ):
+        ngram_encoder_path = os.path.join(save_dir, self.NGRAM_ENCODER_FNAME)
+        data_path = os.path.join(save_dir, self.DATA_FNAME)
+        core_ngram_path = os.path.join(save_dir, self.CORE_NGRAMS_FNAME)
+        tokenizer_path = os.path.join(save_dir, self.TOKENIZER_DIR)
+
+        self.ngram_encoder.save(ngram_encoder_path)
+        self.tokenizer.save_pretrained(tokenizer_path)
+        _save_core_ngrams(core_ngram_path, core_ngrams=self.core_ngrams)
         torch.save({
-            "ngram_vocab_size": self.ngram_vocab_size,
-            "max_num_ngrams": self.max_num_ngrams,
-            'num_classes': self.num_classes,
-            'input_ids': self.input_ids,
-            'labels': self.labels,
-            'attention_mask': self.attention_mask,
-            'ngram_id_list': self.ngram_id_list,
-            'ngram_position_matrix_list': self.ngram_position_matrix_list
-        }, path)
+            "mlm_prob": self.mlm_prob,
+
+            'tokens': self.tokens,
+            'attention_mask': self.attn_mask,
+        }, data_path)
 
     @classmethod
-    def from_file(
+    def from_dir(
         cls,
-        path: str,
+        save_dir: str, # path to the save directory
     ):
-        data = torch.load(path)
-        dataset = cls.__new__(cls)
-        dataset.max_num_ngrams = data['max_num_ngrams']
-        dataset.ngram_vocab_size = data['ngram_vocab_size']
+        # data = torch.load(path)
+        ngram_encoder_path = os.path.join(save_dir, cls.NGRAM_ENCODER_FNAME)
+        tokenizer_path = os.path.join(save_dir, cls.TOKENIZER_DIR)
+        data_path = os.path.join(save_dir, cls.DATA_FNAME)
+        core_ngram_path = os.path.join(save_dir, cls.CORE_NGRAMS_FNAME)
+        data = torch.load(data_path)
         
-        dataset.num_classes = data['num_classes']
-        dataset.input_ids = data['input_ids']
-        dataset.labels = data['labels']
-        dataset.attention_mask = data['attention_mask']
-        dataset.ngram_id_list = data['ngram_id_list']
-        dataset.ngram_position_matrix_list = data['ngram_position_matrix_list']
-        return dataset
+        # tokenizer = PreTrainedTokenizer.from_pretrained(tokenizer_path, local_files_only=True)
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+        
+        return cls(
+            tokens = data["tokens"],
+            attn_mask = data["attention_mask"],
+            tokenizer = tokenizer,
+            ngram_encoder = NgramEncoder.from_file(ngram_encoder_path),
+            core_ngrams = _load_core_ngrams(core_ngram_path),
+            mlm_prob = data["mlm_prob"],
+        )
         
     def __len__(self):
-        return self.input_ids.size(0)
+        return self.tokens.size(0)
     
     def __getitem__(self, index):
+        # do masking during run-time
+        input_ids_, labels_ = MlmDataset._create_mlm_predictions(
+            token_seq=self.tokens[index],
+            sep_token=self.SEP,
+            cls_token=self.CLS,
+            mask_token=self.MASK,
+            vocab_list=list(self.tokenizer.get_vocab().values()),
+            mlm_prob=self.mlm_prob,
+            core_ngrams=self.core_ngrams,
+            max_core_ngram_len=self.core_ngram_max_len,
+            min_core_ngram_len=self.core_ngram_min_len,
+        )
+        
+        ngram_encoder_outputs = self.ngram_encoder.encode(
+            input_ids_, pad_token_id=self.PAD,
+        )
+
         return {
-            "input_ids": self.input_ids[index],
-            # "labels": self.labels[index],
-            "labels": self.labels[index],
-            "attention_mask": self.attention_mask[index],
-            "ngram_input_ids": self.ngram_id_list[index],
-            "ngram_position_matrix": self.ngram_position_matrix_list[index],
+            "input_ids": input_ids_,
+            "labels": labels_,
+            "attention_mask": self.attn_mask[index],
+            "ngram_input_ids": ngram_encoder_outputs["ngram_ids"],
+            "ngram_position_matrix": ngram_encoder_outputs['ngram_position_matrix'],
         }
-    
+
     @staticmethod
     def _create_mlm_predictions(
         token_seq: torch.Tensor,
         mlm_prob: float,
-        # max_pred_per_seq: int,
-        # tokenizer: PreTrainedTokenizer,
         cls_token: int,
         sep_token: int,
         mask_token: int,
         vocab_list: list[int],
+        core_ngrams: set[tuple[int, ...]], # TODO: enable this
+        min_core_ngram_len: int,
+        max_core_ngram_len: int,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         assert token_seq.dim() == 1, f"token_seq should be a 1d array, but got dimension {token_seq.dim()}"
         CLS = cls_token
         SEP = sep_token
         MASK= mask_token
 
-        candidate_idxes = torch.nonzero(
+        candidate_idxes_list = torch.nonzero(
             (token_seq != CLS) & (token_seq != SEP) & (token_seq != MASK), 
             as_tuple=False
-        ).squeeze()
+        ).squeeze().tolist()
+        
+        
+        token_seq_list = token_seq.tolist()
+        non_candidiate_idxes = []
+        for idx in candidate_idxes_list:
+            for len_ in range(min_core_ngram_len, max_core_ngram_len):
+                if idx + len_ > token_seq.shape[0]:
+                    continue
+                # find core ngram matches
+                if tuple(token_seq_list[idx:idx+len_]) in core_ngrams:
+                    non_candidiate_idxes += range(idx, idx+len_)
+        
+        candidate_idxes = torch.tensor(
+            [idx for idx in candidate_idxes_list if idx not in non_candidiate_idxes], 
+            dtype=torch.int32
+        )
 
         masked_token_seq = token_seq.clone()
         # labels = torch.zeros_like(token_seq)
@@ -183,19 +266,3 @@ class MlmDataset(Dataset):
         masked_token_seq[mask_mask_10_rand] = torch.tensor(random.choices(vocab_list, k=mask_mask_10_rand.sum().item()), dtype=torch.long)
 
         return masked_token_seq, labels
-
-        # masked_token_seq = torch.empty_like(token_seq)
-        # labels = torch.zeros_like(token_seq)
-        # masked_token_seq.copy_(token_seq)
-        # for idx in random.choices(candidate_idxes, k=num_masked_tokens):
-        #     rand_num = random.random()
-        #     if rand_num < 0.8: # 80% of the time, replace with [MASK]
-        #         masked_token = MASK
-        #     elif rand_num < 0.9:
-        #         masked_token = token_seq[idx]
-        #     else:
-        #         masked_token = random.choice(vocab_list)
-        #     labels[idx] = masked_token_seq[idx]
-        #     masked_token_seq[idx] = masked_token
-
-        # return labels, masked_token_seq
