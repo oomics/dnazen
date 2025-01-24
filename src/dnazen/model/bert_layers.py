@@ -30,7 +30,6 @@ import logging
 import math
 import warnings
 from typing import List, Optional, Union
-from typing_extensions import deprecated
 
 import torch
 import torch.nn as nn
@@ -38,18 +37,7 @@ from torch.nn.functional import scaled_dot_product_attention
 from einops import rearrange
 from transformers.activations import ACT2FN
 
-from .bert_padding import (
-    index_first_axis,
-    pad_input,
-    unpad_input_only,
-)
-
 from .bert_config import ZenConfig, BertConfig
-
-try:
-    from .flash_attn_triton import flash_attn_qkvpacked_func
-except ImportError:
-    flash_attn_qkvpacked_func = None
 
 logger = logging.getLogger(__name__)
 
@@ -222,107 +210,6 @@ class BertEmbeddings(nn.Module):
         embeddings = self.dropout(embeddings)
         return embeddings
 
-
-@deprecated("Unpadding would be removed in the next iteration.")
-class BertUnpadSelfAttention(nn.Module):
-    """Performs multi-headed self attention on a batch of unpadded sequences.
-    If Triton is installed, this module uses Flash Attention to greatly improve throughput.
-    The Flash Attention implementation used in Mosaic BERT supports arbitrary attention biases (which
-    we use to implement ALiBi), but does not support attention dropout. If either Triton is not installed
-    or `config.attention_probs_dropout_prob > 0`, the implementation will default to a
-    math-equivalent pytorch version, which is much slower.
-    See `forward` method for additional detail.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(
-            config, "embedding_size"
-        ):
-            raise ValueError(
-                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({config.num_attention_heads})"
-            )
-
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.p_dropout = config.attention_probs_dropout_prob
-        self.Wqkv = nn.Linear(self.all_head_size, 3 * config.hidden_size)
-
-        # Warn if defaulting to pytorch because of import issues
-        if flash_attn_qkvpacked_func is None:
-            warnings.warn(
-                "Unable to import Triton; defaulting MosaicBERT attention implementation to pytorch (this will reduce throughput when using this model)."
-            )
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        cu_seqlens: torch.Tensor,
-        max_seqlen_in_batch: int,
-        indices: torch.Tensor,
-        attn_mask: torch.Tensor,
-        bias: torch.Tensor,
-    ) -> torch.Tensor:
-        """Perform self-attention.
-        If dropout is zero, then we can use the Triton kernel, so we do that. However, if not, we send through a standard PyTorch
-        implementation of self-attention.
-        The arguments are unpadded, and our implementations of attention require padded arguments,
-        so we first call `pad_input`. Once we compute attention, we re-unpad our outputs for the other layers.
-        The pad/unpad operations add overhead, but not sending pad tokens through ffs saves compute.
-        It is possible to write an unpadded implementation of attention (in Triton and PyTorch), which we will eventually do.
-        Args:
-            hidden_states: (total_nnz, dim)
-            cu_seqlens: (batch + 1,)
-            max_seqlen_in_batch: int
-            indices: (total_nnz,)
-            attn_mask: (batch, max_seqlen_in_batch)
-            bias: (batch, heads, max_seqlen_in_batch, max_seqlen_in_batch)
-        Returns:
-            attention: (total_nnz, dim)
-        """
-        # dtype = hidden_states.dtype
-        # bsz, seq_len = attn_mask.size()
-
-        qkv = self.Wqkv(hidden_states)
-        qkv = pad_input(
-            qkv, indices, cu_seqlens.shape[0] - 1, max_seqlen_in_batch
-        )  # batch, max_seqlen_in_batch, thd
-        qkv = rearrange(
-            qkv, "b s (t h d) -> b s t h d", t=3, h=self.num_attention_heads
-        )
-        if self.p_dropout or flash_attn_qkvpacked_func is None:
-            # if we have nonzero attention dropout (e.g. during fine-tuning) or no Triton, compute attention in PyTorch
-            q = qkv[:, :, 0, :, :].permute(0, 2, 1, 3)  # b h s d
-            k = qkv[:, :, 1, :, :].permute(0, 2, 3, 1)  # b h d s
-            v = qkv[:, :, 2, :, :].permute(0, 2, 1, 3)  # b h s d
-            attention_scores = torch.matmul(q, k) / math.sqrt(self.attention_head_size)
-            attention_scores = attention_scores + bias
-            attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-            attention_probs = self.dropout(attention_probs)
-            attention = torch.matmul(attention_probs, v).permute(0, 2, 1, 3)  # b s h d
-        else:
-            # Triton implementation only supports 0 attention dropout
-            convert_dtype = qkv.dtype not in [torch.float16, torch.bfloat16]
-            if convert_dtype:
-                # Triton implementation only supports fp16 and bf16
-                orig_dtype = qkv.dtype
-                qkv = qkv.to(torch.float16)
-                bias_dtype = bias.dtype
-                bias = bias.to(torch.float16)
-                attention = flash_attn_qkvpacked_func(qkv, bias)
-                attention = attention.to(orig_dtype)
-                bias = bias.to(bias_dtype)
-            else:
-                attention = flash_attn_qkvpacked_func(qkv, bias)
-
-        # attn_mask is 1 for attend and 0 for don't
-        attention = unpad_input_only(attention, torch.squeeze(attn_mask) == 1)
-        return rearrange(attention, "nnz h d -> nnz (h d)")
-
-
 class BertSelfAttention(nn.Module):
     """Performs multi-headed self attention on a batch of unpadded sequences.
     If Triton is installed, this module uses Flash Attention to greatly improve throughput.
@@ -352,22 +239,11 @@ class BertSelfAttention(nn.Module):
         self._p_dropout = config.attention_probs_dropout_prob
         self.Wqkv = nn.Linear(self.all_head_size, 3 * config.hidden_size)
 
-        if self._p_dropout or flash_attn_qkvpacked_func is None:
-            self.attn_impl = self._pytorch_attn
-        else:
-            self.attn_impl = self._triton_flash_attn
-
-        # Warn if defaulting to pytorch because of import issues
-        if flash_attn_qkvpacked_func is None:
-            warnings.warn(
-                "Unable to import Triton; defaulting MosaicBERT attention implementation to pytorch (this will reduce throughput when using this model)."
-            )
-
     @property
     def p_dropout(self):
         return self._p_dropout if self.training else 0
 
-    def _pytorch_attn(
+    def _flash_attn(
         self,
         qkv: torch.Tensor,
         bias: torch.Tensor,
@@ -375,7 +251,6 @@ class BertSelfAttention(nn.Module):
     ):
         """The fallback impl in case the triton impl is not supported."""
         q = qkv[:, :, 0, :, :].permute(0, 2, 1, 3)  # b h s d
-        # k = qkv[:, :, 1, :, :].permute(0, 2, 3, 1)  # b h d s
         k = qkv[:, :, 1, :, :].permute(0, 2, 1, 3)  # b h s d
         v = qkv[:, :, 2, :, :].permute(0, 2, 1, 3)  # b h s d
 
@@ -388,47 +263,15 @@ class BertSelfAttention(nn.Module):
         ).permute(0, 2, 1, 3)
         return attention
 
-        # attention_scores = torch.matmul(q, k) / math.sqrt(self.attention_head_size)
-        # attention_scores = attention_scores + bias
-        # attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-        # attention_probs = self.dropout(attention_probs)
-        # attention = torch.matmul(attention_probs, v).permute(0, 2, 1, 3)  # b s h d
-        # return attention
-
-    def _triton_flash_attn(
-        self,
-        qkv: torch.Tensor,
-        bias: torch.Tensor,
-    ):
-        # Triton implementation only supports 0 attention dropout
-        # Triton implementation only supports fp16 and bf16
-        orig_dtype = qkv.dtype
-        qkv = qkv.to(torch.float16)
-        bias_dtype = bias.dtype
-        bias = bias.to(torch.float16)
-        attention = flash_attn_qkvpacked_func(qkv, bias)  # type: ignore
-        attention = attention.to(orig_dtype)
-        bias = bias.to(bias_dtype)
-        return attention
-
     def forward(
         self,
         hidden_states: torch.Tensor,
         bias: torch.Tensor,
     ) -> torch.Tensor:
         """Perform self-attention.
-        If dropout is zero, then we can use the Triton kernel, so we do that. However, if not, we send through a standard PyTorch
-        implementation of self-attention.
-        The arguments are unpadded, and our implementations of attention require padded arguments,
-        so we first call `pad_input`. Once we compute attention, we re-unpad our outputs for the other layers.
-        The pad/unpad operations add overhead, but not sending pad tokens through ffs saves compute.
-        It is possible to write an unpadded implementation of attention (in Triton and PyTorch), which we will eventually do.
+
         Args:
             hidden_states: (total_nnz, dim)
-            cu_seqlens: (batch + 1,)
-            max_seqlen_in_batch: int
-            indices: (total_nnz,)
-            attn_mask: (batch, max_seqlen_in_batch)
             bias: (batch, heads, max_seqlen_in_batch, max_seqlen_in_batch)
         Returns:
             attention: (total_nnz, dim)
@@ -437,14 +280,12 @@ class BertSelfAttention(nn.Module):
         # bsz, seq_len = attn_mask.size()
 
         qkv = self.Wqkv(hidden_states)
-        # qkv = pad_input(
-        #     qkv, indices, cu_seqlens.shape[0] - 1, max_seqlen_in_batch
-        # )  # batch, max_seqlen_in_batch, thd
         qkv = rearrange(
             qkv, "b s (t h d) -> b s t h d", t=3, h=self.num_attention_heads
         )
 
-        attention = self.attn_impl(qkv, bias)
+        # attention = self.attn_impl(qkv, bias)
+        attention = self._flash_attn(qkv, bias)
 
         # attn_mask is 1 for attend and 0 for don't
         # attention = unpad_input_only(attention, torch.squeeze(attn_mask) == 1)
@@ -475,49 +316,6 @@ class BertSelfOutput(nn.Module):
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
-
-
-@deprecated("Unpadding would be removed in the next iteration.")
-class BertUnpadAttention(nn.Module):
-    """Chains attention, Dropout, and LayerNorm for Mosaic BERT."""
-
-    def __init__(self, config):
-        super().__init__()
-        self.self = BertUnpadSelfAttention(config)
-        self.output = BertSelfOutput(config)
-
-    def forward(
-        self,
-        input_tensor: torch.Tensor,
-        cu_seqlens: torch.Tensor,
-        max_s: int,
-        subset_idx: Optional[torch.Tensor] = None,
-        indices: Optional[torch.Tensor] = None,
-        attn_mask: Optional[torch.Tensor] = None,
-        bias: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
-        """Forward pass for scaled self-attention without padding.
-        Arguments:
-            input_tensor: (total_nnz, dim)
-            cu_seqlens: (batch + 1,)
-            max_s: int
-            subset_idx: () set of indices whose values we care about at the end of the layer
-                        (e.g., the masked tokens, if this is the final layer).
-            indices: None or (total_nnz,)
-            attn_mask: None or (batch, max_seqlen_in_batch)
-            bias: None or (batch, heads, max_seqlen_in_batch, max_seqlen_in_batch)
-        """
-        self_output = self.self(
-            input_tensor, cu_seqlens, max_s, indices, attn_mask, bias
-        )
-        if subset_idx is not None:
-            return self.output(
-                index_first_axis(self_output, subset_idx),
-                index_first_axis(input_tensor, subset_idx),
-            )
-        else:
-            return self.output(self_output, input_tensor)
-
 
 class BertAttention(nn.Module):
     """Chains attention, Dropout, and LayerNorm for Mosaic BERT."""
