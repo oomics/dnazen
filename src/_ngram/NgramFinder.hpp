@@ -120,13 +120,14 @@ class DnaNgramFinder {
     NgramMap_t ngrams;
     PairMap_t pairs;
     // ThreadPool thread_pool;
+    std::mutex mutex;
 
     /**
      * @brief Filter the pairs using pmi.
      */
-    void _filter_pairs(size_t total_num_tokens) {
+    void _filter_pairs(PairMap_t &pairs, size_t total_num_tokens) {
         std::vector<TokenSeq_t> keys_to_erase;
-        for (auto it = this->pairs.begin(); it != this->pairs.end(); it++) {
+        for (auto it = pairs.begin(); it != pairs.end(); it++) {
             auto pair = it->first;
             const size_t count = it->second;
 
@@ -139,13 +140,14 @@ class DnaNgramFinder {
                  log2(this->token_dict[b]));  // here we break the formula
                                               // into parts to avoid overflow
 
+            // std::cout<< "[debug] pmi=" << mi <<std::endl;
             if (mi < this->config.min_pmi) {
                 keys_to_erase.push_back(pair);
             }
         }
 
         for (auto k : keys_to_erase) {
-            this->pairs.erase(k);
+            pairs.erase(k);
         }
     }
 
@@ -186,8 +188,22 @@ class DnaNgramFinder {
         }
     }
 
+    void _count_token_and_pairs2(const TokenSeq_t &token_seq) {
+        std::unordered_map<Token_t, size_t> local_token_dict;
+        PairMap_t local_pair_map;
+        _count_token_and_pairs(token_seq, local_token_dict, local_pair_map);
+
+        std::lock_guard<std::mutex> lock(this->mutex);
+        for (const auto &pair : local_token_dict) {
+            this->token_dict[pair.first] += pair.second;
+        }
+        for (const auto &pair : local_pair_map) {
+            this->pairs[pair.first] += pair.second;
+        }
+    }
+
    public:
-    DnaNgramFinder(NgramFinderConfig config):token_dict(), ngrams(), pairs() {
+    DnaNgramFinder(NgramFinderConfig config) : token_dict(), ngrams(), pairs() {
         this->config = config;
     }
 
@@ -237,53 +253,28 @@ class DnaNgramFinder {
 
         std::cout << "count token and pairs..." << std::endl;
         size_t total_num_tokens = 0;
-        { 
-            // make the actual number of tasks bit bigger
-            int num_tasks = num_threads + 2;
-            std::unordered_map<Token_t, size_t> token_dicts[num_tasks];
-            PairMap_t pair_list[num_tasks];
-
-            // Divide the work among threads
-            auto chunk_size = token_seq_vec.size() / num_tasks;
+        {
             std::vector<std::future<void>> futures;
-
-            for (int i = 0; i < num_tasks; ++i) {
-                auto begin = token_seq_vec.begin() + i * chunk_size;
-                auto end = (i == num_tasks - 1) ? token_seq_vec.end()
-                                                : begin + chunk_size;
-
-                futures.emplace_back(thread_pool.submit([&, begin, end, i] {
-                    _count_token_and_pairs_iterative(begin, end, token_dicts[i],
-                                                    pair_list[i]);
+            for (auto token_seq : token_seq_vec) {
+                total_num_tokens += token_seq.size();
+                futures.emplace_back(thread_pool.submit([this, token_seq]() {
+                    this->_count_token_and_pairs2(token_seq);
                 }));
             }
-
             // Wait for all threads to finish
             for (auto &f : futures) {
                 f.get();
             }
-
-            // Merge the results from all tasks
-            for (int i = 0; i < num_tasks; ++i) {
-                for (const auto &pair : token_dicts[i]) {
-                    this->token_dict[pair.first] += pair.second;
-                    total_num_tokens += pair.second;
-                }
-                for (const auto &pair : pair_list[i]) {
-                    this->pairs[pair.first] += pair.second;
-                }
-            }
         }
 
         // filter the mappings based on the minimum count
-        filter_dict_by_freq(
-            this->token_dict, this->config.min_token_count);
+        filter_dict_by_freq(this->token_dict, this->config.min_token_count);
         filter_dict_by_freq<PairMap_t>(this->pairs,
                                        this->config.min_token_count);
 
         // filter the pairs based on pmi
         std::cout << "filter pairs.." << std::endl;
-        this->_filter_pairs(total_num_tokens = total_num_tokens);
+        this->_filter_pairs(this->pairs, total_num_tokens);
 
         // iterate over the token sequences again.
         // enumerate over ngram candidates
@@ -318,10 +309,9 @@ class DnaNgramFinder {
         }
 
         this->ngrams = new_ngram_dict;
-        std::cout<< "filer dict by freq..." << std::endl;
+        std::cout << "filer dict by freq..." << std::endl;
         filter_dict_by_freq<NgramMap_t>(this->ngrams,
                                         this->config.min_ngram_freq);
-
 
         // thread_pool.shutdown();
     }
