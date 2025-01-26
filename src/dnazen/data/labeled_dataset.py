@@ -20,6 +20,7 @@ class LabeledData(TypedDict):
 class ZenLabeledData(LabeledData):
     # ngram specific
     ngram_input_ids: torch.Tensor | None
+    ngram_attention_mask: torch.Tensor | None
     ngram_position_matrix: torch.Tensor | None
 
 
@@ -53,7 +54,6 @@ class LabeledDataset(Dataset):
             texts,
             return_tensors="pt",
             padding="longest",
-            max_length=tokenizer.model_max_length,
             truncation=True,
         )
         self.labels = labels
@@ -62,17 +62,20 @@ class LabeledDataset(Dataset):
 
         if ngram_encoder is None:
             self.ngram_id_list = None
+            self.ngram_attention_mask = None
             self.ngram_position_matrix_list = None
             return
 
         self.ngram_id_list: list[torch.Tensor] = []
         self.ngram_position_matrix_list: list[torch.Tensor] = []
+        self.ngram_attention_mask: list[torch.Tensor] = []
 
         for i in range(self.input_ids.size(0)):
             ngram_encoder_outputs = ngram_encoder.encode(
                 self.input_ids[i], pad_token_id=PAD
             )
             self.ngram_id_list.append(ngram_encoder_outputs["ngram_ids"])
+            self.ngram_attention_mask.append(ngram_encoder_outputs["ngram_attention_mask"])
             self.ngram_position_matrix_list.append(
                 ngram_encoder_outputs["ngram_position_matrix"]
             )
@@ -80,7 +83,7 @@ class LabeledDataset(Dataset):
     def __len__(self):
         return self.input_ids.shape[0]
 
-    @no_type_check
+    # @no_type_check
     def __getitem__(self, i) -> ZenLabeledData | LabeledData:
         if self.ngram_id_list is not None:
             return {
@@ -88,6 +91,7 @@ class LabeledDataset(Dataset):
                 "labels": self.labels[i],
                 "attention_mask": self.attention_mask[i],
                 "ngram_input_ids": self.ngram_id_list[i],
+                "ngram_attention_mask": self.ngram_attention_mask[i],
                 "ngram_position_matrix": self.ngram_position_matrix_list[i],
             }
         else:

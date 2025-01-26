@@ -16,6 +16,7 @@ class _NgramEncoderConfig(TypedDict):
 
 class EncodedNgram(TypedDict):
     ngram_ids: torch.Tensor
+    ngram_attention_mask: torch.Tensor
     ngram_position_matrix: torch.Tensor
 
 
@@ -38,6 +39,28 @@ class NgramEncoder:
 
     def _get_ngram_id(self, tokens: tuple[int, ...]) -> int | None:
         return self._vocab.get(tokens, None)
+    
+    def get_num_matches(
+        self, token_ids: torch.Tensor, pad_token_id: int = 3
+    ):
+        """Calculate the number of ngram matches from token_ids."""
+        assert token_ids.dim() == 1, f"token_ids should have dim=1, but got {token_ids.dim()}"
+
+        token_len = token_ids.shape[0]
+        token_ids = token_ids[token_ids != pad_token_id]
+        token_ids_list = token_ids.tolist()
+        # token_len = len(token_ids_list)
+
+        num_matches = 0
+        for ngram_len in range(self._min_ngram_len, self._max_ngram_len):
+            for q in range(token_len - ngram_len + 1):
+                ngram: tuple[int, ...] = tuple(token_ids_list[q : q + ngram_len])
+                ngram_id = self._get_ngram_id(ngram)
+                if ngram_id is None:
+                    continue
+                # found the match
+                num_matches += 1
+        return num_matches
 
     def encode(self, token_ids: torch.Tensor, pad_token_id: int = 3) -> EncodedNgram:
         """
@@ -49,15 +72,15 @@ class NgramEncoder:
         """
         assert token_ids.dim() == 1
 
+        token_len = token_ids.shape[0]
+        token_ids = token_ids[token_ids != pad_token_id]
         token_ids_list = token_ids.tolist()
-        token_len = len(token_ids_list)
-        # Trim trailing pad tokens
-        while token_ids_list and token_ids_list[-1] == pad_token_id:
-            token_ids_list.pop()
+        # token_len = len(token_ids_list)
 
         _cur_ngram_id_idx = 0  # index to ngram_ids
         ret_val: EncodedNgram = {
             "ngram_ids": torch.zeros(self._max_ngrams, dtype=torch.int),
+            "ngram_attention_mask": torch.zeros(self._max_ngrams, dtype=torch.int),
             "ngram_position_matrix": torch.zeros(
                 token_len, self._max_ngrams, dtype=torch.bool
             ),
@@ -71,6 +94,7 @@ class NgramEncoder:
                     continue
                 # found the match
                 ret_val["ngram_ids"][_cur_ngram_id_idx] = ngram_id
+                ret_val["ngram_attention_mask"][_cur_ngram_id_idx] = 1
                 ret_val["ngram_position_matrix"][
                     q : q + ngram_len, _cur_ngram_id_idx
                 ] = 1
@@ -78,6 +102,36 @@ class NgramEncoder:
                 if _cur_ngram_id_idx >= self._max_ngrams:
                     return ret_val
         return ret_val
+
+    def set_max_ngram_match(self, max_ngrams: int):
+        self._max_ngrams = max_ngrams
+    
+    @classmethod
+    def from_list(
+        cls, 
+        ngram_list: list[list[int]], 
+        max_ngrams: int = 20
+    ):
+        """Instantiate a new :class:`~dnazen.ngram.NgramTokenizer` from list of ngram list.
+
+        Do not question why this method is even here. It is 20:00 and the day after tmw is Spring Festival.
+        It's the only and least ugly way to finish my one-time-only-but-very-urgent job.
+        """
+        vocab_dict = {}
+        min_ngram_len = 100
+        max_ngram_len = 0
+        for idx, vocab in enumerate(ngram_list):
+            k_ = tuple(vocab)
+            min_ngram_len = min(len(k_), min_ngram_len)
+            max_ngram_len = max(len(k_), max_ngram_len)
+            vocab_dict[k_] = idx
+
+        return cls(
+            vocab_dict=vocab_dict,
+            min_ngram_len=min_ngram_len,
+            max_ngram_len=max_ngram_len,
+            max_ngrams=max_ngrams,
+        )
 
     @classmethod
     def from_file(cls, path):
@@ -159,6 +213,6 @@ class NgramEncoder:
         """
         Get the unique identifier of ngram encoder.
 
-        The identifier is soloy based on the ngram vocabulary.
+        The identifier is solely based on the ngram vocabulary.
         """
         return hash(frozenset(self._vocab.items()))

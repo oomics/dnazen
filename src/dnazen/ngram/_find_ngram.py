@@ -1,18 +1,6 @@
 import _ngram
 from _ngram import NgramFinderConfig
 
-# class NgramFinderConfig(_ngram.NgramFinderConfig):
-#     @classmethod
-#     def from_dict(cls, d: dict):
-#         instance = cls()
-#         for key, value in d.items():
-#             if not getattr(instance, key):
-#                 raise ValueError(f"attribute {key} not found in `NgramFinderConfig`")
-
-#             setattr(instance, key, value)
-#         return instance
-
-
 def find_ngrams(
     ngram_finder_config: NgramFinderConfig,
     tokens: list[list[int]],
