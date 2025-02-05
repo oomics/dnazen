@@ -1,6 +1,7 @@
 
 #include <cmath>
 #include <csignal>
+#include <cstdint>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -9,11 +10,26 @@
 #include <unordered_map>
 #include <vector>
 
-// #include "fasta.hpp"
 #include "ThreadPool.hpp"
+
+// only detect keyboard interrupt if it defined
+#if defined(__unix__) || (defined(__APPLE__) && defined(__MACH__))
+#define DETECT_KEY_INTERRUPT()                                               \
+    signal(SIGINT, [](int) {                                                 \
+        std::cout << "Keyboard interrupt detected. Exiting..." << std::endl; \
+        exit(0);                                                             \
+    });
+#else
+#define DETECT_KEY_INTERRUPT()
+#warning "Keyboard interrupt detection is not yet implemented on this platform"
+#endif
+
+// builtin likely
+#define likely(x) __builtin_expect((x), 1)
 
 typedef int Token_t;
 typedef std::vector<Token_t> TokenSeq_t;
+typedef std::unordered_map<Token_t, uint32_t> TokenDict_t;
 
 struct VectorHash {
     size_t operator()(const TokenSeq_t &vec) const {
@@ -30,23 +46,8 @@ struct VectorHash {
     }
 };
 
-typedef std::unordered_map<TokenSeq_t, size_t, VectorHash> NgramMap_t;
-typedef std::unordered_map<TokenSeq_t, size_t, VectorHash> PairMap_t;
-
-// only detect keyboard interrupt if it defined
-#if defined(__unix__) || (defined(__APPLE__) && defined(__MACH__))
-#define DETECT_KEY_INTERRUPT()                                               \
-    signal(SIGINT, [](int) {                                                 \
-        std::cout << "Keyboard interrupt detected. Exiting..." << std::endl; \
-        exit(0);                                                             \
-    });
-#else
-#define DETECT_KEY_INTERRUPT()
-#warning "Keyboard interrupt detection is not yet implemented on this platform"
-#endif
-
-// builtin likely
-#define likely(x) __builtin_expect((x), 1)
+typedef std::unordered_map<TokenSeq_t, uint32_t, VectorHash> NgramMap_t;
+typedef std::unordered_map<TokenSeq_t, uint32_t, VectorHash> PairMap_t;
 
 /* utility functions */
 template <typename T>
@@ -74,8 +75,7 @@ void filter_dict_by_freq(T &dict, size_t min_freq) {
 }
 
 void _count_token_and_pairs(const TokenSeq_t &token_seq,
-                            std::unordered_map<Token_t, size_t> &token_dict,
-                            PairMap_t &pair_map) {
+                            TokenDict_t &token_dict, PairMap_t &pair_map) {
     Token_t curr_token, prev_token;
     curr_token = token_seq[0];
     prev_token = 0;
@@ -93,15 +93,6 @@ void _count_token_and_pairs(const TokenSeq_t &token_seq,
     return;
 }
 
-void _count_token_and_pairs_iterative(
-    const std::vector<TokenSeq_t>::const_iterator &begin,
-    const std::vector<TokenSeq_t>::const_iterator &end,
-    std::unordered_map<Token_t, size_t> &token_dict, PairMap_t &pair_map) {
-    for (auto it = begin; it != end; ++it) {
-        _count_token_and_pairs(*it, token_dict, pair_map);
-    }
-}
-
 struct NgramFinderConfig {
     size_t min_ngram_freq;
     size_t min_ngram_len;
@@ -116,10 +107,9 @@ struct NgramFinderConfig {
 class DnaNgramFinder {
    private:
     struct NgramFinderConfig config;
-    std::unordered_map<Token_t, size_t> token_dict;
+    TokenDict_t token_dict;
     NgramMap_t ngrams;
     PairMap_t pairs;
-    // ThreadPool thread_pool;
     std::mutex mutex;
 
     /**
@@ -140,7 +130,6 @@ class DnaNgramFinder {
                  log2(this->token_dict[b]));  // here we break the formula
                                               // into parts to avoid overflow
 
-            // std::cout<< "[debug] pmi=" << mi <<std::endl;
             if (mi < this->config.min_pmi) {
                 keys_to_erase.push_back(pair);
             }
@@ -168,10 +157,10 @@ class DnaNgramFinder {
      * @param new_ngram_dict The dictionary to update with the frequency of new
      * n-grams found
      */
-    void _get_new_ngram_by_freq(
-        const TokenSeq_t &token_seq,
-        const std::unordered_map<Token_t, size_t> &token_dict,
-        const NgramMap_t &ngram_dict, NgramMap_t &new_ngram_dict) {
+    void _get_new_ngram_by_freq(const TokenSeq_t &token_seq,
+                                const TokenDict_t &token_dict,
+                                const NgramMap_t &ngram_dict,
+                                NgramMap_t &new_ngram_dict) {
         for (size_t idx = 0; idx < token_seq.size(); idx++) {
             for (size_t ngram_len = 1; ngram_len < this->config.max_ngram_len &&
                                        idx + ngram_len <= token_seq.size();
@@ -189,7 +178,7 @@ class DnaNgramFinder {
     }
 
     void _count_token_and_pairs2(const TokenSeq_t &token_seq) {
-        std::unordered_map<Token_t, size_t> local_token_dict;
+        TokenDict_t local_token_dict;
         PairMap_t local_pair_map;
         _count_token_and_pairs(token_seq, local_token_dict, local_pair_map);
 
@@ -207,9 +196,7 @@ class DnaNgramFinder {
         this->config = config;
     }
 
-    std::unordered_map<Token_t, size_t> &get_tokens() {
-        return this->token_dict;
-    }
+    TokenDict_t &get_tokens() { return this->token_dict; }
     NgramMap_t &get_ngrams() { return this->ngrams; }
     PairMap_t &get_pairs() { return this->pairs; }
 
@@ -297,6 +284,12 @@ class DnaNgramFinder {
             }
         }
 
+        // remove pairs to save memory
+        {
+            PairMap_t tmp;
+            std::swap(this->pairs, tmp);
+        }
+
         filter_dict_by_freq<NgramMap_t>(this->ngrams,
                                         this->config.min_ngram_freq);
 
@@ -312,7 +305,5 @@ class DnaNgramFinder {
         std::cout << "filer dict by freq..." << std::endl;
         filter_dict_by_freq<NgramMap_t>(this->ngrams,
                                         this->config.min_ngram_freq);
-
-        // thread_pool.shutdown();
     }
 };

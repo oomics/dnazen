@@ -1,6 +1,7 @@
 import _ngram
 from _ngram import NgramFinderConfig
 
+
 def find_ngrams(
     ngram_finder_config: NgramFinderConfig,
     tokens: list[list[int]],

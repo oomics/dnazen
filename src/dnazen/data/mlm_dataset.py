@@ -92,13 +92,11 @@ class MlmDataset(Dataset):
         for ngram in core_ngrams:
             self.core_ngram_min_len = min(self.core_ngram_min_len, len(ngram))
             self.core_ngram_max_len = max(self.core_ngram_max_len, len(ngram))
-        # print("minimum core ngram len=", self.core_ngram_min_len)
-        # print("maximum core ngram len=", self.core_ngram_max_len)
 
         self.mlm_prob = mlm_prob
         self.tokens = tokens
         self.attn_mask = attn_mask
-        
+
         if verbose:
             logger.info(
                 f"MlmDataset initialized. "
@@ -245,7 +243,7 @@ class MlmDataset(Dataset):
             .squeeze()
             .tolist()
         )
-        
+
         # get non-candidate indexes
         token_seq_list = token_seq.tolist()
         non_candidiate_idxes = []
@@ -263,7 +261,7 @@ class MlmDataset(Dataset):
             dtype=torch.int32,
         )
         len_prop = seq_len / len(candidate_idxes)
-        mlm_prob *= len_prop # modify the mlm prob
+        mlm_prob *= len_prop  # modify the mlm prob
 
         masked_token_seq = token_seq.clone()
         # labels = torch.zeros_like(token_seq)
@@ -276,7 +274,7 @@ class MlmDataset(Dataset):
         # Sample which tokens to mask
         mask_prob = torch.full_like(token_seq, mlm_prob, dtype=torch.float)
         mask_prob[~candidate_mask] = 0
-        mask_mask = torch.bernoulli(mask_prob).bool() # 1 = sample; 0 = not sample
+        mask_mask = torch.bernoulli(mask_prob).bool()  # 1 = sample; 0 = not sample
 
         # Apply masking
         labels[mask_mask] = masked_token_seq[mask_mask]
@@ -288,10 +286,7 @@ class MlmDataset(Dataset):
         masked_token_seq[mask_mask_80] = MASK
         masked_token_seq[mask_mask_10] = token_seq[mask_mask_10]
         masked_token_seq[mask_mask_10_rand] = torch.tensor(
-            random.choices(
-                vocab_list, 
-                k=int(mask_mask_10_rand.sum().item())
-            ),
+            random.choices(vocab_list, k=int(mask_mask_10_rand.sum().item())),
             dtype=torch.long,
         )
 

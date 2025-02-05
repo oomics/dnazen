@@ -1,8 +1,6 @@
 """Utilities for processing datas in dataset."""
 
 from typing import Literal
-from glob import glob
-import os
 
 from .util import find_file
 
@@ -10,7 +8,20 @@ from .util import find_file
 _gue_data_type = Literal["train", "test", "dev"]
 
 
-def get_all_gue_data(dir_path: str, type: _gue_data_type = "train", with_label=-1) -> list:
+def get_all_gue_data2(
+    dir_path: str,
+    with_label=-1,
+):
+    return (
+        get_all_gue_data(dir_path, type="train", with_label=with_label)
+        + get_all_gue_data(dir_path, type="test", with_label=with_label)
+        + get_all_gue_data(dir_path, type="dev", with_label=with_label)
+    )
+
+
+def get_all_gue_data(
+    dir_path: str, type: _gue_data_type = "train", with_label=-1
+) -> list:
     """Get all GUE data without label."""
     ret = []
 
@@ -26,10 +37,11 @@ def get_all_gue_data(dir_path: str, type: _gue_data_type = "train", with_label=-
 
     return ret
 
-def get_useful_gue_data(
-    dir_path: str, type: _gue_data_type = "train"
-) -> list:
-    assert "mouse" not in dir_path, "word mouse should not be in data path. Detail please see the code."
+
+def get_useful_gue_data(dir_path: str, type: _gue_data_type = "train") -> list:
+    assert "mouse" not in dir_path, (
+        "word mouse should not be in data path. Detail please see the code."
+    )
     ret = []
 
     for data_file in find_file(dir_path, target_filename=f"{type}.csv"):
@@ -39,7 +51,7 @@ def get_useful_gue_data(
         is_mouse = "mouse" in data_file
         if is_mouse:
             print(data_file)
-        
+
         for line in lines[1:]:
             data = line.split(",")[0]
             label = line.split(",")[1].strip("\n")
@@ -65,3 +77,9 @@ def get_all_hg38_data(data_path: str) -> list[str]:
         ret.append(dna_seq)
 
     return ret
+
+
+# --- multi-species ---
+def get_multi_species_data(data_path: str) -> list[str]:
+    with open(data_path, "r") as f:
+        return f.read().split("\n")

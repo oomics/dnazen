@@ -210,6 +210,7 @@ class BertEmbeddings(nn.Module):
         embeddings = self.dropout(embeddings)
         return embeddings
 
+
 class BertSelfAttention(nn.Module):
     """Performs multi-headed self attention on a batch of unpadded sequences.
     If Triton is installed, this module uses Flash Attention to greatly improve throughput.
@@ -284,7 +285,6 @@ class BertSelfAttention(nn.Module):
             qkv, "b s (t h d) -> b s t h d", t=3, h=self.num_attention_heads
         )
 
-        # attention = self.attn_impl(qkv, bias)
         attention = self._flash_attn(qkv, bias)
 
         # attn_mask is 1 for attend and 0 for don't
@@ -316,6 +316,7 @@ class BertSelfOutput(nn.Module):
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
+
 
 class BertAttention(nn.Module):
     """Chains attention, Dropout, and LayerNorm for Mosaic BERT."""

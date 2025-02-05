@@ -39,12 +39,12 @@ class NgramEncoder:
 
     def _get_ngram_id(self, tokens: tuple[int, ...]) -> int | None:
         return self._vocab.get(tokens, None)
-    
-    def get_num_matches(
-        self, token_ids: torch.Tensor, pad_token_id: int = 3
-    ):
+
+    def get_num_matches(self, token_ids: torch.Tensor, pad_token_id: int = 3):
         """Calculate the number of ngram matches from token_ids."""
-        assert token_ids.dim() == 1, f"token_ids should have dim=1, but got {token_ids.dim()}"
+        assert token_ids.dim() == 1, (
+            f"token_ids should have dim=1, but got {token_ids.dim()}"
+        )
 
         token_len = token_ids.shape[0]
         token_ids = token_ids[token_ids != pad_token_id]
@@ -105,13 +105,9 @@ class NgramEncoder:
 
     def set_max_ngram_match(self, max_ngrams: int):
         self._max_ngrams = max_ngrams
-    
+
     @classmethod
-    def from_list(
-        cls, 
-        ngram_list: list[list[int]], 
-        max_ngrams: int = 20
-    ):
+    def from_list(cls, ngram_list: list[list[int]], max_ngrams: int = 20):
         """Instantiate a new :class:`~dnazen.ngram.NgramTokenizer` from list of ngram list.
 
         Do not question why this method is even here. It is 20:00 and the day after tmw is Spring Festival.

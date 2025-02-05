@@ -1,3 +1,5 @@
+PACKAGE_NAME=dnazen
+
 clean:
 	rm -rf *.o *.out *.exe *.stackdump *.dSYM
 	rm -rf build/*
@@ -10,7 +12,4 @@ uninstall: clean
 	pip uninstall -y $(PACKAGE_NAME)
 
 install: uninstall
-	python setup.py install
-
-demo:
-	python demo.py
+	pip install .

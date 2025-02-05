@@ -23,9 +23,7 @@ def tokenizer():
 def ngram_encoder():
     from dnazen.ngram import NgramEncoder
 
-    return NgramEncoder.from_file(
-        current_dir + "/../../resources/ngram-encoder.json"
-    )
+    return NgramEncoder.from_file(current_dir + "/resources/ngram-encoder.json")
 
 
 @pytest.mark.usefixtures("tokenizer", "ngram_encoder")
@@ -33,7 +31,6 @@ def test_labeled_dataset(
     tokenizer: PreTrainedTokenizer,
     ngram_encoder,
 ):
-    from torch import Tensor
 
     dataset = LabeledDataset(
         test_csv_file,

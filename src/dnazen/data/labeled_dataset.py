@@ -75,7 +75,9 @@ class LabeledDataset(Dataset):
                 self.input_ids[i], pad_token_id=PAD
             )
             self.ngram_id_list.append(ngram_encoder_outputs["ngram_ids"])
-            self.ngram_attention_mask.append(ngram_encoder_outputs["ngram_attention_mask"])
+            self.ngram_attention_mask.append(
+                ngram_encoder_outputs["ngram_attention_mask"]
+            )
             self.ngram_position_matrix_list.append(
                 ngram_encoder_outputs["ngram_position_matrix"]
             )

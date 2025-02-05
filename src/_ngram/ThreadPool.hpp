@@ -78,9 +78,7 @@ class ThreadPool {
     ThreadPool &operator=(const ThreadPool &) = delete;
     ThreadPool &operator=(ThreadPool &&) = delete;
 
-    ~ThreadPool() {
-        this->shutdown();
-    }
+    ~ThreadPool() { this->shutdown(); }
 
     // Inits thread pool
     void init() {
