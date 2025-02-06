@@ -31,7 +31,6 @@ def test_labeled_dataset(
     tokenizer: PreTrainedTokenizer,
     ngram_encoder,
 ):
-
     dataset = LabeledDataset(
         test_csv_file,
         tokenizer=tokenizer,

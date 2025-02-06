@@ -23,8 +23,8 @@ int main() {
     int _seed = 1;
 
     for (int i=0; i<10000; i++) {
-        TokenSeq_t token_seq = {1,2,3};
-        for (int j=0; j<100000; j++) {
+        TokenSeq_t token_seq = {1,2,3,1,2,3};
+        for (int j=0; j<1000; j++) {
             _seed ^= ((i+j)<<10) + (i<<4) + j + 0xdeadbeaf + (_seed << 6) + (_seed >> 2);
             token_seq.push_back(0x00ff & _seed);
         }
@@ -48,9 +48,8 @@ int main() {
     PairMap_t pair_dict = ngram_finder.get_pairs();
     for (auto it = pair_dict.begin(); it != pair_dict.end(); it++) {
         std::cout << "pair=(";
-        for (Token_t tok : it->first) {
-            std::cout << tok << " ";
-        }
+        std::cout << std::get<0>(it->first) << " ";
+        std::cout << std::get<1>(it->first) << " ";
         std::cout << ") val=" << it->second;
         std::cout << std::endl;
     }

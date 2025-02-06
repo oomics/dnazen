@@ -3,6 +3,8 @@ PACKAGE_NAME=dnazen
 SRC_DIR=src
 TEST_DIR=tests
 
+PIXI_SHELL=pixi exec
+
 .git:
 	pre-commit install
 
@@ -15,8 +17,10 @@ clean:
 
 format:
 	clang-format -i src/_ngram/*.cpp src/_ngram/*.hpp
-	ruff format
-	ruff check --fix
+	$(PIXI_SHELL) ruff format $(SRC_DIR)
+	$(PIXI_SHELL) ruff format $(TEST_DIR)
+	$(PIXI_SHELL) ruff check $(SRC_DIR) --fix
+	$(PIXI_SHELL) ruff check $(TEST_DIR) --fix
 
 uninstall: clean
 	pip uninstall -y $(PACKAGE_NAME)

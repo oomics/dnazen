@@ -29,7 +29,7 @@
 
 typedef int Token_t;
 typedef std::vector<Token_t> TokenSeq_t;
-typedef std::unordered_map<Token_t, uint32_t> TokenDict_t;
+typedef std::tuple<Token_t, Token_t> TokenPair_t;
 
 struct VectorHash {
     size_t operator()(const TokenSeq_t &vec) const {
@@ -46,8 +46,33 @@ struct VectorHash {
     }
 };
 
+struct TokenPairHash {
+    size_t operator()(const TokenPair_t &token_pair) const {
+        // https://stackoverflow.com/questions/20511347/a-good-hash-function-for-a-vector/72073933#72073933
+        size_t seed = 0xdeadbeef;
+
+        // manual loop-unroll
+        size_t x = (size_t)std::get<0>(token_pair);
+        size_t _x = x;
+        _x = ((_x >> 16) ^ _x) * 0x45d9f3b;
+        _x = ((_x >> 16) ^ _x) * 0x45d9f3b;
+        _x = (_x >> 16) ^ _x;
+        seed ^= x + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+
+        x = (size_t)std::get<1>(token_pair);
+        _x = x;
+        _x = ((_x >> 16) ^ _x) * 0x45d9f3b;
+        _x = ((_x >> 16) ^ _x) * 0x45d9f3b;
+        _x = (_x >> 16) ^ _x;
+        seed ^= x + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+
+        return seed;
+    }
+};
+
+typedef std::unordered_map<Token_t, uint32_t> TokenDict_t;
 typedef std::unordered_map<TokenSeq_t, uint32_t, VectorHash> NgramMap_t;
-typedef std::unordered_map<TokenSeq_t, uint32_t, VectorHash> PairMap_t;
+typedef std::unordered_map<TokenPair_t, uint32_t, TokenPairHash> PairMap_t;
 
 /* utility functions */
 template <typename T>
@@ -86,7 +111,7 @@ void _count_token_and_pairs(const TokenSeq_t &token_seq,
         curr_token = token_seq[i];
 
         token_dict[curr_token]++;
-        TokenSeq_t token_pair = {prev_token, curr_token};
+        TokenPair_t token_pair = {prev_token, curr_token};
         pair_map[token_pair]++;
     }
 
@@ -116,13 +141,13 @@ class DnaNgramFinder {
      * @brief Filter the pairs using pmi.
      */
     void _filter_pairs(PairMap_t &pairs, size_t total_num_tokens) {
-        std::vector<TokenSeq_t> keys_to_erase;
+        std::vector<TokenPair_t> keys_to_erase;
         for (auto it = pairs.begin(); it != pairs.end(); it++) {
             auto pair = it->first;
             const size_t count = it->second;
 
-            const Token_t a = pair[0];
-            const Token_t b = pair[1];
+            const Token_t a = std::get<0>(pair);
+            const Token_t b = std::get<1>(pair);
 
             double mi =
                 (log2(total_num_tokens) + log2(count) -
@@ -198,7 +223,11 @@ class DnaNgramFinder {
 
     TokenDict_t &get_tokens() { return this->token_dict; }
     NgramMap_t &get_ngrams() { return this->ngrams; }
-    PairMap_t &get_pairs() { return this->pairs; }
+    PairMap_t &get_pairs() {
+        std::cout << "Warning: Getting pairs is deprecated. "
+                  << "It would always return an empty dict." << std::endl;
+        return this->pairs;
+    }
 
     /**
      * @brief Converts the n-grams stored in the object to a list of token
@@ -269,7 +298,7 @@ class DnaNgramFinder {
         for (auto &tok_seq : token_seq_vec) {
             TokenSeq_t ngram_candidate = {tok_seq[0]};
             for (size_t i = 1; i < tok_seq.size(); i++) {
-                TokenSeq_t tok_pair = {tok_seq[i - 1], tok_seq[i]};
+                TokenPair_t tok_pair = {tok_seq[i - 1], tok_seq[i]};
                 if (this->pairs.find(tok_pair) != this->pairs.end() &&
                     ngram_candidate.size() < this->config.max_ngram_len) {
                     // the current token pair exists

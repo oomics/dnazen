@@ -1,4 +1,4 @@
-from typing import TypedDict, no_type_check
+from typing import TypedDict
 import csv
 import logging
 

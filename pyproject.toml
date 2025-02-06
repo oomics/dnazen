@@ -5,15 +5,19 @@ dependencies = [
     "torch>=2.4", 
     "deepspeed==0.16",
     "einops==0.8",
-    "accelerate>=0.26.0", "scikit-learn>=1.6.1,<2", "datasets>=3.2.0,<4", "peft>=0.14.0,<0.15", "click>=8.1.8,<9",
+    "accelerate>=0.26.0", 
+    "scikit-learn>=1.6.1,<2", 
+    "datasets>=3.2.0,<4", 
+    "peft>=0.14.0,<0.15", 
+    "click>=8.1.8,<9",
 ]
 description = "Ngram utilities for Large Language Model Pre-training."
 name = "dnazen"
 requires-python = ">= 3.11"
-version = "0.1.1"
+version = "0.1.2"
 
 [project.optional-dependencies]
-dev = ["pybind11", "pybind11_stubgen", "pytest", "ruff>=0.9.1,<0.10", "matplotlib", "biopython>=1.84,<2", "pandas>=2.2.3,<3"]
+dev = ["pybind11", "pybind11_stubgen", "pytest", "ruff>=0.9.1,<0.10", "matplotlib", "biopython>=1.84,<2", "pandas>=2.2.3,<3", "pre-commit>=4.1.0,<5", "clang-format>=19.1.7,<20"]
 
 [build-system]
 build-backend = "setuptools.build_meta"
@@ -37,4 +41,8 @@ dev = ["dev"]
 [tool.pixi.dependencies]
 pip = ">=24.3.1,<25"
 matplotlib = "*"
+
+[tool.pixi.feature.dev.dependencies]
+make = "*"
+gcc = ">=14.2.0,<14.3"
 

@@ -2,7 +2,6 @@ import pytest
 import random
 
 from dnazen.ngram import NgramEncoder
-import tracemalloc
 
 random.seed(42)
 
