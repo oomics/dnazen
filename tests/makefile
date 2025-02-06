@@ -10,13 +10,21 @@ INCLUDES = -I$(CSRC_DIR) -I$(PYBIND_DIR)
 TEST_SOURCES = $(wildcard *_test.cpp)
 TEST_EXECUTABLES = $(TEST_SOURCES:.cpp=)
 
+.PHONY: test clean test_cpp test_py
+
 compile_test: $(TEST_EXECUTABLES) $(CSRC_DIR)
 
 %: %.cpp
 	$(CXX) $(LDFLAGS) $(INCLUDES) -o $@ $<
 
-test: compile_test
+test_cpp: compile_test
 	@for exec in $(TEST_EXECUTABLES); do ./$$exec; done
+
+test_py: 
+	pytest . -v
+
+test: clean test_cpp test_py
+	make clean
 
 clean:
 	rm -f $(TEST_EXECUTABLES)
