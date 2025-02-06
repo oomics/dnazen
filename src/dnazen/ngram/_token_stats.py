@@ -1,4 +1,5 @@
 import os
+import json
 
 from transformers import PreTrainedTokenizer
 
@@ -54,8 +55,6 @@ def analyze_token_stats(
     # save to dir
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
-
-    import json
 
     with open(save_dir + "/token-freq.txt", "w") as f:
         json.dump(sorted_token_decoded, f)
