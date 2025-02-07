@@ -45,7 +45,7 @@ class NgramEncoder:
         return self._vocab.get(tokens, None)
 
     def get_matched_ngrams(self, token_ids: torch.Tensor, pad_token_id: int = 3):
-        """Calculate the number of ngram matches from token_ids."""
+        """Get matched ngrams and it's index from token_ids."""
         assert token_ids.dim() == 1, (
             f"token_ids should have dim=1, but got {token_ids.dim()}"
         )
@@ -61,7 +61,7 @@ class NgramEncoder:
                 if ngram_id is None:
                     continue
                 # found the match
-                yield ngram
+                yield ngram, q
 
     def get_num_matches(self, token_ids: torch.Tensor, pad_token_id: int = 3):
         """Calculate the number of ngram matches from token_ids."""
@@ -70,7 +70,7 @@ class NgramEncoder:
     def get_total_ngram_len(self, token_ids: torch.Tensor, pad_token_id: int = 3):
         """Calculate average ngram length."""
         total_ngram_len = 0
-        for ngram in self.get_matched_ngrams(token_ids, pad_token_id):
+        for ngram, _ in self.get_matched_ngrams(token_ids, pad_token_id):
             total_ngram_len += len(ngram)
         return total_ngram_len
 

@@ -44,6 +44,126 @@ def _load_core_ngrams(
     return set(tuple(ngram) for ngram in ngrams)
 
 
+class TokenMasker:
+    def __init__(
+        self,
+        core_ngrams: set[tuple[int, ...]],
+        cls_token: int,
+        sep_token: int,
+        pad_token: int,
+        mask_token: int,
+        verbose: bool = True,
+    ):
+        self.core_ngrams = core_ngrams
+        self.CLS = cls_token
+        self.SEP = sep_token
+        self.PAD = pad_token
+        self.MASK = mask_token
+
+        self.core_ngram_min_len = 128
+        self.core_ngram_max_len = 0
+        for ngram in core_ngrams:
+            self.core_ngram_min_len = min(self.core_ngram_min_len, len(ngram))
+            self.core_ngram_max_len = max(self.core_ngram_max_len, len(ngram))
+
+        if verbose:
+            logger.info(
+                f"MlmDataset initialized. "
+                f"minimum core ngram len={self.core_ngram_min_len}; "
+                f"maximum core ngram len={self.core_ngram_max_len}"
+            )
+
+    def create_mlm_predictions(
+        self,
+        token_seq: torch.Tensor,
+        mlm_prob: float,
+        vocab_list: list[int],
+        ngram_encoder: NgramEncoder,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        assert token_seq.dim() == 1, (
+            f"token_seq should be a 1d array, but got dimension {token_seq.dim()}"
+        )
+
+        candidate_idxes_list = (
+            torch.nonzero(
+                (token_seq != self.CLS)
+                & (token_seq != self.SEP)
+                & (token_seq != self.MASK),
+                as_tuple=False,
+            )
+            .squeeze()
+            .tolist()
+        )
+
+        # get non-candidate indexes
+        token_seq_list = token_seq.tolist()
+        non_candidiate_idxes = []
+        for idx in candidate_idxes_list:
+            for len_ in range(self.core_ngram_min_len, self.core_ngram_max_len):
+                if idx + len_ > token_seq.shape[0]:
+                    continue
+                # find core ngram matches
+                if tuple(token_seq_list[idx : idx + len_]) in self.core_ngrams:
+                    non_candidiate_idxes += range(idx, idx + len_)
+
+        masked_token_seq = token_seq.clone()
+        labels = torch.empty_like(token_seq).fill_(-100)
+
+        # tries to mask whole ngram
+        ngram_mask = torch.zeros_like(token_seq, dtype=torch.bool)
+        for ngram, idx in ngram_encoder.get_matched_ngrams(
+            token_seq, pad_token_id=self.PAD
+        ):
+            num = random.random()
+            if num < mlm_prob:
+                ngram_mask[idx : idx + len(ngram)] = 1
+        num_ngram_mask = int(ngram_mask.sum().item())
+
+        rand = torch.rand_like(token_seq, dtype=torch.float)
+        ngram_mask_80 = ngram_mask & (rand < 0.8)
+        ngram_mask_10 = ngram_mask & (rand >= 0.8) & (rand < 0.9)
+        ngram_mask_10_rand = ngram_mask & (rand >= 0.9)
+        masked_token_seq[ngram_mask_80] = self.MASK
+        masked_token_seq[ngram_mask_10] = token_seq[ngram_mask_10]
+        masked_token_seq[ngram_mask_10_rand] = torch.tensor(
+            random.choices(vocab_list, k=int(ngram_mask_10_rand.sum().item())),
+            dtype=torch.long,
+        )
+
+        seq_len = len(candidate_idxes_list)
+        candidate_idxes = torch.tensor(
+            [idx for idx in candidate_idxes_list if idx not in non_candidiate_idxes],
+            dtype=torch.int32,
+        )
+        len_prop = (seq_len - num_ngram_mask) / len(candidate_idxes)
+        mlm_prob *= len_prop  # modify the mlm prob
+
+        # Create a mask for candidate indices
+        candidate_mask = torch.zeros_like(token_seq, dtype=torch.bool)
+        candidate_mask[candidate_idxes] = 1
+
+        # Sample which tokens to mask
+        mask_prob = torch.full_like(token_seq, mlm_prob, dtype=torch.float)
+        mask_prob[~candidate_mask] = 0
+        mask_mask = torch.bernoulli(mask_prob).bool()  # 1 = sample; 0 = not sample
+
+        # Apply masking
+        labels[mask_mask] = masked_token_seq[mask_mask]
+        rand = torch.rand_like(token_seq, dtype=torch.float)
+        mask_mask_80 = mask_mask & (rand < 0.8)
+        mask_mask_10 = mask_mask & (rand >= 0.8) & (rand < 0.9)
+        mask_mask_10_rand = mask_mask & (rand >= 0.9)
+
+        masked_token_seq[mask_mask_80] = self.MASK
+        masked_token_seq[mask_mask_10] = token_seq[mask_mask_10]
+        masked_token_seq[mask_mask_10_rand] = torch.tensor(
+            random.choices(vocab_list, k=int(mask_mask_10_rand.sum().item())),
+            dtype=torch.long,
+        )
+
+        return masked_token_seq, labels
+
+
 class MlmDataset(Dataset):
     """
     Dataset for mlm task.
@@ -79,30 +199,21 @@ class MlmDataset(Dataset):
         super().__init__()
         self.ngram_encoder = ngram_encoder
         self.tokenizer = tokenizer
-        self.core_ngrams = core_ngrams
 
         # tokenizer things
-        self.CLS: int = tokenizer.convert_tokens_to_ids("[CLS]")
-        self.SEP: int = tokenizer.convert_tokens_to_ids("[SEP]")
         self.PAD: int = tokenizer.convert_tokens_to_ids("[PAD]")
-        self.MASK: int = tokenizer.convert_tokens_to_ids("[MASK]")
-
-        self.core_ngram_min_len = 128
-        self.core_ngram_max_len = 0
-        for ngram in core_ngrams:
-            self.core_ngram_min_len = min(self.core_ngram_min_len, len(ngram))
-            self.core_ngram_max_len = max(self.core_ngram_max_len, len(ngram))
+        self.token_masker = TokenMasker(
+            core_ngrams,
+            cls_token=tokenizer.convert_tokens_to_ids("[CLS]"),
+            sep_token=tokenizer.convert_tokens_to_ids("[SEP]"),
+            pad_token=self.PAD,
+            mask_token=tokenizer.convert_tokens_to_ids("[MASK]"),
+            verbose=verbose,
+        )
 
         self.mlm_prob = mlm_prob
         self.tokens = tokens
         self.attn_mask = attn_mask
-
-        if verbose:
-            logger.info(
-                f"MlmDataset initialized. "
-                f"minimum core ngram len={self.core_ngram_min_len}; "
-                f"maximum core ngram len={self.core_ngram_max_len}"
-            )
 
     @property
     def ngram_vocab_size(self):
@@ -173,7 +284,6 @@ class MlmDataset(Dataset):
         core_ngram_path = os.path.join(save_dir, cls.CORE_NGRAMS_FNAME)
         data = torch.load(data_path, weights_only=True)
 
-        # tokenizer = PreTrainedTokenizer.from_pretrained(tokenizer_path, local_files_only=True)
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
 
         return cls(
@@ -190,16 +300,11 @@ class MlmDataset(Dataset):
 
     def __getitem__(self, index) -> MlmData:
         # do masking during run-time
-        input_ids_, labels_ = MlmDataset._create_mlm_predictions(
+        input_ids_, labels_ = self.token_masker.create_mlm_predictions(
             token_seq=self.tokens[index],
-            sep_token=self.SEP,
-            cls_token=self.CLS,
-            mask_token=self.MASK,
             vocab_list=list(self.tokenizer.get_vocab().values()),
             mlm_prob=self.mlm_prob,
-            core_ngrams=self.core_ngrams,
-            max_core_ngram_len=self.core_ngram_max_len,
-            min_core_ngram_len=self.core_ngram_min_len,
+            ngram_encoder=self.ngram_encoder,
         )
 
         ngram_encoder_outputs = self.ngram_encoder.encode(
@@ -215,79 +320,3 @@ class MlmDataset(Dataset):
             "ngram_input_ids": ngram_encoder_outputs["ngram_ids"],
             "ngram_position_matrix": ngram_encoder_outputs["ngram_position_matrix"],
         }
-
-    @staticmethod
-    def _create_mlm_predictions(
-        token_seq: torch.Tensor,
-        mlm_prob: float,
-        cls_token: int,
-        sep_token: int,
-        mask_token: int,
-        vocab_list: list[int],
-        core_ngrams: set[tuple[int, ...]],
-        min_core_ngram_len: int,
-        max_core_ngram_len: int,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        assert token_seq.dim() == 1, (
-            f"token_seq should be a 1d array, but got dimension {token_seq.dim()}"
-        )
-        CLS = cls_token
-        SEP = sep_token
-        MASK = mask_token
-
-        candidate_idxes_list = (
-            torch.nonzero(
-                (token_seq != CLS) & (token_seq != SEP) & (token_seq != MASK),
-                as_tuple=False,
-            )
-            .squeeze()
-            .tolist()
-        )
-
-        # get non-candidate indexes
-        token_seq_list = token_seq.tolist()
-        non_candidiate_idxes = []
-        for idx in candidate_idxes_list:
-            for len_ in range(min_core_ngram_len, max_core_ngram_len):
-                if idx + len_ > token_seq.shape[0]:
-                    continue
-                # find core ngram matches
-                if tuple(token_seq_list[idx : idx + len_]) in core_ngrams:
-                    non_candidiate_idxes += range(idx, idx + len_)
-
-        seq_len = len(candidate_idxes_list)
-        candidate_idxes = torch.tensor(
-            [idx for idx in candidate_idxes_list if idx not in non_candidiate_idxes],
-            dtype=torch.int32,
-        )
-        len_prop = seq_len / len(candidate_idxes)
-        mlm_prob *= len_prop  # modify the mlm prob
-
-        masked_token_seq = token_seq.clone()
-        # labels = torch.zeros_like(token_seq)
-        labels = torch.empty_like(token_seq).fill_(-100)
-
-        # Create a mask for candidate indices
-        candidate_mask = torch.zeros_like(token_seq, dtype=torch.bool)
-        candidate_mask[candidate_idxes] = 1
-
-        # Sample which tokens to mask
-        mask_prob = torch.full_like(token_seq, mlm_prob, dtype=torch.float)
-        mask_prob[~candidate_mask] = 0
-        mask_mask = torch.bernoulli(mask_prob).bool()  # 1 = sample; 0 = not sample
-
-        # Apply masking
-        labels[mask_mask] = masked_token_seq[mask_mask]
-        rand = torch.rand_like(token_seq, dtype=torch.float)
-        mask_mask_80 = mask_mask & (rand < 0.8)
-        mask_mask_10 = mask_mask & (rand >= 0.8) & (rand < 0.9)
-        mask_mask_10_rand = mask_mask & (rand >= 0.9)
-
-        masked_token_seq[mask_mask_80] = MASK
-        masked_token_seq[mask_mask_10] = token_seq[mask_mask_10]
-        masked_token_seq[mask_mask_10_rand] = torch.tensor(
-            random.choices(vocab_list, k=int(mask_mask_10_rand.sum().item())),
-            dtype=torch.long,
-        )
-
-        return masked_token_seq, labels
