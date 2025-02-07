@@ -134,7 +134,6 @@ class DnaNgramFinder {
     struct NgramFinderConfig config;
     TokenDict_t token_dict;
     NgramMap_t ngrams;
-    // PairMap_t pairs;
     std::mutex mutex;
 
     /**
@@ -299,7 +298,7 @@ class DnaNgramFinder {
             for (size_t i = 1; i < tok_seq.size(); i++) {
                 TokenPair_t tok_pair = {tok_seq[i - 1], tok_seq[i]};
                 if (pair_map.find(tok_pair) != pair_map.end() &&
-                    ngram_candidate.size() < this->config.max_ngram_len) {
+                    ngram_candidate.size() <= this->config.max_ngram_len) {
                     // the current token pair exists
                     ngram_candidate.push_back(tok_seq[i]);
                 } else if (ngram_candidate.size() <
