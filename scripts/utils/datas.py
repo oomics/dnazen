@@ -49,8 +49,6 @@ def get_useful_gue_data(dir_path: str, type: _gue_data_type = "train") -> list:
             lines = f.readlines()
 
         is_mouse = "mouse" in data_file
-        if is_mouse:
-            print(data_file)
 
         for line in lines[1:]:
             data = line.split(",")[0]
