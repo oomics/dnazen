@@ -1,3 +1,7 @@
+"""
+Utility for encoding, and do statical analysis of ngrams.
+"""
+
 from typing import TypedDict
 import json
 import warnings
@@ -40,7 +44,7 @@ class NgramEncoder:
     def _get_ngram_id(self, tokens: tuple[int, ...]) -> int | None:
         return self._vocab.get(tokens, None)
 
-    def get_num_matches(self, token_ids: torch.Tensor, pad_token_id: int = 3):
+    def get_matched_ngrams(self, token_ids: torch.Tensor, pad_token_id: int = 3):
         """Calculate the number of ngram matches from token_ids."""
         assert token_ids.dim() == 1, (
             f"token_ids should have dim=1, but got {token_ids.dim()}"
@@ -49,9 +53,7 @@ class NgramEncoder:
         token_len = token_ids.shape[0]
         token_ids = token_ids[token_ids != pad_token_id]
         token_ids_list = token_ids.tolist()
-        # token_len = len(token_ids_list)
 
-        num_matches = 0
         for ngram_len in range(self._min_ngram_len, self._max_ngram_len):
             for q in range(token_len - ngram_len + 1):
                 ngram: tuple[int, ...] = tuple(token_ids_list[q : q + ngram_len])
@@ -59,8 +61,18 @@ class NgramEncoder:
                 if ngram_id is None:
                     continue
                 # found the match
-                num_matches += 1
-        return num_matches
+                yield ngram
+
+    def get_num_matches(self, token_ids: torch.Tensor, pad_token_id: int = 3):
+        """Calculate the number of ngram matches from token_ids."""
+        return len([0 for _ in self.get_matched_ngrams(token_ids, pad_token_id)])
+
+    def get_total_ngram_len(self, token_ids: torch.Tensor, pad_token_id: int = 3):
+        """Calculate average ngram length."""
+        total_ngram_len = 0
+        for ngram in self.get_matched_ngrams(token_ids, pad_token_id):
+            total_ngram_len += len(ngram)
+        return total_ngram_len
 
     def encode(self, token_ids: torch.Tensor, pad_token_id: int = 3) -> EncodedNgram:
         """
