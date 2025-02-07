@@ -45,14 +45,14 @@ int main() {
         std::cout << std::endl;
     }
 
-    PairMap_t pair_dict = ngram_finder.get_pairs();
-    for (auto it = pair_dict.begin(); it != pair_dict.end(); it++) {
-        std::cout << "pair=(";
-        std::cout << std::get<0>(it->first) << " ";
-        std::cout << std::get<1>(it->first) << " ";
-        std::cout << ") val=" << it->second;
-        std::cout << std::endl;
-    }
+    // PairMap_t pair_dict = ngram_finder.get_pairs();
+    // for (auto it = pair_dict.begin(); it != pair_dict.end(); it++) {
+    //     std::cout << "pair=(";
+    //     std::cout << std::get<0>(it->first) << " ";
+    //     std::cout << std::get<1>(it->first) << " ";
+    //     std::cout << ") val=" << it->second;
+    //     std::cout << std::endl;
+    // }
 
     return 0;
 }

@@ -38,4 +38,3 @@ def test_labeled_dataset(
     )
     for d in dataset:
         assert isinstance(d, dict)
-    print(dataset[1])

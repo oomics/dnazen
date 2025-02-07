@@ -52,5 +52,5 @@ def test_zen_forward(model_config, mlm_model_input):
 
     model = BertForMaskedLM(model_config)
     model.to(device=device)
-    ret = model(**mlm_model_input)
-    print(ret)
+    _ = model(**mlm_model_input)
+    # print(ret)
