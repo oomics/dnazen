@@ -16,7 +16,7 @@ clean:
 	rm -rf dist/*
 
 format:
-	clang-format -i src/_ngram/*.cpp src/_ngram/*.hpp
+	$(PIXI_SHELL) clang-format -i src/_ngram/*.cpp src/_ngram/*.hpp
 	$(PIXI_SHELL) ruff format $(SRC_DIR)
 	$(PIXI_SHELL) ruff format $(TEST_DIR)
 	$(PIXI_SHELL) ruff check $(SRC_DIR) --fix
