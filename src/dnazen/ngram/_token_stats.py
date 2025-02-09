@@ -4,6 +4,7 @@ import json
 from transformers import PreTrainedTokenizer
 
 from _ngram import NgramFinderConfig, DnaNgramFinder
+from ._ngram_encoder import NgramEncoder
 
 
 def analyze_token_stats(
@@ -35,6 +36,18 @@ def analyze_token_stats(
         freq = ngram.pop()
         ngram_dict[tuple(ngram)] = freq
 
+    ngram_encoder = NgramEncoder(
+        ngram_dict,
+        min_ngram_len=min_ngram_len,
+        max_ngram_len=max_ngram_len,
+        max_ngrams=30,
+    )
+
+    actual_max_ngram_len = 0
+    for d in ngram_dict:
+        actual_max_ngram_len = max(actual_max_ngram_len, len(d))
+    print(f"{actual_max_ngram_len=}")
+
     ngram_decoded = {}
     for k, v in ngram_dict.items():
         k_ = tokenizer.decode(list(k))
@@ -60,3 +73,4 @@ def analyze_token_stats(
         json.dump(sorted_token_decoded, f)
     with open(save_dir + "/ngram-freq.txt", "w") as f:
         json.dump(sorted_ngram_decoded, f)
+    ngram_encoder.save(save_dir + "/ngram-encoder.json")

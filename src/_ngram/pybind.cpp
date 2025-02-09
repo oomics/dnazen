@@ -18,9 +18,7 @@ PYBIND11_MODULE(_ngram, m) {
     py::class_<DnaNgramFinder>(m, "DnaNgramFinder")
         .def(py::init<struct NgramFinderConfig>())
         .def("find_ngrams_batched", &DnaNgramFinder::find_ngrams_batched)
+        .def("find_ngrams_from_file", &DnaNgramFinder::find_ngrams_from_file)
         .def_property_readonly("token_freq", &DnaNgramFinder::get_tokens)
-        // .def_property_readonly("words", &DnaNgramFinder::get_words)
-        // .def_property_readonly("pairs", &DnaNgramFinder::get_pairs)
-        // .def_property_readonly("ngrams", &DnaNgramFinder::get_ngrams);
         .def("get_ngram_list", &DnaNgramFinder::ngram_to_list);
 }

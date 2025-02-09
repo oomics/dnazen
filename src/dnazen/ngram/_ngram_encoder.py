@@ -65,7 +65,7 @@ class NgramEncoder:
 
     def get_num_matches(self, token_ids: torch.Tensor, pad_token_id: int = 3):
         """Calculate the number of ngram matches from token_ids."""
-        return len([0 for _ in self.get_matched_ngrams(token_ids, pad_token_id)])
+        return len([0 for _, _ in self.get_matched_ngrams(token_ids, pad_token_id)])
 
     def get_total_ngram_len(self, token_ids: torch.Tensor, pad_token_id: int = 3):
         """Calculate average ngram length."""
@@ -194,6 +194,39 @@ class NgramEncoder:
         self._id2ngrams = {}
         for k, v in self._vocab.items():
             self._id2ngrams[v] = k
+
+    def train_from_file(
+        self,
+        fname: str,
+        min_pmi: float,
+        min_token_count: int,
+        min_ngram_freq: int,
+        num_workers: int = 64,
+    ):
+        ngram_finder_config = NgramFinderConfig()
+        ngram_finder_config.min_pmi = min_pmi
+        ngram_finder_config.max_ngram_len = self._max_ngram_len
+        ngram_finder_config.min_ngram_len = self._min_ngram_len
+        ngram_finder_config.min_ngram_freq = min_ngram_freq
+        ngram_finder_config.min_token_count = min_token_count
+        ngram_finder_config.num_workers = num_workers
+
+        if self._vocab != {}:
+            warnings.warn("the vocab is non-empty. Would be overloaded after training.")
+
+        import _ngram
+
+        finder = _ngram.DnaNgramFinder(ngram_finder_config)
+        finder.find_ngrams_from_file(fname)
+        ngrams: list[list[int]] = finder.get_ngram_list([])
+        del finder  # save memory
+
+        ngram_dict = {}
+        for ngram in ngrams:
+            freq = ngram.pop()
+            ngram_dict[tuple(ngram)] = freq
+
+        # return ngram_dict
 
     def save(self, path, pretty=True):
         vocab_dict = {}

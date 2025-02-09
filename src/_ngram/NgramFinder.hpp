@@ -74,6 +74,25 @@ typedef std::unordered_map<Token_t, uint32_t> TokenDict_t;
 typedef std::unordered_map<TokenSeq_t, uint32_t, VectorHash> NgramMap_t;
 typedef std::unordered_map<TokenPair_t, uint32_t, TokenPairHash> PairMap_t;
 
+void make_token_seq(std::string &line, TokenSeq_t &token_seq) {
+    // splitting string
+    size_t start = 0;
+    size_t end = line.find(':');
+
+    while (end != std::string::npos) {
+        std::string token = line.substr(start, end - start);
+        token_seq.push_back(std::stoul(token));
+
+        start = end + 1;
+        end = line.find(':', start);
+    }
+
+    // process the last string
+    std::string token = line.substr(start);
+    token_seq.push_back(std::stoul(token));
+    return;
+}
+
 /* utility functions */
 template <typename T>
 void filter_dict_by_freq(T &dict, size_t min_freq) {
@@ -284,7 +303,7 @@ class DnaNgramFinder {
 
         // filter the mappings based on the minimum count
         filter_dict_by_freq(this->token_dict, this->config.min_token_count);
-        filter_dict_by_freq<PairMap_t>(pair_map, this->config.min_token_count);
+        filter_dict_by_freq(pair_map, this->config.min_token_count);
 
         // filter the pairs based on pmi
         std::cout << "filter pairs.." << std::endl;
@@ -298,7 +317,7 @@ class DnaNgramFinder {
             for (size_t i = 1; i < tok_seq.size(); i++) {
                 TokenPair_t tok_pair = {tok_seq[i - 1], tok_seq[i]};
                 if (pair_map.find(tok_pair) != pair_map.end() &&
-                    ngram_candidate.size() <= this->config.max_ngram_len) {
+                    ngram_candidate.size() < this->config.max_ngram_len) {
                     // the current token pair exists
                     ngram_candidate.push_back(tok_seq[i]);
                 } else if (ngram_candidate.size() <
@@ -332,5 +351,95 @@ class DnaNgramFinder {
         std::cout << "filer dict by freq..." << std::endl;
         filter_dict_by_freq<NgramMap_t>(this->ngrams,
                                         this->config.min_ngram_freq);
+    }
+
+    void find_ngrams_from_file(std::string fname) {
+        std::ifstream file(fname);
+
+        if (!file.is_open()) {
+            std::cerr << "Cannot open the file." << std::endl;
+            return;
+        }
+
+        std::cout << "count token and pairs..." << std::endl;
+        PairMap_t pair_map;
+        size_t total_num_tokens = 0;
+        {
+            int num_threads = this->config.num_workers;
+            ThreadPool thread_pool(num_threads);
+            thread_pool.init();
+
+            std::vector<std::future<void>> futures;
+            std::string line;
+            while (std::getline(file, line)) {
+                TokenSeq_t token_seq;
+                make_token_seq(line, token_seq);
+                total_num_tokens += token_seq.size();
+                futures.emplace_back(
+                    // here, token_seq is copy-by-value instead of
+                    // copy-by-reference
+                    thread_pool.submit([this, token_seq, &pair_map]() {
+                        this->_count_token_and_pairs2(token_seq, pair_map);
+                    }));
+            }
+            // Wait for all threads to finish
+            for (auto &f : futures) {
+                f.get();
+            }
+        }
+
+        // filter the mappings based on the minimum count
+        filter_dict_by_freq(this->token_dict, this->config.min_token_count);
+        filter_dict_by_freq(pair_map, this->config.min_token_count);
+
+        // filter the pairs based on pmi
+        std::cout << "filter pairs.." << std::endl;
+        this->_filter_pairs(pair_map, total_num_tokens);
+
+        // iterate over the token sequences again.
+        // enumerate over ngram candidates
+        std::cout << "iterate over token seq" << std::endl;
+        std::string line;
+        while (std::getline(file, line)) {
+            TokenSeq_t tok_seq;
+            make_token_seq(line, tok_seq);
+            TokenSeq_t ngram_candidate = {tok_seq[0]};
+            for (size_t i = 1; i < tok_seq.size(); i++) {
+                TokenPair_t tok_pair = {tok_seq[i - 1], tok_seq[i]};
+                if (pair_map.find(tok_pair) != pair_map.end() &&
+                    ngram_candidate.size() < this->config.max_ngram_len) {
+                    // the current token pair exists
+                    ngram_candidate.push_back(tok_seq[i]);
+                } else if (ngram_candidate.size() <
+                           this->config.min_ngram_len) {
+                    ngram_candidate = {tok_seq[i]};
+                } else {
+                    this->ngrams[ngram_candidate]++;
+                    ngram_candidate = {tok_seq[i]};
+                }
+            }
+        }
+
+        // remove pairs to save memory
+        {
+            PairMap_t tmp;
+            std::swap(pair_map, tmp);
+        }
+
+        filter_dict_by_freq(this->ngrams, this->config.min_ngram_freq);
+
+        // renew ngram by freq
+        std::cout << "renew ngram by freq..." << std::endl;
+        NgramMap_t new_ngram_dict;
+        while (std::getline(file, line)) {
+            TokenSeq_t tok_seq;
+            make_token_seq(line, tok_seq);
+            this->_get_new_ngram_by_freq(tok_seq, this->token_dict, pair_map,
+                                         this->ngrams, new_ngram_dict);
+        }
+
+        this->ngrams = new_ngram_dict;
+        std::cout << "filer dict by freq..." << std::endl;
+        filter_dict_by_freq(this->ngrams, this->config.min_ngram_freq);
     }
 };
