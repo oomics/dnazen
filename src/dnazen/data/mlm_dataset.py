@@ -52,9 +52,11 @@ class TokenMasker:
         sep_token: int,
         pad_token: int,
         mask_token: int,
+        whole_ngram_masking: bool = True,
         verbose: bool = True,
     ):
         self.core_ngrams = core_ngrams
+        self.whole_ngram_masking = whole_ngram_masking
         self.CLS = cls_token
         self.SEP = sep_token
         self.PAD = pad_token
@@ -110,25 +112,27 @@ class TokenMasker:
         labels = torch.empty_like(token_seq).fill_(-100)
 
         # tries to mask whole ngram
-        ngram_mask = torch.zeros_like(token_seq, dtype=torch.bool)
-        for ngram, idx in ngram_encoder.get_matched_ngrams(
-            token_seq, pad_token_id=self.PAD
-        ):
-            num = random.random()
-            if num < mlm_prob:
-                ngram_mask[idx : idx + len(ngram)] = 1
-        num_ngram_mask = int(ngram_mask.sum().item())
-
-        rand = torch.rand_like(token_seq, dtype=torch.float)
-        ngram_mask_80 = ngram_mask & (rand < 0.8)
-        ngram_mask_10 = ngram_mask & (rand >= 0.8) & (rand < 0.9)
-        ngram_mask_10_rand = ngram_mask & (rand >= 0.9)
-        masked_token_seq[ngram_mask_80] = self.MASK
-        masked_token_seq[ngram_mask_10] = token_seq[ngram_mask_10]
-        masked_token_seq[ngram_mask_10_rand] = torch.tensor(
-            random.choices(vocab_list, k=int(ngram_mask_10_rand.sum().item())),
-            dtype=torch.long,
-        )
+        if self.whole_ngram_masking:
+            ngram_mask = torch.zeros_like(token_seq, dtype=torch.bool)
+            for ngram, idx in ngram_encoder.get_matched_ngrams(
+                token_seq, pad_token_id=self.PAD
+            ):
+                num = random.random()
+                if num < mlm_prob:
+                    ngram_mask[idx : idx + len(ngram)] = 1
+            num_ngram_mask = int(ngram_mask.sum().item())
+            rand = torch.rand_like(token_seq, dtype=torch.float)
+            ngram_mask_80 = ngram_mask & (rand < 0.8)
+            ngram_mask_10 = ngram_mask & (rand >= 0.8) & (rand < 0.9)
+            ngram_mask_10_rand = ngram_mask & (rand >= 0.9)
+            masked_token_seq[ngram_mask_80] = self.MASK
+            masked_token_seq[ngram_mask_10] = token_seq[ngram_mask_10]
+            masked_token_seq[ngram_mask_10_rand] = torch.tensor(
+                random.choices(vocab_list, k=int(ngram_mask_10_rand.sum().item())),
+                dtype=torch.long,
+            )
+        else:
+            num_ngram_mask = 0
 
         seq_len = len(candidate_idxes_list)
         candidate_idxes = torch.tensor(
@@ -184,6 +188,7 @@ class MlmDataset(Dataset):
         ngram_encoder: NgramEncoder,
         core_ngrams: set[tuple[int, ...]],
         mlm_prob: float = 0.15,
+        whole_ngram_masking: bool = True,
         verbose: bool = True,
     ):
         """Initialize a Mlm dataset.
@@ -208,11 +213,14 @@ class MlmDataset(Dataset):
             sep_token=tokenizer.convert_tokens_to_ids("[SEP]"),
             pad_token=self.PAD,
             mask_token=tokenizer.convert_tokens_to_ids("[MASK]"),
+            whole_ngram_masking=whole_ngram_masking,
             verbose=verbose,
         )
 
         self.mlm_prob = mlm_prob
         self.tokens = tokens
+        self.core_ngrams = core_ngrams  # fix breaking change introduced by token_masker
+        self.whole_ngram_masking = whole_ngram_masking
         self.attn_mask = attn_mask
 
     @property
@@ -226,6 +234,7 @@ class MlmDataset(Dataset):
         tokenizer: PreTrainedTokenizer,
         ngram_encoder: NgramEncoder,
         core_ngrams: set[tuple[int, ...]],
+        whole_ngram_masking: bool = False,
         mlm_prob: float = 0.15,
     ):
         with open(data_path, "r") as f:
@@ -248,6 +257,7 @@ class MlmDataset(Dataset):
             tokenizer=tokenizer,
             ngram_encoder=ngram_encoder,
             core_ngrams=core_ngrams,
+            whole_ngram_masking=whole_ngram_masking,
             mlm_prob=mlm_prob,
         )
 
@@ -265,6 +275,7 @@ class MlmDataset(Dataset):
         _save_core_ngrams(core_ngram_path, core_ngrams=self.core_ngrams)
         torch.save(
             {
+                "whole_ngram_masking": self.whole_ngram_masking,
                 "mlm_prob": self.mlm_prob,
                 "tokens": self.tokens,
                 "attention_mask": self.attn_mask,
@@ -292,6 +303,7 @@ class MlmDataset(Dataset):
             tokenizer=tokenizer,
             ngram_encoder=NgramEncoder.from_file(ngram_encoder_path),
             core_ngrams=_load_core_ngrams(core_ngram_path),
+            whole_ngram_masking=data["whole_ngram_masking"],
             mlm_prob=data["mlm_prob"],
         )
 

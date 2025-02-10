@@ -1,3 +1,5 @@
+import shutil
+
 import pytest
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
@@ -27,15 +29,25 @@ def ngram_encoder():
 
 
 @pytest.mark.usefixtures("tokenizer", "ngram_encoder")
+@pytest.mark.parametrize(("whole_ngram_masking"), (True, False))
 def test_labeled_dataset(
     tokenizer: PreTrainedTokenizer,
     ngram_encoder,
+    whole_ngram_masking: bool,
 ):
     dataset = MlmDataset.from_raw_data(
         current_dir + "/resources/test_mlm.txt",
         tokenizer=tokenizer,
         ngram_encoder=ngram_encoder,
         core_ngrams=set([(1, 10), (23, 24, 25)]),
+        whole_ngram_masking=whole_ngram_masking,
     )
     for d in dataset:
         assert isinstance(d, dict)
+
+    # test save
+    dataset.save(current_dir + "/.cache")
+
+    dataset = MlmDataset.from_dir(current_dir + "/.cache")
+
+    shutil.rmtree(current_dir + "/.cache")
