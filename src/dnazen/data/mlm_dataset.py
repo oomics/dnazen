@@ -303,7 +303,7 @@ class MlmDataset(Dataset):
             tokenizer=tokenizer,
             ngram_encoder=NgramEncoder.from_file(ngram_encoder_path),
             core_ngrams=_load_core_ngrams(core_ngram_path),
-            whole_ngram_masking=data["whole_ngram_masking"],
+            whole_ngram_masking=data.get("whole_ngram_masking", False),
             mlm_prob=data["mlm_prob"],
         )
 
