@@ -35,7 +35,7 @@ ext = Pybind11Extension(
     define_macros=CPP_MACROS,
 )
 if dev_build:
-    ext._add_cflags(["-std=c++17", "-O0", "-g"])
+    ext._add_cflags(["-std=c++17", "-O0", "-fsanitize=address", "-static-libasan", "-g"])
 else:
     ext._add_cflags(["-std=c++17", "-O3"])
 
