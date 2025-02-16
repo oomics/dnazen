@@ -4,8 +4,7 @@ CXX = g++
 LDFLAGS = -lstdc++ -std=c++17 -O0 -g -fsanitize=address
 
 CSRC_DIR = ../src/_ngram
-PYBIND_DIR = ../.venv/lib/python3.11/site-packages
-INCLUDES = -I$(CSRC_DIR) -I$(PYBIND_DIR)
+INCLUDES = -I$(CSRC_DIR) 
 
 TEST_SOURCES = $(wildcard *_test.cpp)
 TEST_EXECUTABLES = $(TEST_SOURCES:.cpp=)

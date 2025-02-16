@@ -1,23 +1,44 @@
 from __future__ import annotations
 
-__all__ = ["DnaNgramFinder", "NgramFinderConfig"]
+__all__ = [
+    "FreqNgramFinder",
+    "FreqNgramFinderConfig",
+    "PmiNgramFinder",
+    "PmiNgramFinderConfig",
+]
 
-class DnaNgramFinder:
+class FreqNgramFinder:
     @staticmethod
     def _pybind11_conduit_v1_(*args, **kwargs): ...
-    def __init__(self, arg0: NgramFinderConfig) -> None: ...
+    def __init__(self, arg0: FreqNgramFinderConfig) -> None: ...
     def find_ngrams_batched(self, arg0: list[list[int]]) -> None: ...
     def get_ngram_list(self, arg0: list[list[int]]) -> list[list[int]]: ...
-    def find_ngrams_from_file(self, arg0: str) -> list[list[int]]: ...
+
+class FreqNgramFinderConfig:
+    max_ngram_len: int
+    min_freq: int
+    min_ngram_len: int
+    num_workers: int
+    @staticmethod
+    def _pybind11_conduit_v1_(*args, **kwargs): ...
+    def __init__(self) -> None: ...
+
+class PmiNgramFinder:
+    @staticmethod
+    def _pybind11_conduit_v1_(*args, **kwargs): ...
+    def __init__(self, arg0: PmiNgramFinderConfig) -> None: ...
+    def find_ngrams_batched(self, arg0: list[list[int]]) -> None: ...
+    def find_ngrams_from_file(self, arg0: str) -> None: ...
+    def get_ngram_list(self, arg0: list[list[int]]) -> list[list[int]]: ...
     @property
     def token_freq(self) -> dict[int, int]: ...
 
-class NgramFinderConfig:
+class PmiNgramFinderConfig:
     max_ngram_len: int
     min_ngram_freq: int
     min_ngram_len: int
     min_pmi: float
-    min_token_count: float
+    min_token_count: int
     num_workers: int
     @staticmethod
     def _pybind11_conduit_v1_(*args, **kwargs): ...

@@ -1,144 +1,11 @@
-
-#include <cmath>
-#include <csignal>
-#include <cstdint>
-#include <fstream>
-#include <functional>
-#include <iostream>
-#include <string>
-#include <thread>
-#include <unordered_map>
-#include <vector>
-
-#include "ThreadPool.hpp"
-
-// only detect keyboard interrupt if it defined
-#if defined(__unix__) || (defined(__APPLE__) && defined(__MACH__))
-#define DETECT_KEY_INTERRUPT()                                               \
-    signal(SIGINT, [](int) {                                                 \
-        std::cout << "Keyboard interrupt detected. Exiting..." << std::endl; \
-        exit(0);                                                             \
-    });
-#else
-#define DETECT_KEY_INTERRUPT()
-#warning "Keyboard interrupt detection is not yet implemented on this platform"
-#endif
-
-// builtin likely
-#define likely(x) __builtin_expect((x), 1)
-
-typedef uint32_t Token_t;
-typedef std::vector<Token_t> TokenSeq_t;
-typedef std::tuple<Token_t, Token_t> TokenPair_t;
-
-struct VectorHash {
-    size_t operator()(const TokenSeq_t &vec) const {
-        // https://stackoverflow.com/questions/20511347/a-good-hash-function-for-a-vector/72073933#72073933
-        size_t seed = vec.size();
-        for (auto x : vec) {
-            size_t _x = (size_t)x;
-            _x = ((_x >> 16) ^ _x) * 0x45d9f3b;
-            _x = ((_x >> 16) ^ _x) * 0x45d9f3b;
-            _x = (_x >> 16) ^ _x;
-            seed ^= x + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-        }
-        return seed;
-    }
-};
-
-struct TokenPairHash {
-    size_t operator()(const TokenPair_t &token_pair) const {
-        // https://stackoverflow.com/questions/20511347/a-good-hash-function-for-a-vector/72073933#72073933
-        size_t seed = 0xdeadbeef;
-
-        // manual loop-unroll
-        size_t x = (size_t)std::get<0>(token_pair);
-        size_t _x = x;
-        _x = ((_x >> 16) ^ _x) * 0x45d9f3b;
-        _x = ((_x >> 16) ^ _x) * 0x45d9f3b;
-        _x = (_x >> 16) ^ _x;
-        seed ^= x + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-
-        x = (size_t)std::get<1>(token_pair);
-        _x = x;
-        _x = ((_x >> 16) ^ _x) * 0x45d9f3b;
-        _x = ((_x >> 16) ^ _x) * 0x45d9f3b;
-        _x = (_x >> 16) ^ _x;
-        seed ^= x + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-
-        return seed;
-    }
-};
-
-typedef std::unordered_map<Token_t, uint64_t> TokenDict_t;
-typedef std::unordered_map<TokenSeq_t, uint64_t, VectorHash> NgramMap_t;
-typedef std::unordered_map<TokenPair_t, uint64_t, TokenPairHash> PairMap_t;
-
-/* utility functions */
-inline bool isInteger(const std::string &s) {
-    if (s.empty() || (!isdigit(s[0]))) return false;
-
-    char *p;
-    strtol(s.c_str(), &p, 10);
-
-    return (*p == 0);
-}
-
-void make_token_seq(std::string &line, TokenSeq_t &token_seq) {
-    // splitting string
-    size_t start = 0;
-    size_t end = line.find(':');
-    while (end != std::string::npos) {
-        std::string token = line.substr(start, end - start);
-        if (!isInteger(token)) {
-            std::cerr << "Token " << token << " cannot be convertted to int."
-                      << std::endl;
-        }
-        token_seq.push_back(std::stoul(token));
-
-        start = end + 1;
-        end = line.find(':', start);
-    }
-
-    // process the last string
-    std::string token = line.substr(start);
-    if (!isInteger(token)) {
-        std::cout << "Token " << token << " cannot be convertted to int."
-                  << std::endl;
-    } else {
-        token_seq.push_back(std::stoul(token));
-    }
-
-    return;
-}
-
-template <typename T>
-void filter_dict_by_freq(T &dict, size_t min_freq) {
-    static_assert(std::is_same<decltype(std::declval<T>().begin()),
-                               typename T::iterator>::value,
-                  "T must have a begin() method returning an iterator");
-    static_assert(std::is_same<decltype(std::declval<T>().end()),
-                               typename T::iterator>::value,
-                  "T must have an end() method returning an iterator");
-    static_assert(
-        std::is_same<decltype(++std::declval<typename T::iterator &>()),
-                     typename T::iterator &>::value,
-        "T's iterator must support increment");
-
-    std::vector<typename T::key_type> keys_to_erase;
-    for (auto it = dict.begin(); it != dict.end(); it++) {
-        if (it->second < min_freq) {
-            keys_to_erase.push_back(it->first);
-        }
-    }
-    for (auto key : keys_to_erase) {
-        dict.erase(key);
-    }
-}
+#include "common.hpp"
 
 void _count_token_and_pairs(const TokenSeq_t &token_seq,
                             TokenDict_t &token_dict, PairMap_t &pair_map) {
     if (token_seq.empty()) {
+        // dummy variables so that they could be iterated.
+        token_dict[0] = 0;
+        pair_map[{0, 0}] = 0;
         std::cout << "Warning: token_seq is empty" << std::endl;
         return;
     }
@@ -160,7 +27,7 @@ void _count_token_and_pairs(const TokenSeq_t &token_seq,
     return;
 }
 
-struct NgramFinderConfig {
+struct PmiNgramFinderConfig {
     size_t min_ngram_freq;
     size_t min_ngram_len;
     size_t max_ngram_len;
@@ -171,9 +38,9 @@ struct NgramFinderConfig {
     int num_workers = 16;
 };
 
-class DnaNgramFinder {
+class PmiNgramFinder {
    private:
-    struct NgramFinderConfig config;
+    struct PmiNgramFinderConfig config;
     TokenDict_t token_dict;
     NgramMap_t ngrams;
     std::mutex mutex;
@@ -181,7 +48,7 @@ class DnaNgramFinder {
     /**
      * @brief Filter the pairs using pmi.
      */
-    void _filter_pairs(PairMap_t &pairs, size_t total_num_tokens) {
+    void _filter_pairs(PairMap_t &pairs, size_t total_num_pairs) {
         std::vector<TokenPair_t> keys_to_erase;
         for (auto it = pairs.begin(); it != pairs.end(); it++) {
             auto pair = it->first;
@@ -190,8 +57,13 @@ class DnaNgramFinder {
             const Token_t a = std::get<0>(pair);
             const Token_t b = std::get<1>(pair);
 
+            if (this->token_dict.find(a) == this->token_dict.end() ||
+                this->token_dict.find(b) == this->token_dict.end()) {
+                keys_to_erase.push_back(pair);
+            }
+
             double mi =
-                (log2(total_num_tokens) + log2(count) -
+                (log2(total_num_pairs) + log2(count) -
                  log2(this->token_dict[a]) -
                  log2(this->token_dict[b]));  // here we break the formula
                                               // into parts to avoid overflow
@@ -224,14 +96,14 @@ class DnaNgramFinder {
      * n-grams found
      */
     void _get_new_ngram_by_freq(const TokenSeq_t &token_seq,
-                                // const TokenDict_t &token_dict,
                                 const NgramMap_t &ngram_dict,
                                 NgramMap_t &new_ngram_dict) {
         NgramMap_t local_ngram_dict;
 
         for (size_t idx = 0; idx < token_seq.size(); idx++) {
-            for (size_t ngram_len = 1; ngram_len < this->config.max_ngram_len &&
-                                       idx + ngram_len <= token_seq.size();
+            for (size_t ngram_len = 1;
+                 ngram_len <= this->config.max_ngram_len &&
+                 idx + ngram_len <= token_seq.size();
                  ngram_len++) {
                 TokenSeq_t ngram =
                     TokenSeq_t(token_seq.begin() + idx,
@@ -267,10 +139,6 @@ class DnaNgramFinder {
         PairMap_t local_pair_map;
         _count_token_and_pairs(token_seq, local_token_dict, local_pair_map);
 
-#ifdef __DEBUG__
-        std::cout << "_count_token_and_pairs2" << std::endl;
-#endif
-
         std::lock_guard<std::mutex> lock(mutex);
         for (const auto &pair : local_token_dict) {
             token_dict[pair.first] += pair.second;
@@ -281,9 +149,15 @@ class DnaNgramFinder {
     }
 
    public:
-    DnaNgramFinder(NgramFinderConfig config) : token_dict(), ngrams() {
+    PmiNgramFinder(PmiNgramFinderConfig config) : token_dict(), ngrams() {
         DETECT_KEY_INTERRUPT()
         this->config = config;
+        if (this->config.min_ngram_len == 0) {
+            std::cout << "Warning: Cannot have min_ngram_len set to 0. "
+                         "Resetting to 1."
+                      << std::endl;
+            this->config.min_ngram_len = 1;
+        }
     }
 
     TokenDict_t &get_tokens() { return this->token_dict; }
@@ -323,22 +197,22 @@ class DnaNgramFinder {
     }
 
     void find_ngrams_batched(const std::vector<TokenSeq_t> &token_seq_vec) {
+        ThreadPool thread_pool(this->config.num_workers);
+        thread_pool.init();
+
         PairMap_t pair_map;
 
         std::cout << "count token and pairs..." << std::endl;
-        size_t total_num_tokens = 0;
+        size_t total_num_pairs = 0;
         {
-            ThreadPool thread_pool(this->config.num_workers);
-            thread_pool.init();
+            std::vector<std::future<void>> futures;
             // lock striping
             std::vector<TokenDict_t> token_dict_vec(this->config.num_workers);
             std::vector<PairMap_t> pair_map_vec(this->config.num_workers);
             std::vector<std::mutex> locks(this->config.num_workers);
 
-            std::vector<std::future<void>> futures;
-            // for (const auto &token_seq : token_seq_vec) {
             for (size_t idx = 0; idx < token_seq_vec.size(); idx++) {
-                total_num_tokens += token_seq_vec[idx].size();
+                total_num_pairs += token_seq_vec[idx].size();
                 futures.emplace_back(thread_pool.submit([&, this, idx]() {
                     this->_count_token_and_pairs2(
                         token_seq_vec[idx],
@@ -353,6 +227,8 @@ class DnaNgramFinder {
             }
 
             // merge all dicts
+            std::cout << "merging token and pairs frequency results..."
+                      << std::endl;
             for (const auto &token_dict_tmp : token_dict_vec) {
                 for (const auto &pair : token_dict_tmp) {
                     this->token_dict[pair.first] += pair.second;
@@ -371,18 +247,18 @@ class DnaNgramFinder {
         filter_dict_by_freq(pair_map, this->config.min_token_count);
 
         // filter the pairs based on pmi
-        std::cout << "filter pairs.." << std::endl;
-        this->_filter_pairs(pair_map, total_num_tokens);
+        this->_filter_pairs(pair_map, total_num_pairs);
 
         // iterate over the token sequences again.
         // enumerate over ngram candidates
         std::cout << "iterate over token seq" << std::endl;
         for (auto &tok_seq : token_seq_vec) {
+            if (tok_seq.size() < this->config.min_ngram_len) continue;
             TokenSeq_t ngram_candidate = {tok_seq[0]};
             for (size_t i = 1; i < tok_seq.size(); i++) {
                 TokenPair_t tok_pair = {tok_seq[i - 1], tok_seq[i]};
                 if (pair_map.find(tok_pair) != pair_map.end() &&
-                    ngram_candidate.size() < this->config.max_ngram_len) {
+                    ngram_candidate.size() <= this->config.max_ngram_len) {
                     // the current token pair exists
                     ngram_candidate.push_back(tok_seq[i]);
                 } else if (ngram_candidate.size() <
@@ -406,10 +282,8 @@ class DnaNgramFinder {
         // renew ngram by freq
         std::cout << "renew ngram by freq..." << std::endl;
         {
-            ThreadPool thread_pool(this->config.num_workers);
-            thread_pool.init();
-            NgramMap_t new_ngram_dict;
             std::vector<std::future<void>> futures;
+            NgramMap_t new_ngram_dict;
             for (auto &tok_seq : token_seq_vec) {
                 futures.emplace_back(
                     // everything except `this` is pass-by-reference
@@ -428,6 +302,8 @@ class DnaNgramFinder {
         // this->ngrams = new_ngram_dict;
         std::cout << "filer dict by freq..." << std::endl;
         filter_dict_by_freq(this->ngrams, this->config.min_ngram_freq);
+
+        filter_dict_by_min_length(this->ngrams, this->config.min_ngram_len);
     }
 
     void find_ngrams_from_file(std::string fname) {
@@ -440,7 +316,7 @@ class DnaNgramFinder {
 
         std::cout << "count token and pairs(mem-eficient)..." << std::endl;
         PairMap_t pair_map;
-        size_t total_num_tokens = 0;
+        size_t total_num_pairs = 0;
         {
             ThreadPool thread_pool(this->config.num_workers);
             thread_pool.init();
@@ -450,7 +326,7 @@ class DnaNgramFinder {
             while (std::getline(file, line)) {
                 TokenSeq_t token_seq;
                 make_token_seq(line, token_seq);
-                total_num_tokens += token_seq.size();
+                total_num_pairs += token_seq.size();
                 futures.emplace_back(
                     // here, token_seq is copy-by-value instead of
                     // copy-by-reference
@@ -471,7 +347,7 @@ class DnaNgramFinder {
 
         // filter the pairs based on pmi
         std::cout << "filter pairs.." << std::endl;
-        this->_filter_pairs(pair_map, total_num_tokens);
+        this->_filter_pairs(pair_map, total_num_pairs);
 
         // iterate over the token sequences again.
         // enumerate over ngram candidates
@@ -484,7 +360,7 @@ class DnaNgramFinder {
             for (size_t i = 1; i < tok_seq.size(); i++) {
                 TokenPair_t tok_pair = {tok_seq[i - 1], tok_seq[i]};
                 if (pair_map.find(tok_pair) != pair_map.end() &&
-                    ngram_candidate.size() < this->config.max_ngram_len) {
+                    ngram_candidate.size() <= this->config.max_ngram_len) {
                     // the current token pair exists
                     ngram_candidate.push_back(tok_seq[i]);
                 } else if (ngram_candidate.size() <

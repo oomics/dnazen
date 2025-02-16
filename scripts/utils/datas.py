@@ -80,4 +80,4 @@ def get_all_hg38_data(data_path: str) -> list[str]:
 # --- multi-species ---
 def get_multi_species_data(data_path: str) -> list[str]:
     with open(data_path, "r") as f:
-        return f.read().split("\n")
+        return f.read().split("\n")[:-1]

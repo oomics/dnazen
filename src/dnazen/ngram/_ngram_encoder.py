@@ -2,13 +2,19 @@
 Utility for encoding, and do statical analysis of ngrams.
 """
 
-from typing import TypedDict
+from typing import TypedDict, Literal
 import json
 import warnings
+from copy import deepcopy
 
 import torch
 
-from ._find_ngram import find_ngrams, NgramFinderConfig
+from ._find_ngram import (
+    find_ngrams_by_pmi,
+    find_ngrams_by_freq,
+    PmiNgramFinderConfig,
+    FreqNgramFinderConfig,
+)
 
 
 class _NgramEncoderConfig(TypedDict):
@@ -162,38 +168,73 @@ class NgramEncoder:
     def train(
         self,
         tokens: list[list[int]],
-        min_pmi: float,
-        min_token_count: int,
-        min_ngram_freq: int,
+        min_pmi: float | None = None,
+        min_token_count: int | None = None,
+        min_ngram_freq: int = 5,
         num_workers: int = 64,
+        returns_freq: bool = False,
+        method: Literal["pmi", "freq"] = "pmi",
     ):
-        """Train the ngram encoder using the given token and config.
+        """Train the ngram encoder using the given token, config and method.
 
         Args:
             tokens (list[list[int]]): list of pre-tokenized tokens.
-            min_pmi (float): the pmi threshold of ngram
-            min_token_count (int): the minimum token frequency for filtering ngram
+            min_pmi (float): the pmi threshold of ngram (used only using pmi method)
+            min_token_count (int): the minimum token frequency for filtering ngram (used only using pmi method)
             min_ngram_freq (int): the minimum ngram frequency for filtering ngram
             num_workers (int, optional): number of workers for training. Defaults to 64.
+            returns_freq (bool, optional): whether return the frequency info. Defaults to false.
+            method (Literal["pmi", "freq"], optional): the method to train. Defaults to pmi.
         """
-        ngram_finder_config = NgramFinderConfig()
-        ngram_finder_config.min_pmi = min_pmi
-        ngram_finder_config.max_ngram_len = self._max_ngram_len
-        ngram_finder_config.min_ngram_len = self._min_ngram_len
-        ngram_finder_config.min_ngram_freq = min_ngram_freq
-        ngram_finder_config.min_token_count = min_token_count
-        ngram_finder_config.num_workers = num_workers
-
         if self._vocab != {}:
             warnings.warn("the vocab is non-empty. Would be overloaded after training.")
 
-        self._vocab = find_ngrams(ngram_finder_config, tokens=tokens)
+        if method == "pmi":
+            if min_pmi is None:
+                raise ValueError("min_pmi not set")
+            if min_token_count is None:
+                raise ValueError("min_token_count not set")
+
+            ngram_finder_config = PmiNgramFinderConfig()
+            ngram_finder_config.min_pmi = min_pmi
+            ngram_finder_config.max_ngram_len = self._max_ngram_len
+            ngram_finder_config.min_ngram_len = self._min_ngram_len
+            ngram_finder_config.min_ngram_freq = min_ngram_freq
+            ngram_finder_config.min_token_count = min_token_count
+            ngram_finder_config.num_workers = num_workers
+
+            self._vocab = find_ngrams_by_pmi(ngram_finder_config, tokens=tokens)
+        elif method == "freq":
+            if min_pmi is not None:
+                print("[Warning] min_pmi not used when using freq method to train.")
+            if min_token_count is not None:
+                print(
+                    "[Warning] min_token_count not used when using freq method to train."
+                )
+
+            ngram_finder_config = FreqNgramFinderConfig()
+            ngram_finder_config.min_freq = min_ngram_freq
+            ngram_finder_config.max_ngram_len = self._max_ngram_len
+            ngram_finder_config.min_ngram_len = self._min_ngram_len
+            ngram_finder_config.num_workers = num_workers
+
+            self._vocab = find_ngrams_by_freq(ngram_finder_config, tokens=tokens)
+        else:
+            raise NotImplementedError(f"Method {method} not supported.")
+
+        if returns_freq:
+            vocab_freq = deepcopy(self._vocab)
+        else:
+            vocab_freq = None
+
         for idx, (k, v) in enumerate(self._vocab.items()):
             self._vocab[k] = idx
 
         self._id2ngrams = {}
         for k, v in self._vocab.items():
             self._id2ngrams[v] = k
+
+        return vocab_freq
 
     def train_from_file(
         self,
@@ -202,8 +243,9 @@ class NgramEncoder:
         min_token_count: int,
         min_ngram_freq: int,
         num_workers: int = 64,
+        returns_freq: bool = False,
     ):
-        ngram_finder_config = NgramFinderConfig()
+        ngram_finder_config = PmiNgramFinderConfig()
         ngram_finder_config.min_pmi = min_pmi
         ngram_finder_config.max_ngram_len = self._max_ngram_len
         ngram_finder_config.min_ngram_len = self._min_ngram_len
@@ -216,17 +258,30 @@ class NgramEncoder:
 
         import _ngram
 
-        finder = _ngram.DnaNgramFinder(ngram_finder_config)
+        finder = _ngram.PmiNgramFinder(ngram_finder_config)
         finder.find_ngrams_from_file(fname)
         ngrams: list[list[int]] = finder.get_ngram_list([])
-        del finder  # save memory
+        # del finder  # save memory
 
         ngram_dict = {}
         for ngram in ngrams:
             freq = ngram.pop()
             ngram_dict[tuple(ngram)] = freq
 
-        # return ngram_dict
+        self._vocab = ngram_dict
+        if returns_freq:
+            vocab_freq = deepcopy(self._vocab)
+        else:
+            vocab_freq = None
+
+        for idx, (k, v) in enumerate(self._vocab.items()):
+            self._vocab[k] = idx
+
+        self._id2ngrams = {}
+        for k, v in self._vocab.items():
+            self._id2ngrams[v] = k
+
+        return vocab_freq
 
     def save(self, path, pretty=True):
         vocab_dict = {}

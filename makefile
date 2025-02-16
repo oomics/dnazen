@@ -1,7 +1,10 @@
 PACKAGE_NAME=dnazen
+CPP_MODULE_NAME=_ngram
 
 SRC_DIR=src
 TEST_DIR=tests
+
+STUBGEN_OUT=$(SRC_DIR)/$(CPP_MODULE_NAME).pyi
 
 PIXI_SHELL=pixi exec
 
@@ -22,10 +25,16 @@ format:
 	$(PIXI_SHELL) ruff check $(SRC_DIR) --fix
 	$(PIXI_SHELL) ruff check $(TEST_DIR) --fix
 
+$(STUBGEN_OUT):
+	pybind11-stubgen $(CPP_MODULE_NAME)
+	mv stubs/$(CPP_MODULE_NAME).pyi $(STUBGEN_OUT)
+
+stubgen: $(STUBGEN_OUT)
+
 uninstall: clean
 	pip uninstall -y $(PACKAGE_NAME)
 
-install: uninstall .git
+install: uninstall .git $(STUBGEN_OUT)
 	pip install .
 
 test:

@@ -1,10 +1,10 @@
+#include "PmiNgramFinder.hpp"
+
 #include <iostream>
 #include <vector>
 #include <string>
 // include time.h for measuring time
 #include <ctime>
-
-#include "PmiNgramFinder.hpp"
 
 // measure the time taken to read the fasta file
 int main() {
@@ -31,6 +31,8 @@ int main() {
 
         token_seq_vec.push_back(token_seq);
     }
+    token_seq_vec[9999] = {};
+
     std::cout<<"finding ngram"<<std::endl;
     ngram_finder.find_ngrams_batched(token_seq_vec);
     std::cout<<"result:"<<std::endl;
@@ -44,15 +46,6 @@ int main() {
         std::cout << "val=" << it->second;
         std::cout << std::endl;
     }
-
-    // PairMap_t pair_dict = ngram_finder.get_pairs();
-    // for (auto it = pair_dict.begin(); it != pair_dict.end(); it++) {
-    //     std::cout << "pair=(";
-    //     std::cout << std::get<0>(it->first) << " ";
-    //     std::cout << std::get<1>(it->first) << " ";
-    //     std::cout << ") val=" << it->second;
-    //     std::cout << std::endl;
-    // }
 
     return 0;
 }
