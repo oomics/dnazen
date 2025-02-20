@@ -19,6 +19,7 @@ class FreqNgramFinderConfig:
     min_freq: int
     min_ngram_len: int
     num_workers: int
+    secondary_filter: bool
     @staticmethod
     def _pybind11_conduit_v1_(*args, **kwargs): ...
     def __init__(self) -> None: ...

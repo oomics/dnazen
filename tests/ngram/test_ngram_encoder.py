@@ -29,8 +29,9 @@ def tokens2() -> list[list[int]]:
 
     token_seq_list = []
     for _ in range(NUM_TOKEN_SEQ):
-        token_seq = [1, 2, 1, 2]
+        token_seq = [1, 2, 1, 2, 1, 2, 1, 2]
         token_seq_list.append(token_seq)
+    token_seq_list.append([4, 5, 6])
     return token_seq_list
 
 
@@ -62,11 +63,13 @@ def test_freq_count(tokens2, num_workers):
     )
     assert ngram_freq is not None, "Should return frequency"
     for k, v in ngram_freq.items():
+        assert len(k) <= 6, f"key {k}'s length should exceed 6"
         assert v >= 5, f"key {k} has frequency {v}, but should be >= 5."
 
-    assert ngram_freq.get((1, 2, 1, 2)) == 10_000, (
-        f"(1,2,1,2) should have freq 10_000, but got {ngram_freq.get((1, 2, 1, 2))}. freq={ngram_freq}"
+    assert ngram_freq.get((1, 2, 1, 2, 1, 2)) == 10_000, (
+        f"(1,2,1,2,1,2) should have freq 10_000, but got {ngram_freq.get((1, 2, 1, 2))}. freq={ngram_freq}"
     )
+    assert ngram_freq.get((4, 5)) is None
 
 
 @pytest.mark.parametrize(

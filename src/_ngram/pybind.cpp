@@ -29,6 +29,8 @@ PYBIND11_MODULE(_ngram, m) {
         .def_readwrite("min_freq", &FreqNgramFinderConfig::min_freq)
         .def_readwrite("min_ngram_len", &FreqNgramFinderConfig::min_ngram_len)
         .def_readwrite("max_ngram_len", &FreqNgramFinderConfig::max_ngram_len)
+        .def_readwrite("secondary_filter",
+                       &FreqNgramFinderConfig::secondary_filter)
         .def_readwrite("num_workers", &FreqNgramFinderConfig::num_workers);
 
     py::class_<FreqNgramFinder>(m, "FreqNgramFinder")

@@ -220,6 +220,9 @@ class ConcurrentHashMap {
         for (auto &pair : bucket) {
             target[pair.first] += pair.second;
         }
+
+        HashBucket_t tmp_bucket;
+        std::swap(bucket, tmp_bucket);
     }
 
    public:
@@ -288,6 +291,11 @@ class ConcurrentHashMap {
         }
     }
 
+    /**
+     * @brief Dump all kv pairs into an unordered map.
+     *
+     * After dumping this map would become empty.
+     */
     void to_unordered_map(HashBucket_t &target) {
         for (size_t idx = 0; idx < buckets.size(); idx++) {
             this->_dump_bucket_to_unordered_map(target, idx);

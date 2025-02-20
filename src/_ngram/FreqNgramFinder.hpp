@@ -5,6 +5,8 @@ struct FreqNgramFinderConfig {
     size_t min_ngram_len;
     size_t max_ngram_len;
 
+    bool secondary_filter = true;
+
     int num_workers = 16;
 };
 
@@ -56,7 +58,7 @@ class FreqNgramFinder {
         size_t i = this->config.min_ngram_len;
         while (i < token_seq.size()) {
             if (ngram_dict.find(ngram_candidate) != ngram_dict.end() &&
-                ngram_candidate.size() <= this->config.max_ngram_len) {
+                ngram_candidate.size() < this->config.max_ngram_len) {
                 // the current ngram exists
                 ngram_candidate.push_back(token_seq[i]);
                 i++;
@@ -78,7 +80,7 @@ class FreqNgramFinder {
 
         // deal with the last one
         if (ngram_dict.find(ngram_candidate) != ngram_dict.end() &&
-            ngram_candidate.size() <= this->config.max_ngram_len) {
+            ngram_candidate.size() < this->config.max_ngram_len) {
             local_ngram_dict[ngram_candidate]++;
         }
 
@@ -92,6 +94,7 @@ class FreqNgramFinder {
     FreqNgramFinder(FreqNgramFinderConfig config) : ngram_dict() {
         DETECT_KEY_INTERRUPT()
         this->config = config;
+        std::cout << "[debug] min_freq=" << config.min_freq << std::endl;
         if (this->config.min_ngram_len == 0) {
             std::cout << "Warning: Cannot have min_ngram_len set to 0. "
                          "Resetting to 1."
@@ -158,7 +161,7 @@ class FreqNgramFinder {
 
             // concurr_ngram_map.to_unordered_map(this->ngram_dict);
             std::cout << "Filtering ngram by frequency..." << std::endl;
-            concurr_ngram_map.parallel_apply([this](NgramMap_t ngram_dict) {
+            concurr_ngram_map.parallel_apply([this](NgramMap_t &ngram_dict) {
                 filter_dict_by_freq(ngram_dict, this->config.min_freq);
             });
             std::cout << "merging frequency results..." << std::endl;
@@ -167,6 +170,10 @@ class FreqNgramFinder {
                                     // ConcurrentHashMap to unordered_map here.
                                     // Try it after we finish the second
                                     // iteration.
+        }
+
+        if (!this->config.secondary_filter) {
+            return;
         }
 
         // re-count
@@ -190,7 +197,7 @@ class FreqNgramFinder {
             }
 
             std::cout << "Filtering ngram by frequency(2)..." << std::endl;
-            concurr_ngram_map.parallel_apply([this](NgramMap_t ngram_dict) {
+            concurr_ngram_map.parallel_apply([this](NgramMap_t &ngram_dict) {
                 filter_dict_by_freq(ngram_dict, this->config.min_freq);
             });
 

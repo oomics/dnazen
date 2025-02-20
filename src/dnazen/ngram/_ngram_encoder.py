@@ -60,7 +60,7 @@ class NgramEncoder:
         token_ids = token_ids[token_ids != pad_token_id]
         token_ids_list = token_ids.tolist()
 
-        for ngram_len in range(self._min_ngram_len, self._max_ngram_len):
+        for ngram_len in range(self._min_ngram_len, self._max_ngram_len + 1):
             for q in range(token_len - ngram_len + 1):
                 ngram: tuple[int, ...] = tuple(token_ids_list[q : q + ngram_len])
                 ngram_id = self._get_ngram_id(ngram)
@@ -104,7 +104,7 @@ class NgramEncoder:
             ),
         }
 
-        for ngram_len in range(self._min_ngram_len, self._max_ngram_len):
+        for ngram_len in range(self._min_ngram_len, self._max_ngram_len + 1):
             for q in range(token_len - ngram_len + 1):
                 ngram: tuple[int, ...] = tuple(token_ids_list[q : q + ngram_len])
                 ngram_id = self._get_ngram_id(ngram)
@@ -165,11 +165,48 @@ class NgramEncoder:
             max_ngrams=config["max_ngrams"],
         )
 
+    def get_new_ngram_encoder_from_data(
+        self, tokenized_data: list[list[int]], freq_threshold: int = 0
+    ):
+        """Get a new NgramEncoder where all ngrams could be matched in the given dataset."""
+        matched_ngram_dict = {}
+        for d in tokenized_data:
+            for matched_ngram, _ in self.get_matched_ngrams(torch.tensor(d)):
+                if matched_ngram_dict.get(matched_ngram) is None:
+                    matched_ngram_dict[matched_ngram] = 1
+                else:
+                    matched_ngram_dict[matched_ngram] += 1
+
+        # sort the data
+        sorted_ngram_dict = {
+            k: v
+            for k, v in sorted(
+                matched_ngram_dict.items(), key=lambda item: item[1], reverse=True
+            )
+            if v >= freq_threshold
+        }
+
+        vocab = {}
+        min_ngram_len = self._max_ngram_len + 1
+        max_ngram_len = 0
+        for idx, k in enumerate(sorted_ngram_dict.keys()):
+            vocab[k] = idx
+            min_ngram_len = min(min_ngram_len, len(k))
+            max_ngram_len = max(max_ngram_len, len(k))
+
+        return NgramEncoder(
+            vocab_dict=vocab,
+            min_ngram_len=min_ngram_len,
+            max_ngram_len=max_ngram_len,
+            max_ngrams=self._max_ngrams,
+        )
+
     def train(
         self,
         tokens: list[list[int]],
         min_pmi: float | None = None,
         min_token_count: int | None = None,
+        secondary_filter: bool = False,
         min_ngram_freq: int = 5,
         num_workers: int = 64,
         returns_freq: bool = False,
@@ -216,6 +253,7 @@ class NgramEncoder:
             ngram_finder_config.min_freq = min_ngram_freq
             ngram_finder_config.max_ngram_len = self._max_ngram_len
             ngram_finder_config.min_ngram_len = self._min_ngram_len
+            ngram_finder_config.secondary_filter = secondary_filter
             ngram_finder_config.num_workers = num_workers
 
             self._vocab = find_ngrams_by_freq(ngram_finder_config, tokens=tokens)
