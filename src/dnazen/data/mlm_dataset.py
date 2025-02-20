@@ -100,13 +100,14 @@ class TokenMasker:
         # get non-candidate indexes
         token_seq_list = token_seq.tolist()
         non_candidiate_idxes = []
-        for idx in candidate_idxes_list:
-            for len_ in range(self.core_ngram_min_len, self.core_ngram_max_len):
-                if idx + len_ > token_seq.shape[0]:
-                    continue
-                # find core ngram matches
-                if tuple(token_seq_list[idx : idx + len_]) in self.core_ngrams:
-                    non_candidiate_idxes += range(idx, idx + len_)
+        if len(self.core_ngrams) > 0:
+            for idx in candidate_idxes_list:
+                for len_ in range(self.core_ngram_min_len, self.core_ngram_max_len):
+                    if idx + len_ > token_seq.shape[0]:
+                        continue
+                    # find core ngram matches
+                    if tuple(token_seq_list[idx : idx + len_]) in self.core_ngrams:
+                        non_candidiate_idxes += range(idx, idx + len_)
 
         masked_token_seq = token_seq.clone()
         labels = torch.empty_like(token_seq).fill_(-100)
@@ -241,18 +242,48 @@ class MlmDataset(Dataset):
             texts = f.readlines()
 
         print(
-            f"tokenizing {len(texts)} tokens. model_max_length={tokenizer.model_max_length}"
+            f"tokenizing {len(texts)} lines. model_max_length={tokenizer.model_max_length}"
         )
         outputs = tokenizer(
             texts,
             return_tensors="pt",
             padding="longest",
+            return_token_type_ids=False,
             truncation=True,
         )
         tokens = outputs["input_ids"]
         attn_mask = outputs["attention_mask"]
         return cls(
             tokens=tokens,
+            attn_mask=attn_mask,
+            tokenizer=tokenizer,
+            ngram_encoder=ngram_encoder,
+            core_ngrams=core_ngrams,
+            whole_ngram_masking=whole_ngram_masking,
+            mlm_prob=mlm_prob,
+        )
+
+    @classmethod
+    def from_tokenized_data(
+        cls,
+        token_ids: list[list[int]],
+        tokenizer: PreTrainedTokenizer,
+        ngram_encoder: NgramEncoder,
+        core_ngrams: set[tuple[int, ...]],
+        whole_ngram_masking: bool = False,
+        mlm_prob: float = 0.15,
+    ):
+        """Build dataset from already tokenized data.
+
+        We assume the token_ids are already padded.
+        """
+        PAD: int = tokenizer.convert_tokens_to_ids("[PAD]")
+
+        input_ids = torch.tensor(token_ids)
+        attn_mask = input_ids.ne(PAD).int()
+
+        return cls(
+            tokens=input_ids,
             attn_mask=attn_mask,
             tokenizer=tokenizer,
             ngram_encoder=ngram_encoder,
