@@ -108,9 +108,9 @@ OUTPUT_DIR = args.out
 NUM_NGRAM_HIDDEN_LAYER = args.num_ngram_hidden_layer
 LEARNING_RATE = args.lr
 
-train_dataset = MlmDataset.from_dir(TRAIN_DATA_DIR)
+train_dataset = MlmDataset.from_dir(TRAIN_DATA_DIR, check_hash=False)
 
-val_dataset = MlmDataset.from_dir(DEV_DATA_DIR)
+val_dataset = MlmDataset.from_dir(DEV_DATA_DIR, check_hash=False)
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 bert_config = BertConfig.from_pretrained(current_dir + "/../resources/DNABERT-2-117M")

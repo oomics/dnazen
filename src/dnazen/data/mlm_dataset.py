@@ -349,6 +349,7 @@ class MlmDataset(Dataset):
     def from_dir(
         cls,
         save_dir: str,  # path to the save directory
+        check_hash: bool = True,
     ):
         ngram_encoder_path = os.path.join(save_dir, cls.NGRAM_ENCODER_FNAME)
         tokenizer_path = os.path.join(save_dir, cls.TOKENIZER_DIR)
@@ -358,7 +359,7 @@ class MlmDataset(Dataset):
 
         with open(data_config_path, "r") as f:
             data_cfg: MlmDataConfig = json.load(f)
-        if data_cfg["mlm_data_symlink"] is not None:
+        if data_cfg["mlm_data_symlink"] is not None and check_hash:
             assert data_cfg["mlm_data_hash_val"] is not None
             # check hashval
             logger.info("Using the symlink when loading data. Checking the md5 value.")
@@ -368,6 +369,8 @@ class MlmDataset(Dataset):
                     f"Trying to open file {data_path}, ",
                     "but the original data seems to be modified.",
                 )
+        elif check_hash:
+            logger.warning("Checking hash is not supported when we are not using symlink.")
 
         data = torch.load(data_path, weights_only=True)
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
