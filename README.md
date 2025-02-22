@@ -23,12 +23,14 @@ python setup.py install
 
 `scripts`: the scripts you need to do pretraining, finetuning, making datasets, etc.
 
-`resources`: directory for keeping results.
+`resources`: directory for keeping various resources.
+
+`results`: results from experiments
 
 
 ## Usage
 
-We keep all scripts you might find useful in `sciripts` directory. The usage of script is self-explanatory. Here are some scripts you might find most helpful:
+We keep all scripts you might find useful in `scripts` directory. The usage of script is self-explanatory. Here are some scripts you might find most helpful:
 
 - `run_pretrain.py`: Run the pretraining process.
 
@@ -50,6 +52,8 @@ We keep all scripts you might find useful in `sciripts` directory. The usage of 
     > Do `pixi install` if you want to use `pixi`.
 
     > Otherwise, do `pip install -e .`
+
+    > Specifically do `pip install .` if you are using `conda` (see `1` for the reason)
 
 - __3. install pre-commit hook__
     > Do `pre-commit install`.
