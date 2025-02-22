@@ -266,7 +266,8 @@ class MlmDataset(Dataset):
     @classmethod
     def from_tokenized_data(
         cls,
-        token_ids: list[list[int]],
+        token_ids: torch.Tensor,
+        attn_mask: torch.Tensor,
         tokenizer: PreTrainedTokenizer,
         ngram_encoder: NgramEncoder,
         core_ngrams: set[tuple[int, ...]],
@@ -277,13 +278,9 @@ class MlmDataset(Dataset):
 
         We assume the token_ids are already padded.
         """
-        PAD: int = tokenizer.convert_tokens_to_ids("[PAD]")
-
-        input_ids = torch.tensor(token_ids)
-        attn_mask = input_ids.ne(PAD).int()
 
         return cls(
-            tokens=input_ids,
+            tokens=token_ids,
             attn_mask=attn_mask,
             tokenizer=tokenizer,
             ngram_encoder=ngram_encoder,
