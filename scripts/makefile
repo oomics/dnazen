@@ -83,7 +83,7 @@ $(DNAZEN_PRETRAIN_DATA_DIR): \
 	$(DNAZEN_TOKENIZED_VALID_DATASET_DIR) \
 	$(DNAZEN_TOKENIZED_TRAIN_DATASET_DIR)
 	python make_pretrain_dataset.py \
-		--data_source tokenized \
+		--data-source tokenized \
 		-d $(DNAZEN_PRETRAIN_RAW_DATA_DIR) \
 		--ngram $(MAIN_NGRAM_ENCODER_DIR) \
 		--core-ngram $(CORE_NGRAM_DIR) \
