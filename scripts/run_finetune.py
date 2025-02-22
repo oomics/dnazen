@@ -71,6 +71,7 @@ def parse_args():
     parser.add_argument("--num_train_epochs", type=int, default=4)
     parser.add_argument("--lr", type=float, default=3e-5)
     parser.add_argument("--fp16", action="store_true")
+    parser.add_argument("--seed", default=42)
     
     return parser.parse_args()
 
@@ -140,7 +141,6 @@ train_args = transformers.training_args.TrainingArguments(
     do_train=True,
     do_eval=True,
     eval_strategy="steps",
-    # eval_strategy="epoch",
     eval_steps=500,
     max_grad_norm=1,
     per_device_train_batch_size=args.per_device_train_batch_size,
@@ -148,7 +148,13 @@ train_args = transformers.training_args.TrainingArguments(
     learning_rate=LEARNING_RATE,
     bf16=args.fp16,
     num_train_epochs=NUM_TRAIN_EPOCHS,
-    logging_steps=200
+    logging_steps=200,
+    
+    seed=args.seed,
+    data_seed=args.seed,
+    save_total_limit=10,
+    load_best_model_at_end=True,
+    metric_for_best_model="eval_matthews_correlation"
 )
 
 trainer = transformers.Trainer(

@@ -9,6 +9,7 @@ from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizer, AutoTokenizer
 
 from dnazen.ngram import NgramEncoder
+from dnazen.misc import hash_file_md5, check_hash_of_file_md5
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,20 @@ class MlmData(TypedDict):
     ngram_attention_mask: torch.Tensor
     ngram_position_matrix: torch.Tensor
     labels: torch.Tensor
+
+
+class MlmDataSaved(TypedDict):
+    """The Mlm data that is saved on disk."""
+
+    input_ids: torch.Tensor
+    attention_mask: torch.Tensor
+
+
+class MlmDataConfig(TypedDict):
+    whole_ngram_masking: bool
+    mlm_prob: float
+    mlm_data_symlink: str | None
+    mlm_data_hash_val: str | None
 
 
 # --- utils ---
@@ -180,6 +195,7 @@ class MlmDataset(Dataset):
     TOKENIZER_DIR = "tokenizer"
     DATA_FNAME = "data.pt"
     CORE_NGRAMS_FNAME = "core_ngrams.txt"
+    CONFIG_FNAME = "config.json"
 
     def __init__(
         self,
@@ -190,6 +206,7 @@ class MlmDataset(Dataset):
         core_ngrams: set[tuple[int, ...]],
         mlm_prob: float = 0.15,
         whole_ngram_masking: bool = True,
+        mlm_data_symlink: str | None = None,
         verbose: bool = True,
     ):
         """Initialize a Mlm dataset.
@@ -200,6 +217,10 @@ class MlmDataset(Dataset):
             tokenizer (PreTrainedTokenizer): tokenizer from `transformers`.
             ngram_encoder (NgramEncoder): a ngram encoder for encoding.
             mlm_prob (float, optional): The proportion of masked tokens. Defaults to 0.15.
+            whole_ngram_masking (bool, optional): whether to perform whole ngram masking from ZEN2. Defaults to False.
+            mlm_data_symlink (str, optional): the path to the original mlm data on disk.
+                If provided a path, we would try to create a symlink to the original data when saving to save memory.
+                Defaults to None.
             verbose (bool, optional): Whether initialize with loggings. Defaults to True.
         """
         super().__init__()
@@ -223,6 +244,7 @@ class MlmDataset(Dataset):
         self.core_ngrams = core_ngrams  # fix breaking change introduced by token_masker
         self.whole_ngram_masking = whole_ngram_masking
         self.attn_mask = attn_mask
+        self.mlm_data_symlink = mlm_data_symlink
 
     @property
     def ngram_vocab_size(self):
@@ -266,8 +288,7 @@ class MlmDataset(Dataset):
     @classmethod
     def from_tokenized_data(
         cls,
-        token_ids: torch.Tensor,
-        attn_mask: torch.Tensor,
+        data_dir: str,
         tokenizer: PreTrainedTokenizer,
         ngram_encoder: NgramEncoder,
         core_ngrams: set[tuple[int, ...]],
@@ -279,6 +300,10 @@ class MlmDataset(Dataset):
         We assume the token_ids are already padded.
         """
 
+        data: MlmDataSaved = torch.load(data_dir)
+        token_ids = data["input_ids"]
+        attn_mask = data["attention_mask"]
+
         return cls(
             tokens=token_ids,
             attn_mask=attn_mask,
@@ -287,6 +312,7 @@ class MlmDataset(Dataset):
             core_ngrams=core_ngrams,
             whole_ngram_masking=whole_ngram_masking,
             mlm_prob=mlm_prob,
+            mlm_data_symlink=data_dir,
         )
 
     def save(self, save_dir: str):
@@ -297,42 +323,71 @@ class MlmDataset(Dataset):
         data_path = os.path.join(save_dir, self.DATA_FNAME)
         core_ngram_path = os.path.join(save_dir, self.CORE_NGRAMS_FNAME)
         tokenizer_path = os.path.join(save_dir, self.TOKENIZER_DIR)
+        config_path = os.path.join(save_dir, self.CONFIG_FNAME)
 
         self.ngram_encoder.save(ngram_encoder_path)
         self.tokenizer.save_pretrained(tokenizer_path)
         _save_core_ngrams(core_ngram_path, core_ngrams=self.core_ngrams)
-        torch.save(
-            {
-                "whole_ngram_masking": self.whole_ngram_masking,
-                "mlm_prob": self.mlm_prob,
-                "tokens": self.tokens,
-                "attention_mask": self.attn_mask,
-            },
-            data_path,
-        )
+        if self.mlm_data_symlink is None:
+            mlm_data_hash_val = None
+            torch.save(
+                {
+                    "input_ids": self.tokens,
+                    "attention_mask": self.attn_mask,
+                },
+                data_path,
+            )
+        else:
+            mlm_data_hash_val = hash_file_md5(self.mlm_data_symlink)
+            os.symlink(self.mlm_data_symlink, dst=data_path)
+
+        data_cfg: MlmDataConfig = {
+            "whole_ngram_masking": self.whole_ngram_masking,
+            "mlm_prob": self.mlm_prob,
+            "mlm_data_symlink": self.mlm_data_symlink,
+            "mlm_data_hash_val": mlm_data_hash_val,
+        }
+        with open(config_path, "w") as f:
+            json.dump(data_cfg, f, indent=2)
 
     @classmethod
     def from_dir(
         cls,
         save_dir: str,  # path to the save directory
     ):
-        # data = torch.load(path)
         ngram_encoder_path = os.path.join(save_dir, cls.NGRAM_ENCODER_FNAME)
         tokenizer_path = os.path.join(save_dir, cls.TOKENIZER_DIR)
         data_path = os.path.join(save_dir, cls.DATA_FNAME)
         core_ngram_path = os.path.join(save_dir, cls.CORE_NGRAMS_FNAME)
-        data = torch.load(data_path, weights_only=True)
+        data_config_path = os.path.join(save_dir, cls.CONFIG_FNAME)
 
+        with open(data_config_path, "r") as f:
+            data_cfg: MlmDataConfig = json.load(f)
+        if data_cfg["mlm_data_symlink"] is not None:
+            assert data_cfg["mlm_data_hash_val"] is not None
+            # check hashval
+            logger.info("Using the symlink when loading data. Checking the md5 value.")
+            hash_identical = check_hash_of_file_md5(
+                data_path, data_cfg["mlm_data_hash_val"]
+            )
+            if not hash_identical:
+                raise ValueError(
+                    f"Trying to open file {data_path}, ",
+                    "but the original data seems to be modified.",
+                )
+
+        data = torch.load(data_path, weights_only=True)
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
 
         return cls(
-            tokens=data["tokens"],
+            tokens=data["input_ids"],
             attn_mask=data["attention_mask"],
             tokenizer=tokenizer,
             ngram_encoder=NgramEncoder.from_file(ngram_encoder_path),
             core_ngrams=_load_core_ngrams(core_ngram_path),
-            whole_ngram_masking=data.get("whole_ngram_masking", False),
-            mlm_prob=data["mlm_prob"],
+            whole_ngram_masking=data_cfg.get("whole_ngram_masking", False),
+            mlm_prob=data_cfg["mlm_prob"],
+            mlm_data_symlink=data_cfg["mlm_data_symlink"],
         )
 
     def __len__(self):
