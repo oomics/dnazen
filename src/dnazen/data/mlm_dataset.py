@@ -97,15 +97,11 @@ class TokenMasker:
         vocab_list: list[int],
         ngram_encoder: NgramEncoder,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        assert token_seq.dim() == 1, (
-            f"token_seq should be a 1d array, but got dimension {token_seq.dim()}"
-        )
+        assert token_seq.dim() == 1, f"token_seq should be a 1d array, but got dimension {token_seq.dim()}"
 
         candidate_idxes_list = (
             torch.nonzero(
-                (token_seq != self.CLS)
-                & (token_seq != self.SEP)
-                & (token_seq != self.MASK),
+                (token_seq != self.CLS) & (token_seq != self.SEP) & (token_seq != self.MASK),
                 as_tuple=False,
             )
             .squeeze()
@@ -130,9 +126,7 @@ class TokenMasker:
         # tries to mask whole ngram
         if self.whole_ngram_masking:
             ngram_mask = torch.zeros_like(token_seq, dtype=torch.bool)
-            for ngram, idx in ngram_encoder.get_matched_ngrams(
-                token_seq, pad_token_id=self.PAD
-            ):
+            for ngram, idx in ngram_encoder.get_matched_ngrams(token_seq, pad_token_id=self.PAD):
                 num = random.random()
                 if num < mlm_prob:
                     ngram_mask[idx : idx + len(ngram)] = 1
@@ -263,9 +257,7 @@ class MlmDataset(Dataset):
         with open(data_path, "r") as f:
             texts = f.readlines()
 
-        print(
-            f"tokenizing {len(texts)} lines. model_max_length={tokenizer.model_max_length}"
-        )
+        print(f"tokenizing {len(texts)} lines. model_max_length={tokenizer.model_max_length}")
         outputs = tokenizer(
             texts,
             return_tensors="pt",
@@ -316,9 +308,10 @@ class MlmDataset(Dataset):
         )
 
     def save(self, save_dir: str):
+        logger.info(f"Saving dataset to {save_dir}...")
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
-            print(f"Warning: Directory {save_dir} did not exist and was created.")
+            logger.warning(f"Directory {save_dir} did not exist and was created.")
         ngram_encoder_path = os.path.join(save_dir, self.NGRAM_ENCODER_FNAME)
         data_path = os.path.join(save_dir, self.DATA_FNAME)
         core_ngram_path = os.path.join(save_dir, self.CORE_NGRAMS_FNAME)
@@ -338,7 +331,9 @@ class MlmDataset(Dataset):
                 data_path,
             )
         else:
+            logger.info("Using symlink, calculating md5 value...")
             mlm_data_hash_val = hash_file_md5(self.mlm_data_symlink)
+            logger.info(f"Calculation done. value={mlm_data_hash_val}")
             os.symlink(self.mlm_data_symlink, dst=data_path)
 
         data_cfg: MlmDataConfig = {
@@ -367,9 +362,7 @@ class MlmDataset(Dataset):
             assert data_cfg["mlm_data_hash_val"] is not None
             # check hashval
             logger.info("Using the symlink when loading data. Checking the md5 value.")
-            hash_identical = check_hash_of_file_md5(
-                data_path, data_cfg["mlm_data_hash_val"]
-            )
+            hash_identical = check_hash_of_file_md5(data_path, data_cfg["mlm_data_hash_val"])
             if not hash_identical:
                 raise ValueError(
                     f"Trying to open file {data_path}, ",

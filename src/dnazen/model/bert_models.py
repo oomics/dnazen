@@ -125,9 +125,7 @@ class BertModel(BertPreTrainedModel):
         )
 
         sequence_output = encoder_outputs[-1]
-        pooled_output = (
-            self.pooler(sequence_output) if self.pooler is not None else None
-        )
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not output_all_encoded_layers:
             encoder_outputs = sequence_output
@@ -176,13 +174,9 @@ class BertForMaskedLM(BertPreTrainedModel, GenerationMixin):
         missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
 
         if len(missing_keys) > 0:
-            logger.warning(
-                f"Found these missing keys in the checkpoint: {', '.join(missing_keys)}"
-            )
+            logger.warning(f"Found these missing keys in the checkpoint: {', '.join(missing_keys)}")
         if len(unexpected_keys) > 0:
-            logger.warning(
-                f"Found these unexpected keys in the checkpoint: {', '.join(unexpected_keys)}"
-            )
+            logger.warning(f"Found these unexpected keys in the checkpoint: {', '.join(unexpected_keys)}")
 
         return model
 
@@ -229,9 +223,7 @@ class BertForMaskedLM(BertPreTrainedModel, GenerationMixin):
         # else:
         #     masked_tokens_mask = labels > 0
 
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bert(
             input_ids,
@@ -357,13 +349,9 @@ class BertForSequenceClassification(BertPreTrainedModel):
         missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
 
         if len(missing_keys) > 0:
-            logger.warning(
-                f"Found these missing keys in the checkpoint: {', '.join(missing_keys)}"
-            )
+            logger.warning(f"Found these missing keys in the checkpoint: {', '.join(missing_keys)}")
         if len(unexpected_keys) > 0:
-            logger.warning(
-                f"Found these unexpected keys in the checkpoint: {', '.join(unexpected_keys)}"
-            )
+            logger.warning(f"Found these unexpected keys in the checkpoint: {', '.join(unexpected_keys)}")
 
         return model
 
@@ -390,9 +378,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
         # (mean-square loss). If `config.num_labels > 1` a classification loss
         # is computed (cross-entropy).
 
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bert(
             input_ids,
@@ -420,9 +406,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (
-                    labels.dtype == torch.long or labels.dtype == torch.int
-                ):
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"

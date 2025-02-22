@@ -52,9 +52,7 @@ class NgramEncoder:
 
     def get_matched_ngrams(self, token_ids: torch.Tensor, pad_token_id: int = 3):
         """Get matched ngrams and it's index from token_ids."""
-        assert token_ids.dim() == 1, (
-            f"token_ids should have dim=1, but got {token_ids.dim()}"
-        )
+        assert token_ids.dim() == 1, f"token_ids should have dim=1, but got {token_ids.dim()}"
 
         token_len = token_ids.shape[0]
         token_ids = token_ids[token_ids != pad_token_id]
@@ -99,9 +97,7 @@ class NgramEncoder:
         ret_val: EncodedNgram = {
             "ngram_ids": torch.zeros(self._max_ngrams, dtype=torch.int),
             "ngram_attention_mask": torch.zeros(self._max_ngrams, dtype=torch.int),
-            "ngram_position_matrix": torch.zeros(
-                token_len, self._max_ngrams, dtype=torch.bool
-            ),
+            "ngram_position_matrix": torch.zeros(token_len, self._max_ngrams, dtype=torch.bool),
         }
 
         for ngram_len in range(self._min_ngram_len, self._max_ngram_len + 1):
@@ -113,9 +109,7 @@ class NgramEncoder:
                 # found the match
                 ret_val["ngram_ids"][_cur_ngram_id_idx] = ngram_id
                 ret_val["ngram_attention_mask"][_cur_ngram_id_idx] = 1
-                ret_val["ngram_position_matrix"][
-                    q : q + ngram_len, _cur_ngram_id_idx
-                ] = 1
+                ret_val["ngram_position_matrix"][q : q + ngram_len, _cur_ngram_id_idx] = 1
                 _cur_ngram_id_idx += 1
                 if _cur_ngram_id_idx >= self._max_ngrams:
                     return ret_val
@@ -165,9 +159,7 @@ class NgramEncoder:
             max_ngrams=config["max_ngrams"],
         )
 
-    def get_new_ngram_encoder_from_data(
-        self, tokenized_data: list[list[int]], freq_threshold: int = 0
-    ):
+    def get_new_ngram_encoder_from_data(self, tokenized_data: list[list[int]], freq_threshold: int = 0):
         """Get a new NgramEncoder where all ngrams could be matched in the given dataset."""
         matched_ngram_dict = {}
         for d in tokenized_data:
@@ -180,9 +172,7 @@ class NgramEncoder:
         # sort the data
         sorted_ngram_dict = {
             k: v
-            for k, v in sorted(
-                matched_ngram_dict.items(), key=lambda item: item[1], reverse=True
-            )
+            for k, v in sorted(matched_ngram_dict.items(), key=lambda item: item[1], reverse=True)
             if v >= freq_threshold
         }
 
@@ -245,9 +235,7 @@ class NgramEncoder:
             if min_pmi is not None:
                 print("[Warning] min_pmi not used when using freq method to train.")
             if min_token_count is not None:
-                print(
-                    "[Warning] min_token_count not used when using freq method to train."
-                )
+                print("[Warning] min_token_count not used when using freq method to train.")
 
             ngram_finder_config = FreqNgramFinderConfig()
             ngram_finder_config.min_freq = min_ngram_freq
