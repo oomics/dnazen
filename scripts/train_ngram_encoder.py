@@ -62,7 +62,7 @@ data_mapping = {
     "mspecies":get_multi_species_all,
 }
 
-def get_tokenized_data(data_types: list[str], ):
+def get_tokenized_data(data_types: list[str], tok_name: str = "zhihan1996/DNABERT-2-117M"):
     print("Getting data...")
     if 'all' in data_types and len(data_types) > 1:
         data_types = ['all']
@@ -78,7 +78,7 @@ def get_tokenized_data(data_types: list[str], ):
         total_len += len(d)
 
     print(f"Tokenizing (length of all data={total_len})...")
-    tokenizer = AutoTokenizer.from_pretrained("zhihan1996/DNABERT-2-117M", trust_remote_code=True, use_fast=True)
+    tokenizer = AutoTokenizer.from_pretrained(tok_name, trust_remote_code=True, use_fast=True)
     data_tokenized: list[list[int]] = tokenizer(all_data)["input_ids"]  # type: ignore
     for idx, data in enumerate(data_tokenized):
         data.pop(0)
@@ -86,22 +86,22 @@ def get_tokenized_data(data_types: list[str], ):
     return data_tokenized
 
 @click.command()
-@click.option("-s", "--source", type=str, help="Data source: raw or tokenized.", default="raw")
+@click.option("-s", "--source", type=click.Choice(["raw", "tokenized"]), help="Data source: raw or tokenized.", default="raw")
 @click.option("-d", "--data", type=str, 
               help="""(when raw) Comma-separated list of data types to use. Valid data types: all, gue_all, gue_test, hg38, hg38_all, mspecies.
 (When tokenized) directory of alread-tokenized data.
 """)
-@click.option("-o", '--out', 
-    help='Save dir for ngram encoder', type=str)
+@click.option("-o", '--out', help='Save dir for ngram encoder', type=str)
+@click.option("--tok-name", type=str, help="name of tokenizer", default="zhihan1996/DNABERT-2-117M")
 @click.option("--min-ngram", help="Minimum ngram frequency", type=click.IntRange(1, 100), default=5)
 @click.option("--min-ngram-len", help="Minimum ngram length", type=click.IntRange(1, 100), default=2)
 @click.option("--max-ngram-len", help="Minimum ngram length", type=click.IntRange(1, 100), default=5)
 @click.option("--min-tok", help="Minimum token count", type=click.IntRange(1, 100), default=5)
 @click.option("--min-pmi", help="Minimum pmi", type=float, default=5)
 @click.option("--mem-efficient", help="Memory efficient", type=bool, default=False)
-@click.option("--train-method", help="Training method. freq or pmi", type=str, default="pmi")
+@click.option("--train-method", help="Training method. freq or pmi", type=click.Choice(["pmi", "freq"]), default="pmi")
 @click.option("--out-freq", help="The out directory for frequency. Would not output freq info if not specified.", type=str, default=None)
-def main(source:str, data: str, out: str, 
+def main(source:str, data: str, out: str, tok_name: str,
     min_ngram: int, min_ngram_len: int, max_ngram_len: int, min_tok: int, min_pmi: float, mem_efficient: bool, 
     train_method: str,
     out_freq: str | None
@@ -112,7 +112,7 @@ def main(source:str, data: str, out: str,
     if not mem_efficient:
         if source == "raw":
             data_types = data.split(',')
-            data_tokenized: list[list[int]] = get_tokenized_data(data_types)
+            data_tokenized: list[list[int]] = get_tokenized_data(data_types, tok_name=tok_name)
         else:
             import tqdm
             data_tokenized: list[list[int]] = []

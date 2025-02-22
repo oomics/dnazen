@@ -30,7 +30,7 @@ def ngram_encoder():
 
 @pytest.mark.usefixtures("tokenizer", "ngram_encoder")
 @pytest.mark.parametrize(("whole_ngram_masking"), (True, False))
-def test_labeled_dataset(
+def test_mlm_dataset(
     tokenizer: PreTrainedTokenizer,
     ngram_encoder,
     whole_ngram_masking: bool,
@@ -49,5 +49,32 @@ def test_labeled_dataset(
     dataset.save(current_dir + "/.cache")
 
     dataset = MlmDataset.from_dir(current_dir + "/.cache")
+    for d in dataset:
+        pass
+    shutil.rmtree(current_dir + "/.cache")
 
+
+@pytest.mark.usefixtures("tokenizer", "ngram_encoder")
+@pytest.mark.parametrize(("whole_ngram_masking"), (True, False))
+def test_mlm_dataset_from_tokenized(
+    tokenizer: PreTrainedTokenizer,
+    ngram_encoder,
+    whole_ngram_masking: bool,
+):
+    dataset = MlmDataset.from_tokenized_data(
+        current_dir + "/resources/test_mlm.pt",
+        tokenizer=tokenizer,
+        ngram_encoder=ngram_encoder,
+        core_ngrams=set([(1, 10), (23, 24, 25)]),
+        whole_ngram_masking=whole_ngram_masking,
+    )
+    for d in dataset:
+        assert isinstance(d, dict)
+
+    # test save
+    dataset.save(current_dir + "/.cache")
+
+    dataset = MlmDataset.from_dir(current_dir + "/.cache")
+    for d in dataset:
+        pass
     shutil.rmtree(current_dir + "/.cache")

@@ -69,9 +69,9 @@ def preprocess_logits_for_metrics(logits:torch.Tensor | tuple[torch.Tensor, Any]
 def parse_args():
     parser = ArgumentParser(description="Run pretraining for ZENforDNA")
     parser.add_argument("--resume", type=str, default=None, help="checkpoint directory to resume training from.")
-    parser.add_argument("--train", type=str, default="/data2/peter/dnazen_pretrain_v3.1/train", help="Directory for training data")
-    parser.add_argument("--dev", type=str,   default="/data2/peter/dnazen_pretrain_v3.1/dev", help="Directory for validation data")
-    parser.add_argument("--out", type=str,   default="/data2/peter/dnazen_pretrain_v3.1/outputs", help="Directory for output")
+    parser.add_argument("--train", type=str, help="Directory for training data")
+    parser.add_argument("--dev", type=str, help="Directory for validation data")
+    parser.add_argument("--out", type=str, help="Directory for output")
     parser.add_argument("--num_ngram_hidden_layer", type=int, default=6, help="Number of hidden layers for ngram")
     parser.add_argument("--per-device-train-batch-size", type=int, default=16)
     parser.add_argument("--grad-accumulation-steps", type=int, default=128//4)
@@ -97,7 +97,8 @@ val_dataset = MlmDataset.from_dir(
     DEV_DATA_DIR
 )
 
-bert_config = BertConfig.from_pretrained("/home/peter/llm_projects/DNABERT_2/DNABERT-2-117M")
+current_dir = os.path.dirname(os.path.abspath(__file__))
+bert_config = BertConfig.from_pretrained(current_dir + "/../resources/DNABERT-2-117M")
 # bert_config.attention_probs_dropout_prob = 0.05
 zen_config  = ZenConfig(
     num_word_hidden_layers=6, 
@@ -114,13 +115,11 @@ else:
         args.resume,
         config=zen_config
     )
-    
+
 model_params = [param for name, param in model.named_parameters() if ("Norm" not in name)]
-# print("[debug] len of ngram layers=", len(ngram_layer_params))
 optimizer = torch.optim.AdamW(
     model_params,
     LEARNING_RATE,
-    #momentum=args.momentum,
     weight_decay=0.01
 )
 
@@ -132,10 +131,8 @@ train_args = transformers.training_args.TrainingArguments(
     eval_steps=1_000,
     max_grad_norm=1,
     per_device_train_batch_size=args.per_device_train_batch_size,
-    # gradient_accumulation_steps=128//4,
     gradient_accumulation_steps=args.grad_accumulation_steps,
     per_device_eval_batch_size=args.per_device_train_batch_size, # make it the same as train
-    # learning_rate=1e-4,
     num_train_epochs=args.n_epoch,
     logging_steps=100,
     dataloader_num_workers=16,
@@ -144,6 +141,11 @@ train_args = transformers.training_args.TrainingArguments(
     
     # necessary since we have shared tensor weight. 
     save_safetensors=False,
+    seed=args.seed,
+    data_seed=args.seed,
+    save_total_limit=10,
+    load_best_model_at_end=True,
+    metric_for_best_model="eval_loss"
 )
 
 trainer = transformers.Trainer(
