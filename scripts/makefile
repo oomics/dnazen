@@ -6,8 +6,8 @@ define check_defined
 fi
 endef
 
-DNAZEN_PRETRAIN_PER_DEVICE_BATCH_SIZE = 256
-DNAZEN_PRETRAIN_GRAD_ACCU_STEPS = 2
+DNAZEN_PRETRAIN_PER_DEVICE_BATCH_SIZE = 128
+DNAZEN_PRETRAIN_GRAD_ACCU_STEPS = 4
 
 .PHONY: pretrain_data pretrain check_defined_all
 
@@ -51,9 +51,9 @@ $(MAIN_NGRAM_ENCODER_DIR):
 
 $(SIDE_NGRAM_ENCODER_DIR):
 	python train_ngram_encoder.py \
-	    -d gue_all  \
-	    -o $(SIDE_NGRAM_ENCODER_DIR) \
-	    --min-ngram $(NGRAM_MIN_NGRAM_FREQ) \
+		-d gue_all  \
+		-o $(SIDE_NGRAM_ENCODER_DIR) \
+		--min-ngram $(NGRAM_MIN_NGRAM_FREQ) \
 		--min-tok $(NGRAM_MIN_TOKEN_FREQ) \
 		--min-pmi $(NGRAM_MIN_PMI) \
 		--train-method $(NGRAM_TRAIN_METHOD)
