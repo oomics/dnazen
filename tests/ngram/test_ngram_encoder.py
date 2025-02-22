@@ -39,9 +39,7 @@ def tokens2() -> list[list[int]]:
 def test_train(tokens, method):
     ngram_encoder = NgramEncoder({}, min_ngram_len=2, max_ngram_len=6, max_ngrams=20)
     if method == "pmi":
-        ngram_encoder.train(
-            tokens, min_pmi=1, min_token_count=3, min_ngram_freq=3, method="pmi"
-        )
+        ngram_encoder.train(tokens, min_pmi=1, min_token_count=3, min_ngram_freq=3, method="pmi")
     else:
         ngram_encoder.train(tokens, min_ngram_freq=5, method="freq")
 
@@ -93,9 +91,7 @@ def test_train_from_file(fname: str):
 def test_train_from_file_should_fail():
     fname = current_dir + "/resources/tokenized_data_should_fail.txt"
     with pytest.raises(ValueError):
-        ngram_encoder = NgramEncoder(
-            {}, min_ngram_len=2, max_ngram_len=6, max_ngrams=20
-        )
+        ngram_encoder = NgramEncoder({}, min_ngram_len=2, max_ngram_len=6, max_ngrams=20)
         ngram_encoder.train_from_file(
             fname,
             min_pmi=1,
@@ -184,13 +180,9 @@ def test_train_match_ref_impl(fname):
             k2del.append(k)
     for k in k2del:
         del target_ngrams[k]
-    target_ngrams = dict(
-        sorted(target_ngrams.items(), key=lambda kv: (kv[1], kv[0]), reverse=True)
-    )
+    target_ngrams = dict(sorted(target_ngrams.items(), key=lambda kv: (kv[1], kv[0]), reverse=True))
 
     # save_ngram_dict_to_dir(ngram_freq, dir=current_dir + "/resources/my-ngram-freq.json")
     # save_ngram_dict_to_dir(target_ngrams, dir=current_dir + "/resources/target-ngram-freq.json")
 
-    assert ngram_freq == target_ngrams, (
-        f"ngram_freq={ngram_freq}; actual should be {target_ngrams}"
-    )
+    assert ngram_freq == target_ngrams, f"ngram_freq={ngram_freq}; actual should be {target_ngrams}"

@@ -19,9 +19,7 @@ def get_all_gue_data2(
     )
 
 
-def get_all_gue_data(
-    dir_path: str, type: _gue_data_type = "train", with_label=-1
-) -> list:
+def get_all_gue_data(dir_path: str, type: _gue_data_type = "train", with_label=-1) -> list:
     """Get all GUE data without label."""
     ret = []
 
@@ -39,9 +37,7 @@ def get_all_gue_data(
 
 
 def get_useful_gue_data(dir_path: str, type: _gue_data_type = "train") -> list:
-    assert "mouse" not in dir_path, (
-        "word mouse should not be in data path. Detail please see the code."
-    )
+    assert "mouse" not in dir_path, "word mouse should not be in data path. Detail please see the code."
     ret = []
 
     for data_file in find_file(dir_path, target_filename=f"{type}.csv"):

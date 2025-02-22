@@ -11,7 +11,5 @@ class ZenConfig(BertConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        config = BertConfig.from_pretrained(
-            pretrained_model_name_or_path, *model_args, **kwargs
-        )
+        config = BertConfig.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         return cls(**config.to_dict())

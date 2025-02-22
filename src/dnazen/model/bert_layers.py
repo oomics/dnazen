@@ -57,9 +57,7 @@ class ZenNgramEmbeddings(nn.Module):
             config.ngram_vocab_size, config.hidden_size, padding_idx=config.pad_token_id
         )
         # self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-        self.token_type_embeddings = nn.Embedding(
-            config.type_vocab_size, config.hidden_size
-        )
+        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
@@ -109,9 +107,7 @@ class ZenNgramEmbeddings(nn.Module):
                 )
                 token_type_ids = buffered_token_type_ids_expanded
             else:
-                token_type_ids = torch.zeros(
-                    input_shape, dtype=torch.long, device=self.position_ids.device
-                )  # type: ignore
+                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)  # type: ignore
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -145,9 +141,7 @@ class BertEmbeddings(nn.Module):
             config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id
         )
         # ALiBi doesn't use position embeddings
-        self.token_type_embeddings = nn.Embedding(
-            config.type_vocab_size, config.hidden_size
-        )
+        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model
         # variable name and be able to load any TensorFlow checkpoint file
@@ -225,9 +219,7 @@ class BertSelfAttention(nn.Module):
         super().__init__()
         # self.training = True
 
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(
-            config, "embedding_size"
-        ):
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({config.num_attention_heads})"
@@ -281,9 +273,7 @@ class BertSelfAttention(nn.Module):
         # bsz, seq_len = attn_mask.size()
 
         qkv = self.Wqkv(hidden_states)
-        qkv = rearrange(
-            qkv, "b s (t h d) -> b s t h d", t=3, h=self.num_attention_heads
-        )
+        qkv = rearrange(qkv, "b s (t h d) -> b s t h d", t=3, h=self.num_attention_heads)
 
         attention = self._flash_attn(qkv, bias)
 
@@ -309,9 +299,7 @@ class BertSelfOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(
-        self, hidden_states: torch.Tensor, input_tensor: torch.Tensor
-    ) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -363,9 +351,7 @@ class BertGatedLinearUnitMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.gated_layers = nn.Linear(
-            config.hidden_size, config.intermediate_size * 2, bias=False
-        )
+        self.gated_layers = nn.Linear(config.hidden_size, config.intermediate_size * 2, bias=False)
         self.act = nn.GELU(approximate="none")
         self.wo = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -432,9 +418,7 @@ class BertEncoder(nn.Module):
     def __init__(self, config: ZenConfig):
         super().__init__()
         layer = BertLayer(config)
-        self.layer = nn.ModuleList(
-            [copy.deepcopy(layer) for _ in range(config.num_hidden_layers)]
-        )
+        self.layer = nn.ModuleList([copy.deepcopy(layer) for _ in range(config.num_hidden_layers)])
         self.ngram_layer = nn.ModuleList(
             [copy.deepcopy(layer) for _ in range(config.num_word_hidden_layers)]
         )
@@ -457,9 +441,7 @@ class BertEncoder(nn.Module):
         )
         self.rebuild_alibi_tensor(size=config.alibi_starting_size)
 
-    def rebuild_alibi_tensor(
-        self, size: int, device: Optional[Union[torch.device, str]] = None
-    ):
+    def rebuild_alibi_tensor(self, size: int, device: Optional[Union[torch.device, str]] = None):
         # Alibi
         # Following https://github.com/ofirpress/attention_with_linear_biases/issues/5 (Implementation 1)
         # In the causal case, you can exploit the fact that softmax is invariant to a uniform translation
@@ -511,15 +493,11 @@ class BertEncoder(nn.Module):
         # subset_mask: Optional[torch.Tensor] = None,
     ) -> List[torch.Tensor]:
         extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
-        extended_attention_mask = extended_attention_mask.to(
-            dtype=torch.float32
-        )  # fp16 compatibility
+        extended_attention_mask = extended_attention_mask.to(dtype=torch.float32)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
         extended_ngram_attention_mask = ngram_attention_mask.unsqueeze(1).unsqueeze(2)
-        extended_ngram_attention_mask = extended_ngram_attention_mask.to(
-            dtype=torch.float32
-        )
+        extended_ngram_attention_mask = extended_ngram_attention_mask.to(dtype=torch.float32)
         extended_ngram_attention_mask = (1.0 - extended_ngram_attention_mask) * -10000.0
 
         batch, seqlen = hidden_states.shape[:2]
@@ -527,9 +505,7 @@ class BertEncoder(nn.Module):
         # Add alibi matrix to extended_attention_mask
         if self._current_alibi_size < seqlen:
             # Rebuild the alibi tensor when needed
-            warnings.warn(
-                f"Increasing alibi size from {self._current_alibi_size} to {seqlen}"
-            )
+            warnings.warn(f"Increasing alibi size from {self._current_alibi_size} to {seqlen}")
             self.rebuild_alibi_tensor(size=seqlen, device=hidden_states.device)
         elif self.alibi.device != hidden_states.device:
             # Device catch-up
@@ -578,9 +554,7 @@ class BertPooler(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
-    def forward(
-        self, hidden_states: torch.Tensor, pool: Optional[bool] = True
-    ) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, pool: Optional[bool] = True) -> torch.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
         first_token_tensor = hidden_states[:, 0] if pool else hidden_states
@@ -615,9 +589,7 @@ class BertLMPredictionHead(nn.Module):
         self.transform = BertPredictionHeadTransform(config)
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = nn.Linear(
-            bert_model_embedding_weights.size(1), bert_model_embedding_weights.size(0)
-        )
+        self.decoder = nn.Linear(bert_model_embedding_weights.size(1), bert_model_embedding_weights.size(0))
         self.decoder.weight = bert_model_embedding_weights
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:

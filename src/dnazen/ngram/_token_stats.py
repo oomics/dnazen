@@ -58,12 +58,8 @@ def analyze_token_stats(
         k_ = tokenizer.decode(k)
         token_decoded[k_] = v
 
-    sorted_ngram_decoded = dict(
-        sorted(ngram_decoded.items(), key=lambda item: item[1], reverse=True)
-    )
-    sorted_token_decoded = dict(
-        sorted(token_decoded.items(), key=lambda item: item[1], reverse=True)
-    )
+    sorted_ngram_decoded = dict(sorted(ngram_decoded.items(), key=lambda item: item[1], reverse=True))
+    sorted_token_decoded = dict(sorted(token_decoded.items(), key=lambda item: item[1], reverse=True))
 
     # save to dir
     if not os.path.exists(save_dir):

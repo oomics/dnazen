@@ -79,15 +79,11 @@ class FindNgrams:
         #     if len(k) >=10:
         #         print(k)
 
-        self.ngrams = {
-            i: j for i, j in self.ngrams.items() if j > self.min_count and len(i) <= n
-        }
+        self.ngrams = {i: j for i, j in self.ngrams.items() if j > self.min_count and len(i) <= n}
 
         self.renew_ngram_by_freq(token_seq_vec, freq_threshold, n)
 
-    def renew_ngram_by_freq(
-        self, token_seq_vec: list[list[int]], min_feq, ngram_len=10
-    ):
+    def renew_ngram_by_freq(self, token_seq_vec: list[list[int]], min_feq, ngram_len=10):
         new_ngram2count = {}
 
         # for sentence in all_sentences:

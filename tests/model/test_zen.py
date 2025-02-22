@@ -16,9 +16,7 @@ def mlm_model_input(model_config):
         "input_ids": torch.randint(
             low=0, high=vocab_size // 2, size=(batch_size, max_seq_len), device=device
         ),
-        "labels": torch.randint(
-            low=0, high=vocab_size, size=(batch_size, max_seq_len), device=device
-        ),
+        "labels": torch.randint(low=0, high=vocab_size, size=(batch_size, max_seq_len), device=device),
         "attention_mask": torch.rand(size=(batch_size, max_seq_len), device=device),
         "ngram_input_ids": torch.randint(
             low=0,
@@ -26,9 +24,7 @@ def mlm_model_input(model_config):
             size=(batch_size, max_ngram_len),
             device=device,
         ),
-        "ngram_position_matrix": torch.ones(
-            size=(batch_size, max_seq_len, max_ngram_len), device=device
-        ),
+        "ngram_position_matrix": torch.ones(size=(batch_size, max_seq_len, max_ngram_len), device=device),
     }
 
 
