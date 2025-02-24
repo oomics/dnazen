@@ -30,12 +30,10 @@ from dnazen.data.labeled_dataset import LabeledDataset, LabeledData, ZenLabeledD
 from dnazen.ngram import NgramEncoder
 
 
-"""
-Compute metrics used for huggingface trainer.
-"""
-
-
 def compute_metrics(eval_pred):
+    """
+    Compute metrics used for huggingface trainer.
+    """
     predictions, labels = eval_pred
     # calculate metric with sklearn
     predictions: np.ndarray
@@ -154,6 +152,7 @@ train_args = transformers.training_args.TrainingArguments(
     save_total_limit=10,
     load_best_model_at_end=True,
     metric_for_best_model="eval_matthews_correlation",
+    greater_is_better=True,
 )
 
 trainer = transformers.Trainer(

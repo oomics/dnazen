@@ -45,9 +45,9 @@ def get_hg38_hg38rvs():
 
 def get_multi_species_all():
     return get_multi_species_data(
-        f"{DATA_DIR}/dev.txt"
+        f"{DATA_DIR}/mspecies/dev.txt"
     ) + get_multi_species_data(
-        f"{DATA_DIR}/train.txt"
+        f"{DATA_DIR}/mspecies/train.txt"
     )
 
 def get_all_data():
