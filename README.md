@@ -1,6 +1,6 @@
-# ZENforDNA
+# DNAZEN
 
-ZENforDNA is a project aimed at providing tools and resources for DNA sequence analysis and LLM pretraining, finetuning
+DNAZEN is a project aimed at providing tools and resources for DNA sequence analysis with pretraining and finetuning
 
 ## Installation
 
