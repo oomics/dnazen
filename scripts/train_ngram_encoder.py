@@ -55,10 +55,10 @@ def get_all_data():
 
 data_mapping = {
     "all": get_all_data,
-    "gue_all": get_gue_all,
-    "gue_test": get_gue_test,
+    "gue-all": get_gue_all,
+    "gue-test": get_gue_test,
     "hg38":get_hg38,
-    "hg38_all":get_hg38_hg38rvs,
+    "hg38-all":get_hg38_hg38rvs,
     "mspecies":get_multi_species_all,
 }
 
@@ -79,7 +79,7 @@ def get_tokenized_data(data_types: list[str], tok_name: str = "zhihan1996/DNABER
 
     print(f"Tokenizing (length of all data={total_len})...")
     tokenizer = AutoTokenizer.from_pretrained(tok_name, trust_remote_code=True, use_fast=True)
-    data_tokenized: list[list[int]] = tokenizer(all_data)["input_ids"]  # type: ignore
+    data_tokenized: list[list[int]] = tokenizer(all_data, return_attention_mask=False, return_token_type_ids=False)["input_ids"]  # type: ignore
     for idx, data in enumerate(data_tokenized):
         data.pop(0)
         data.pop(-1)
@@ -88,7 +88,7 @@ def get_tokenized_data(data_types: list[str], tok_name: str = "zhihan1996/DNABER
 @click.command()
 @click.option("-s", "--source", type=click.Choice(["raw", "tokenized"]), help="Data source: raw or tokenized.", default="raw")
 @click.option("-d", "--data", type=str, 
-              help="""(when raw) Comma-separated list of data types to use. Valid data types: all, gue_all, gue_test, hg38, hg38_all, mspecies.
+              help="""(when raw) Comma-separated list of data types to use. Valid data types: all, gue-all, gue-test, hg38, hg38-all, mspecies.
 (When tokenized) directory of alread-tokenized data.
 """)
 @click.option("-o", '--out', help='Save dir for ngram encoder', type=str)
