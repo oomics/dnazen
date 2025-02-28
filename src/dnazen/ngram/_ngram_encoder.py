@@ -6,6 +6,7 @@ from typing import TypedDict, Literal
 import json
 import warnings
 from copy import deepcopy
+import pathlib
 
 import torch
 
@@ -322,6 +323,9 @@ class NgramEncoder:
             "max_ngrams": self._max_ngrams,
         }
         indent = 2 if pretty else None
+        _dir = pathlib.Path(path).parent
+        _dir.mkdir(parents=True, exist_ok=True)
+
         with open(path, "w") as f:
             json.dump(config, f, indent=indent)
 

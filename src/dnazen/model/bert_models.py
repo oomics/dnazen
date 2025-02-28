@@ -17,11 +17,6 @@ from .bert_layers import (
     BertPooler,
 )
 
-try:
-    from .flash_attn_triton import flash_attn_qkvpacked_func
-except ImportError:
-    flash_attn_qkvpacked_func = None
-
 logger = logging.getLogger(__name__)
 
 
@@ -101,19 +96,8 @@ class BertModel(BertPreTrainedModel):
         embedding_output = self.embeddings(input_ids, token_type_ids, position_ids)
         ngram_embedding_output = self.ngram_embeddings(
             ngram_input_ids,
-            # token_type_ids=token_type_ids,
-            # position_ids=position_ids
         )
 
-        # subset_mask = []
-        # first_col_mask = []
-
-        # if masked_tokens_mask is None:
-        #     subset_mask = None
-        # else:
-        #     first_col_mask = torch.zeros_like(masked_tokens_mask)
-        #     first_col_mask[:, 0] = True
-        #     subset_mask = masked_tokens_mask | first_col_mask
         encoder_outputs = self.encoder(
             hidden_states=embedding_output,
             ngram_hidden_states=ngram_embedding_output,
@@ -121,7 +105,6 @@ class BertModel(BertPreTrainedModel):
             ngram_attention_mask=ngram_attention_mask,
             ngram_position_matrix=ngram_position_matrix,
             output_all_encoded_layers=output_all_encoded_layers,
-            # subset_mask=subset_mask,
         )
 
         sequence_output = encoder_outputs[-1]
@@ -218,11 +201,6 @@ class BertForMaskedLM(BertPreTrainedModel, GenerationMixin):
         if (input_ids is not None) == (inputs_embeds is not None):
             raise ValueError("Must specify either input_ids or input_embeds!")
 
-        # if labels is None:
-        #     masked_tokens_mask = None
-        # else:
-        #     masked_tokens_mask = labels > 0
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bert(
@@ -240,7 +218,6 @@ class BertForMaskedLM(BertPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            # masked_tokens_mask=masked_tokens_mask,
         )
 
         sequence_output = outputs[0]
@@ -250,23 +227,11 @@ class BertForMaskedLM(BertPreTrainedModel, GenerationMixin):
         if labels is not None:
             # Compute loss
             loss_fct = nn.CrossEntropyLoss()
-            # # hotfix: make 0 -100
-            # labels = torch.where(labels < 0, -100, labels)
 
             loss = loss_fct(
                 prediction_scores.reshape(-1, self.config.vocab_size),
                 labels.reshape(-1),
             )
-
-            # assert input_ids is not None, "Coding error; please open an issue"
-            # batch, seqlen = input_ids.shape[:2]
-            # prediction_scores = rearrange(
-            #     index_put_first_axis(
-            #         prediction_scores, masked_token_idx, batch * seqlen
-            #     ),
-            #     "(b s) d -> b s d",
-            #     b=batch,
-            # )
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
