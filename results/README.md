@@ -48,3 +48,12 @@ Check whether TATA-box makes the model more likely to mark the data as propoter.
 由于这不算老师交代的任务，我仅在凌晨1点，利用了晚上的8h进行预训练，确保我的实验未造成资源抢占，再在早上finetune。总共预训练了2000个epoch，实际应该训练15000个epoch。如果继续训练，我预计效果可能有更多提升。同时，抽取mspecies和GUE而不是mspecies+GUE和GUE是一个更可靠的方案。
 
 新的merge后的ngram我暂时未作ngram匹配分析。
+
+
+## 2025-2-25 画hg38, gue 和mspecies上抽取ngram的zipf's law图片
+
+详见 ./2025-2-25
+
+## 2025-2-26 尝试修改makefile 使得ngram准备+训练自动化
+
+失败。其中有一步需要合并两个或者三个ngram。makefile似乎并不擅长处理变长的指令。只能手动管理依赖，最多写一个批处理程序。
