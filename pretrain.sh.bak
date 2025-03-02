@@ -1,0 +1,60 @@
+#!/bin/bash
+
+# 加载环境变量
+source $(dirname "$0")/env.sh
+
+# 检查所需目录是否存在
+if [ ! -d "${DNAZEN_PRETRAIN_DATA_DIR}/train" ]; then
+  echo "训练数据目录不存在: ${DNAZEN_PRETRAIN_DATA_DIR}/train"
+  echo "正在创建目录..."
+  mkdir -p "${DNAZEN_PRETRAIN_DATA_DIR}/train"
+fi
+
+if [ ! -d "${DNAZEN_PRETRAIN_DATA_DIR}/dev" ]; then
+  echo "验证数据目录不存在: ${DNAZEN_PRETRAIN_DATA_DIR}/dev"
+  echo "正在创建目录..."
+  mkdir -p "${DNAZEN_PRETRAIN_DATA_DIR}/dev"
+fi
+
+# 创建输出目录
+OUTPUT_DIR="${DNAZEN_PRETRAIN_DATA_DIR}/output"
+if [ ! -d "$OUTPUT_DIR" ]; then
+  echo "创建输出目录: $OUTPUT_DIR"
+  mkdir -p "$OUTPUT_DIR"
+fi
+
+# 设置默认参数
+PER_DEVICE_BATCH_SIZE=${DNAZEN_PRETRAIN_PER_DEVICE_BATCH_SIZE:-128}
+GRAD_ACCU_STEPS=${DNAZEN_PRETRAIN_GRAD_ACCU_STEPS:-4}
+NUM_NGRAM_HIDDEN_LAYER=6
+N_EPOCH=2
+SEED=42
+OFFLINE_MODE="--offline"  # 默认使用离线模式
+
+# 打印训练参数
+echo "-------------------------"
+echo "训练参数:"
+echo "训练数据目录: ${DNAZEN_PRETRAIN_DATA_DIR}/train"
+echo "验证数据目录: ${DNAZEN_PRETRAIN_DATA_DIR}/dev"
+echo "输出目录: $OUTPUT_DIR"
+echo "每设备批量大小: $PER_DEVICE_BATCH_SIZE"
+echo "梯度累积步数: $GRAD_ACCU_STEPS"
+echo "学习率: $DNAZEN_PRETRAIN_LR"
+echo "训练轮数: $N_EPOCH"
+echo "随机种子: $SEED"
+echo "Ngram隐藏层数: $NUM_NGRAM_HIDDEN_LAYER"
+echo "离线模式: 启用"
+echo "-------------------------"
+
+# 运行训练脚本
+python $(dirname "$0")/run_pretrain.py \
+  --train "${DNAZEN_PRETRAIN_DATA_DIR}/train" \
+  --dev "${DNAZEN_PRETRAIN_DATA_DIR}/dev" \
+  --out "$OUTPUT_DIR" \
+  --num_ngram_hidden_layer $NUM_NGRAM_HIDDEN_LAYER \
+  --per-device-train-batch-size $PER_DEVICE_BATCH_SIZE \
+  --grad-accumulation-steps $GRAD_ACCU_STEPS \
+  --lr $DNAZEN_PRETRAIN_LR \
+  --n-epoch $N_EPOCH \
+  --seed $SEED \
+  $OFFLINE_MODE 

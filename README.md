@@ -30,6 +30,8 @@ python setup.py install
 
 ## Usage
 
+
+
 We keep all scripts you might find useful in `scripts` directory. The usage of script is self-explanatory. Here are some scripts you might find most helpful:
 
 - `run_pretrain.py`: Run the pretraining process.
@@ -57,3 +59,7 @@ We keep all scripts you might find useful in `scripts` directory. The usage of s
 
 - __3. install pre-commit hook__
     > Do `pre-commit install`.
+
+
+## Getting Started (for train)
+- `cd scripts && source env.sh && make -f makefile pretrain `
