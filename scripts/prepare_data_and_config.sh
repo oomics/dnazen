@@ -90,7 +90,7 @@ fi
 if [[ "$RUN_NGRAM_ENCODER" == "true" ]]; then
   echo "=====Step1 开始训练N-gram编码器 ====="
   python scripts/train_ngram_encoder.py \
-    --input ../data/pretrain/raw/dev.txt \
+    --input ../data/pretrain/dev/dev.txt \
     --output ../data/pretrain/ngram_encoder.json \
     --min-ngram-len 2 \
     --max-ngram-len 5 \
