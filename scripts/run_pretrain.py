@@ -49,7 +49,7 @@ from transformers import (
 from transformers.models.bert.configuration_bert import BertConfig
 
 # DnaZen自定义库
-#from dnazen.data.mlm_dataset import MlmDataset, MlmData
+from dnazen.data.mlm_dataset import MlmDataset, MlmData
 from dnazen.model.bert_models import BertForMaskedLM, BertForSequenceClassification
 from dnazen.model.bert_config import ZenConfig
 from dnazen.ngram import NgramEncoder
@@ -154,6 +154,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--train", type=str, required=True, help="训练数据文件路径")
     parser.add_argument("--dev", type=str, required=True, help="验证数据文件路径")
     parser.add_argument("--out", type=str, required=True, help="输出目录")
+    
+    parser.add_argument("--train_dir", type=str, help="Directory for training data")
+    parser.add_argument("--dev_dir", type=str, help="Directory for validation data")
+    
     parser.add_argument(
         "--num_ngram_hidden_layer",
         type=int,
@@ -508,6 +512,8 @@ def main():
     # 提取参数
     train_data_file = args.train
     dev_data_file = args.dev
+    train_dir = args.train_dir
+    dev_dir = args.dev_dir
     output_dir = args.out
     num_ngram_hidden_layer = args.num_ngram_hidden_layer
     learning_rate = args.lr
@@ -545,14 +551,18 @@ def main():
     
     # 2. 加载数据集
     logger.info("加载训练数据集...")
-    if args.streaming:
-        logger.info("使用流式数据加载...")
-        train_dataset = StreamingDNADataset(train_data_file, tokenizer, buffer_size=args.buffer_size)
-        val_dataset = StreamingDNADataset(dev_data_file, tokenizer, buffer_size=args.buffer_size)
-    else:
-        train_dataset = load_data_from_file(train_data_file, tokenizer, cache_dir=args.cache_dir)
-        val_dataset = load_data_from_file(dev_data_file, tokenizer, cache_dir=args.cache_dir)
+    # if args.streaming:
+    #     logger.info("使用流式数据加载...")
+    #     train_dataset = StreamingDNADataset(train_data_file, tokenizer, buffer_size=args.buffer_size)
+    #     val_dataset = StreamingDNADataset(dev_data_file, tokenizer, buffer_size=args.buffer_size)
+    # else:
+    #     train_dataset = load_data_from_file(train_data_file, tokenizer, cache_dir=args.cache_dir)
+    #     val_dataset = load_data_from_file(dev_data_file, tokenizer, cache_dir=args.cache_dir)
     
+    train_dataset = MlmDataset.from_dir(train_dir, check_hash=False)
+    val_dataset   = MlmDataset.from_dir(dev_dir, check_hash=False)
+
+
     # 2. 加载和配置模型
     logger.info("配置模型...")
     try:
@@ -633,6 +643,15 @@ def main():
         ngram_vocab_size=ngram_vocab_size,
         **bert_config.to_dict(),
     )
+    
+    # 打印ZEN配置信息
+    logger.info("ZEN配置详情:")
+    logger.info(f"  词汇表大小: {zen_config.vocab_size}")
+    logger.info(f"  隐藏层大小: {zen_config.hidden_size}")
+    logger.info(f"  注意力头数: {zen_config.num_attention_heads}")
+    logger.info(f"  隐藏层数量: {zen_config.num_hidden_layers}")
+    logger.info(f"  N-gram词汇表大小: {zen_config.ngram_vocab_size}")
+    logger.info(f"  N-gram隐藏层数量: {zen_config.num_word_hidden_layers}")
     
     # 加载预训练模型或从检查点恢复
     if args.resume is None:

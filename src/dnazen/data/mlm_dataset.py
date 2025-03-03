@@ -471,18 +471,23 @@ class MlmDataset(Dataset):
     @classmethod
     def from_dir(
         cls,
-        save_dir: str,  # 保存目录路径
-        check_hash: bool = True,
+        save_dir,
+        tokenizer=None,
+        max_seq_len=512,
+        max_ngrams=20,
+        **kwargs,
     ):
-        """
-        从保存目录加载数据集
+        """从保存目录加载MLM数据集。
         
-        参数:
+        Args:
             save_dir: 保存目录路径
-            check_hash: 是否检查哈希值
+            tokenizer: 分词器，如果为None则从保存目录加载
+            max_seq_len: 最大序列长度
+            max_ngrams: 每个序列最多匹配的N-gram数量
+            **kwargs: 其他参数
             
-        返回:
-            MLM数据集实例
+        Returns:
+            MLMDataset实例
         """
         # 构建文件路径
         ngram_encoder_path = os.path.join(save_dir, cls.NGRAM_ENCODER_FNAME)
@@ -490,39 +495,63 @@ class MlmDataset(Dataset):
         data_path = os.path.join(save_dir, cls.DATA_FNAME)
         core_ngram_path = os.path.join(save_dir, cls.CORE_NGRAMS_FNAME)
         data_config_path = os.path.join(save_dir, cls.CONFIG_FNAME)
-
+        
+        # 打印详细的加载信息
+        print(f"正在从目录加载MLM数据集: {save_dir}")
+        print(f"  N-gram编码器路径: {ngram_encoder_path}")
+        print(f"  分词器路径: {tokenizer_path}")
+        print(f"  数据路径: {data_path}")
+        print(f"  核心N-gram路径: {core_ngram_path}")
+        print(f"  配置文件路径: {data_config_path}")
+        
+        # 加载N-gram编码器
+        print("加载N-gram编码器...")
+        ngram_encoder = NgramEncoder.from_file(ngram_encoder_path)
+        print(f"  N-gram词汇表大小: {ngram_encoder.get_vocab_size()}")
+        print(f"  N-gram长度范围: {ngram_encoder._min_ngram_len}-{ngram_encoder._max_ngram_len}")
+        print(f"  最大N-gram匹配数: {ngram_encoder._max_ngrams}")
+        
+        # 设置最大N-gram匹配数
+        ngram_encoder.set_max_ngram_match(max_ngrams)
+        print(f"  更新后的最大N-gram匹配数: {max_ngrams}")
+        
+        # 加载分词器
+        if tokenizer is None:
+            print(f"从{tokenizer_path}加载分词器...")
+            tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+            print(f"  分词器词汇表大小: {len(tokenizer)}")
+        else:
+            print("使用提供的分词器")
+        
+        # 加载数据
+        print(f"从{data_path}加载数据...")
+        data = torch.load(data_path)
+        print(f"  加载的数据条目数: {len(data)}")
+        
+        # 加载核心N-gram
+        print(f"从{core_ngram_path}加载核心N-gram...")
+        core_ngrams = torch.load(core_ngram_path)
+        print(f"  核心N-gram数量: {len(core_ngrams)}")
+        
         # 加载配置
+        print(f"从{data_config_path}加载配置...")
         with open(data_config_path, "r") as f:
-            data_cfg: MlmDataConfig = json.load(f)
-            
-        # 检查哈希值（如果使用符号链接）
-        if data_cfg["mlm_data_symlink"] is not None and check_hash:
-            assert data_cfg["mlm_data_hash_val"] is not None
-            # 检查哈希值
-            logger.info("使用符号链接加载数据。正在检查MD5值。")
-            hash_identical = check_hash_of_file_md5(data_path, data_cfg["mlm_data_hash_val"])
-            if not hash_identical:
-                raise ValueError(
-                    f"尝试打开文件{data_path}，",
-                    "但原始数据似乎已被修改。",
-                )
-        elif check_hash:
-            logger.warning("不使用符号链接时不支持检查哈希值。")
-
-        # 加载数据和组件
-        data = torch.load(data_path, weights_only=True)
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
-
-        return cls(
-            tokens=data["input_ids"],
-            attn_mask=data["attention_mask"],
+            config = json.load(f)
+        print(f"  配置信息: {config}")
+        
+        # 创建数据集实例
+        print("创建MLM数据集实例...")
+        dataset = cls(
+            data=data,
             tokenizer=tokenizer,
-            ngram_encoder=NgramEncoder.from_file(ngram_encoder_path),
-            core_ngrams=_load_core_ngrams(core_ngram_path),
-            whole_ngram_masking=data_cfg.get("whole_ngram_masking", False),
-            mlm_prob=data_cfg["mlm_prob"],
-            mlm_data_symlink=data_cfg["mlm_data_symlink"],
+            ngram_encoder=ngram_encoder,
+            core_ngrams=core_ngrams,
+            max_seq_len=max_seq_len,
+            **kwargs,
         )
+        print("MLM数据集加载完成!")
+        
+        return dataset
 
     def __len__(self):
         """返回数据集大小"""
