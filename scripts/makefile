@@ -88,7 +88,7 @@ main_ngram:
 pretrain_data: $(DNAZEN_PRETRAIN_DATA_DIR)
 	@echo "Pretrain data is ready at $(DNAZEN_PRETRAIN_DATA_DIR)"
 
-pretrain: check_defined_all $(PRETRAIN_OUT_DIR)
+pretrain: check_defined_all main_ngram $(PRETRAIN_OUT_DIR)
 	@echo "Pretraining done. Output is at $(PRETRAIN_OUT_DIR)"
 
 finetune:

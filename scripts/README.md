@@ -3,9 +3,13 @@
 
 ## Prerequisite
 
-1. 仿照 `env.sh.sample`写一个脚本用于注册环境变量
+1. 准备数据集
 
-2. `source env.sh` 注意是source而不是sh，否则环境变量不会发生改变
+数据集应该是含有AGCT的txt文件，每条数据由`\n`分割。`train.txt`是训练集，`dev.txt`是验证集。
+
+2. 仿照 `env.sh.sample`写一个脚本用于注册环境变量
+
+3. `source env.sh` 注意是source而不是sh，否则环境变量不会发生改变
 
 ## ngrams
 

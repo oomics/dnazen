@@ -57,3 +57,7 @@ We keep all scripts you might find useful in `scripts` directory. The usage of s
 
 - __3. install pre-commit hook__
     > Do `pre-commit install`.
+
+## Train DNAZEN
+
+See [this document](./scripts/README.md) for detail.
