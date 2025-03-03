@@ -1,160 +1,117 @@
-from argparse import ArgumentParser
+#!/usr/bin/env python
+"""
+训练N-gram编码器并保存配置文件
 
-import click
-from transformers import AutoTokenizer, AutoModel
+此脚本从文本文件加载数据，训练N-gram编码器，
+并将结果保存为正确格式的配置文件。
+"""
+
+import os
+import argparse
+import logging
+from typing import List
+
+import torch
+from transformers import AutoTokenizer
 
 from dnazen.ngram import NgramEncoder
 
-from utils.datas import get_all_gue_data, get_all_hg38_data, get_useful_gue_data, get_multi_species_data
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
 
-DATA_DIR = "/data1/peter"
 
-def get_rvs_complementary(text):
-    tmp = {"A": "T", "T": "A", "C": "G", "G": "C"}
-    return "".join([tmp[c] for c in reversed(text)])
+def load_text_data(file_path: str) -> List[str]:
+    """加载文本数据"""
+    logger.info(f"从 {file_path} 加载文本数据")
+    with open(file_path, "r") as f:
+        lines = [line.strip() for line in f if line.strip()]
+    logger.info(f"加载了 {len(lines)} 行文本")
+    return lines
 
-def get_gue_all():
-    return get_useful_gue_data(
-        f"{DATA_DIR}/GUE",
-        type="train"
-    ) + get_useful_gue_data(
-        f"{DATA_DIR}/GUE",
-        type="dev"
-    ) + get_useful_gue_data(
-        f"{DATA_DIR}/GUE",
-        type="test"
-    )
 
-def get_gue_test():
-    return get_useful_gue_data(
-        f"{DATA_DIR}/GUE",
-        type="test"
-    )
+def tokenize_data(texts: List[str], tokenizer) -> List[List[int]]:
+    """将文本数据转换为token ID"""
+    logger.info("将文本转换为token ID")
+    tokenized_data = []
+    for text in texts:
+        tokens = tokenizer.encode(text, add_special_tokens=False)
+        tokenized_data.append(tokens)
+    logger.info(f"转换完成，共 {len(tokenized_data)} 个序列")
+    return tokenized_data
 
-def get_hg38():
-    return get_all_hg38_data(
-        f"{DATA_DIR}/hg38.fa"
-    )
 
-def get_hg38_hg38rvs():
-    data_hg38 = get_all_hg38_data(
-        f"{DATA_DIR}/hg38.fa"
-    )
-    data_hg38_rvs = [get_rvs_complementary(d) for d in data_hg38]
-    return data_hg38 + data_hg38_rvs
-
-def get_multi_species_all():
-    return get_multi_species_data(
-        f"{DATA_DIR}/mspecies/dev.txt"
-    ) + get_multi_species_data(
-        f"{DATA_DIR}/mspecies/train.txt"
-    )
-
-def get_all_data():
-    return get_multi_species_all() + get_gue_all() + get_hg38_hg38rvs()
-
-data_mapping = {
-    "all": get_all_data,
-    "gue-all": get_gue_all,
-    "gue-test": get_gue_test,
-    "hg38":get_hg38,
-    "hg38-all":get_hg38_hg38rvs,
-    "mspecies":get_multi_species_all,
-}
-
-def get_tokenized_data(data_types: list[str], tok_name: str = "zhihan1996/DNABERT-2-117M"):
-    print("Getting data...")
-    if 'all' in data_types and len(data_types) > 1:
-        data_types = ['all']
-        print("[Warning] 'all' includes all data types. Other specified data types will be ignored.")
-    all_data = []
-    for data_type in data_types:
-        data_func = data_mapping[data_type]
-        all_data.extend(data_func())
-
-    # calculate the total length of data
-    total_len = 0
-    for d in all_data:
-        total_len += len(d)
-
-    print(f"Tokenizing (length of all data={total_len})...")
-    tokenizer = AutoTokenizer.from_pretrained(tok_name, trust_remote_code=True, use_fast=True)
-    data_tokenized: list[list[int]] = tokenizer(all_data, return_attention_mask=False, return_token_type_ids=False)["input_ids"]  # type: ignore
-    for idx, data in enumerate(data_tokenized):
-        data.pop(0)
-        data.pop(-1)
-    return data_tokenized
-
-@click.command()
-@click.option("-s", "--source", type=click.Choice(["raw", "tokenized"]), help="Data source: raw or tokenized.", default="raw")
-@click.option("-d", "--data", type=str, 
-              help="""(when raw) Comma-separated list of data types to use. Valid data types: all, gue-all, gue-test, hg38, hg38-all, mspecies.
-(When tokenized) directory of alread-tokenized data.
-""")
-@click.option("-o", '--out', help='Save dir for ngram encoder', type=str)
-@click.option("--tok-name", type=str, help="name of tokenizer", default="zhihan1996/DNABERT-2-117M")
-@click.option("--min-ngram", help="Minimum ngram frequency", type=click.IntRange(1, 100), default=5)
-@click.option("--min-ngram-len", help="Minimum ngram length", type=click.IntRange(1, 100), default=2)
-@click.option("--max-ngram-len", help="Minimum ngram length", type=click.IntRange(1, 100), default=5)
-@click.option("--min-tok", help="Minimum token count", type=click.IntRange(1, 100), default=5)
-@click.option("--min-pmi", help="Minimum pmi", type=float, default=5)
-@click.option("--mem-efficient", help="Memory efficient", type=bool, default=False)
-@click.option("--train-method", help="Training method. freq or pmi", type=click.Choice(["pmi", "freq"]), default="pmi")
-@click.option("--out-freq", help="The out directory for frequency. Would not output freq info if not specified.", type=str, default=None)
-def main(source:str, data: str, out: str, tok_name: str,
-    min_ngram: int, min_ngram_len: int, max_ngram_len: int, min_tok: int, min_pmi: float, mem_efficient: bool, 
-    train_method: str,
-    out_freq: str | None
-    ):
-    print("min_token_count=", min_tok)
-    returns_freq = (out_freq != None)
+def main():
+    parser = argparse.ArgumentParser(description="训练N-gram编码器并保存配置文件")
+    parser.add_argument("--input", type=str, required=True, help="输入文本文件路径")
+    parser.add_argument("--output", type=str, required=True, help="输出配置文件路径")
+    parser.add_argument("--tokenizer", type=str, default="zhihan1996/DNABERT-2-117M", help="Tokenizer名称或路径")
+    parser.add_argument("--min-ngram-len", type=int, default=2, help="最小N-gram长度")
+    parser.add_argument("--max-ngram-len", type=int, default=5, help="最大N-gram长度")
+    parser.add_argument("--max-ngrams", type=int, default=30, help="每个序列最多匹配的N-gram数量")
+    parser.add_argument("--min-pmi", type=float, default=1.0, help="最小PMI阈值")
+    parser.add_argument("--min-token-count", type=int, default=5, help="最小token计数阈值")
+    parser.add_argument("--min-ngram-freq", type=int, default=5, help="最小N-gram频率阈值")
+    parser.add_argument("--method", type=str, choices=["pmi", "freq"], default="pmi", help="训练方法")
+    parser.add_argument("--num-workers", type=int, default=4, help="训练使用的工作线程数")
     
-    if not mem_efficient:
-        if source == "raw":
-            data_types = data.split(',')
-            data_tokenized: list[list[int]] = get_tokenized_data(data_types, tok_name=tok_name)
-        else:
-            import tqdm
-            data_tokenized: list[list[int]] = []
-            with open(data, "r") as f:
-                lines = f.readlines()
-                for line in tqdm.tqdm(lines, "converting data to tokens"):
-                    line_ = line.replace("\n", "")
-                    if len(line_) > 0:
-                        data_tokenized.append(
-                            [int(n) for n in line_.split(":")]
-                        )
-            del lines # save mem
-
-        ngram_encoder = NgramEncoder(vocab_dict={}, min_ngram_len=min_ngram_len, max_ngram_len=max_ngram_len, max_ngrams=20)
-        ngram_freq = ngram_encoder.train(
-            data_tokenized, min_pmi=min_pmi, min_token_count=min_tok,
-            secondary_filter=False, # set to false for now
-            min_ngram_freq=min_ngram, num_workers=100, returns_freq=returns_freq,
-            method=train_method
-            )
-        ngram_encoder.save(out)
-    else:
-        if source == "raw":
-            print("[Warning] cannot use raw data in mem-efficient mode.")
-            exit(1)
-        if train_method != "pmi":
-            print("[Warning] Only pmi is support for mem-efficient version.")
+    args = parser.parse_args()
+    
+    # 确保输出目录存在
+    os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
+    
+    # 加载tokenizer
+    logger.info(f"加载tokenizer: {args.tokenizer}")
+    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
+    
+    # 加载并处理数据
+    texts = load_text_data(args.input)
+    tokenized_data = tokenize_data(texts, tokenizer)
+    
+    # 初始化N-gram编码器
+    logger.info("初始化N-gram编码器")
+    encoder = NgramEncoder(
+        vocab_dict={},  # 空词典，将通过训练填充
+        min_ngram_len=args.min_ngram_len,
+        max_ngram_len=args.max_ngram_len,
+        max_ngrams=args.max_ngrams,
+    )
+    
+    # 训练N-gram编码器
+    logger.info(f"使用 {args.method} 方法训练N-gram编码器")
+    logger.info(f"参数: min_pmi={args.min_pmi}, min_token_count={args.min_token_count}, min_ngram_freq={args.min_ngram_freq}")
+    
+    ngram_freqs = encoder.train(
+        tokens=tokenized_data,
+        min_pmi=args.min_pmi,
+        min_token_count=args.min_token_count,
+        min_ngram_freq=args.min_ngram_freq,
+        num_workers=args.num_workers,
+        returns_freq=True,
+        method=args.method,
+    )
+    
+    vocab_size = encoder.get_vocab_size()
+    logger.info(f"训练完成，N-gram词汇表大小: {vocab_size}")
+    
+    if vocab_size > 0:
+        # 显示一些N-gram示例
+        logger.info("前5个N-gram示例:")
+        for i, (ngram, id_) in enumerate(list(encoder.get_vocab().items())[:5]):
+            freq = ngram_freqs.get(ngram, "N/A")
+            logger.info(f"  {i+1}. {ngram} -> ID {id_}, 频率 {freq}")
         
-        ngram_encoder = NgramEncoder(vocab_dict={}, min_ngram_len=min_ngram_len, max_ngram_len=max_ngram_len, max_ngrams=20)
-        ngram_freq = ngram_encoder.train_from_file(data, min_pmi=min_pmi, min_token_count=min_tok, min_ngram_freq=min_ngram, num_workers=100, returns_freq=returns_freq)
-        ngram_encoder.save(out)
+        # 保存N-gram编码器配置
+        logger.info(f"保存N-gram编码器配置到: {args.output}")
+        encoder.save(args.output, pretty=True)
+        logger.info("保存完成")
+    else:
+        logger.warning("没有找到任何N-gram，请调整训练参数")
 
-    if out_freq is None:
-        return
 
-    import json
-    with open(out_freq, "w") as f:
-        output = {}
-        for k, v in ngram_freq.items():
-            k_ = ":".join([str(num) for num in list(k)])
-            output[k_] = v
-        json.dump(output, f, indent=2)
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
