@@ -209,6 +209,7 @@ class NgramEncoder:
             tokens (list[list[int]]): list of pre-tokenized tokens.
             min_pmi (float): the pmi threshold of ngram (used only using pmi method)
             min_token_count (int): the minimum token frequency for filtering ngram (used only using pmi method)
+            secondary_filter (bool): whether filter the ngram twice (used only using freq method).
             min_ngram_freq (int): the minimum ngram frequency for filtering ngram
             num_workers (int, optional): number of workers for training. Defaults to 64.
             returns_freq (bool, optional): whether return the frequency info. Defaults to false.
@@ -222,6 +223,8 @@ class NgramEncoder:
                 raise ValueError("min_pmi not set")
             if min_token_count is None:
                 raise ValueError("min_token_count not set")
+            if secondary_filter:
+                print("[Warning] secondary filter has no effect when using pmi.")
 
             ngram_finder_config = PmiNgramFinderConfig()
             ngram_finder_config.min_pmi = min_pmi
