@@ -1,0 +1,19 @@
+flowchart TD
+
+    A(原始训练数据) -->|分割| C(raw dataset)
+    B(其他数据) -->|抽取ngram| D(其他ngrams)
+    A -->|抽取ngram| E(主要ngrams)
+    D --> F{合并}
+    E --> F{合并}
+
+    E --> G{选择}
+    D --> G
+    G -->|选择其中一个ngram, 或者求交集| H(核心ngram)
+    F --> I(训练所用的ngram)
+
+    C -->|tokenize| J(tokenized data)
+
+    H --> K
+    I --> K
+    J -->|symlink| K(pretrain data，训练集+验证集)
+    K -->|pretrain| x(第一阶段的预训练模型)
