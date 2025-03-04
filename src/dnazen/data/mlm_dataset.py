@@ -210,6 +210,7 @@ class MlmDataset(Dataset):
             attn_mask (torch.Tensor): attention mask from a tokenizer.
             tokenizer (PreTrainedTokenizer): tokenizer from `transformers`.
             ngram_encoder (NgramEncoder): a ngram encoder for encoding.
+            core_ngrams (set[tuple[int, ...]]): the ngrams you need to avoid to mask during mlm.
             mlm_prob (float, optional): The proportion of masked tokens. Defaults to 0.15.
             whole_ngram_masking (bool, optional): whether to perform whole ngram masking from ZEN2. Defaults to False.
             mlm_data_symlink (str, optional): the path to the original mlm data on disk.
