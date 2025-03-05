@@ -142,9 +142,7 @@ mkdir -p ../data/pretrain/train
 ###################################################################################
 # Step1:提取N-gram编码
 if [[ "$RUN_NGRAM_ENCODER" == "true" ]]; then
-  echo "===== Step1 开始提取N-gram编码器 (实验${EXPERIMENT_ID}: ${EXPERIMENT_DESC}) ====="
-  
-  # 构建命令，添加--auto-coverage参数
+  echo "===== Step1 开始提取N-gram编码器 (实验${EXPERIMENT_ID}: ${EXPERIMENT_DESC}) ====="  
   CMD="python ../src/train/train_ngram_encoder.py \
     ${USE_GUE} \
     ${USE_INPUT} \
@@ -181,7 +179,8 @@ if [[ "$RUN_COVERAGE_ANALYSIS" == "true" ]]; then
     --tok zhihan1996/DNABERT-2-117M \
     --gue-dir ../data/GUE \
     --mspecies-dir ../data/pretrain/dev/dev.txt \
-    --ngram-list ${EXPERIMENT_DIR}/ngram_list.txt"
+    --ngram-list ${EXPERIMENT_DIR}/ngram_list.txt \
+    --min-freq-filter 5"
   
   echo "执行命令: $CMD"
   eval $CMD
