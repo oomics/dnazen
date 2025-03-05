@@ -96,14 +96,13 @@ def analyze_ngram_coverage(data_sequence_list, tokenizer, output_dir, dataset_na
     logger.info("开始处理序列...")
     idx = 0
     for text in tqdm(data_sequence_list, desc=f"处理{dataset_name or ''}序列"):
-        try:
+         try:
             # 使用tokenizer将文本转换为token IDs
             token_ids = tokenizer(text, return_tensors="pt", return_attention_mask=False)["input_ids"].squeeze(0)
             
             # 获取序列的分词总数
             total_tokens = len(token_ids)
             
-            # 根据频率字典筛选匹配的N-gram
             if ngram_freq_dict is not None:
                 # 如果提供了频率字典，只保留频率大于等于min_freq的N-gram
                 matched_ngrams_with_pos = ngram_encoder.get_matched_ngrams(token_ids)
@@ -112,21 +111,15 @@ def analyze_ngram_coverage(data_sequence_list, tokenizer, output_dir, dataset_na
                     for ngrams, _ in matched_ngrams_with_pos
                     if ngram_freq_dict[ngrams] >= min_freq
                 ]
-                logger.debug(f"序列 {idx}: 使用频率过滤后匹配到 {len(matched_ngrams)} 个N-gram")
+                logger.debug(f"序列 {idx}: 使用频率过滤后匹配到 {len(matched_ngrams)} 个N-gram，匹配率: {len(matched_ngrams)/total_tokens*100:.2f}%")
             else:
                 # 否则保留所有匹配的N-gram
                 matched_ngrams_with_pos = ngram_encoder.get_matched_ngrams(token_ids)
                 matched_ngrams = [ngrams for ngrams, _ in matched_ngrams_with_pos]
-                logger.debug(f"序列 {idx}: 匹配到 {len(matched_ngrams)} 个N-gram")
+                logger.debug(f"序列 {idx}: 匹配到 {len(matched_ngrams)} 个N-gram, 匹配率: {len(matched_ngrams)/total_tokens*100:.2f}%")
             
-            # 计算匹配的token数量和覆盖率
-            covered_positions = set()
-            for _, positions in matched_ngrams_with_pos:
-                for pos in range(positions[0], positions[1]):
-                    covered_positions.add(pos)
-            
-            covered_tokens = len(covered_positions)
-            coverage_ratio = covered_tokens / total_tokens if total_tokens > 0 else 0
+            #logger.info(f"序列 {idx}: 匹配到 {len(matched_ngrams)} 个N-gram, 匹配率: {len(matched_ngrams)/total_tokens*100:.2f}%")
+            coverage_ratio = len(matched_ngrams)/total_tokens*100 if total_tokens > 0 else 0
             
             # 记录匹配的N-gram数量和覆盖率信息
             results["num_matches"][idx] = len(matched_ngrams)
@@ -138,7 +131,7 @@ def analyze_ngram_coverage(data_sequence_list, tokenizer, output_dir, dataset_na
                 results["token_coverage_ratio"] = [0.0] * total_seqs
             
             results["total_tokens"][idx] = total_tokens
-            results["covered_tokens"][idx] = covered_tokens
+            results["covered_tokens"][idx] = len(matched_ngrams)
             results["token_coverage_ratio"][idx] = coverage_ratio
             
             # 将N-gram的token IDs解码回文本形式，并去掉特殊标记
@@ -164,7 +157,7 @@ def analyze_ngram_coverage(data_sequence_list, tokenizer, output_dir, dataset_na
                 meta_datas["covered_tokens"] = 0
             
             meta_datas["total_tokens"] += total_tokens
-            meta_datas["covered_tokens"] += covered_tokens
+            meta_datas["covered_tokens"] += len(matched_ngrams)
             
             idx += 1
             
