@@ -26,12 +26,7 @@ from transformers import AutoTokenizer
 from tools.get_seq_form_dir import *
 
 from dnazen.ngram import NgramEncoder
-try:
-    from scripts.ngram_encoder_analyze import analyze_ngrams_coverage
-except ModuleNotFoundError:
-    # 当直接运行脚本时，尝试相对导入
-    from ngram_encoder_analyze import analyze_ngrams_coverage
-import ipdb
+
 
 # 配置日志
 # 配置日志

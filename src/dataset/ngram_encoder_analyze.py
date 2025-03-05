@@ -127,7 +127,7 @@ def process_sequence(text, idx, tokenizer, ngram_encoder, ngram_freq_dict, min_f
     
     return idx + 1
 
-def analyze_ngram_coverage(data_sequence_list, tokenizer, output_dir, dataset_name=None, ngram_df=None, encoder=None, stats_collector=None):
+def analyze_ngram_coverage(data_sequence_list, tokenizer, output_dir, dataset_name=None, ngram_df=None, encoder=None, stats_collector=None, min_freq_filter=5):
     """分析N-gram在数据集上的覆盖率
     
     Args:
@@ -138,7 +138,7 @@ def analyze_ngram_coverage(data_sequence_list, tokenizer, output_dir, dataset_na
         ngram_df: 包含N-gram信息的DataFrame
         encoder: N-gram编码器对象
         stats_collector: 用于收集统计结果的全局统计收集器
-        
+        min_freq_filter: 最小频率阈值,过滤n-gram的长尾
      覆盖率 = 有匹配序列数 / 总序列数 × 100%
      平均匹配数 = 总匹配数 / 总序列数
     Returns:
@@ -176,15 +176,14 @@ def analyze_ngram_coverage(data_sequence_list, tokenizer, output_dir, dataset_na
     # 初始化必要变量
     logger.info(f"使用编码器: {type(encoder).__name__}")
     ngram_encoder = encoder
-    ngram_freq_dict = None
-    min_freq = 1  # 最小频率阈值
+    ngram_freq_dict = None  
     includes_no_match = True  # 是否包含无匹配的数据
     
     # 遍历每个文本序列
-    logger.info("开始处理序列...")
+    logger.info(f"开始处理{dataset_name}序列...,最小频率阈值: {min_freq_filter}")
     idx = 0
     for text in tqdm(data_sequence_list, desc=f"处理{dataset_name or ''}序列"):
-        idx = process_sequence(text, idx, tokenizer, ngram_encoder, ngram_freq_dict, min_freq, results, meta_datas, total_seqs)
+        idx = process_sequence(text, idx, tokenizer, ngram_encoder, ngram_freq_dict, min_freq_filter, results, meta_datas, total_seqs)
 
     # 模拟分类结果（实际应用中应该有真实的标签和预测）
     logger.info("生成标签数据...")
@@ -314,7 +313,7 @@ def main():
     parser.add_argument("--sample-size", type=int, default=10000, help="每个数据集的样本大小")
     parser.add_argument("--ngram-list", type=str, default=None, help="N-gram列表文件路径")
     parser.add_argument("--tok", type=str, default="zhihan1996/DNABERT-2-117M", help="使用的tokenizer名称")
-
+    parser.add_argument("--min-freq-filter", type=int, default=5, help="ngram的最小频率阈值,过滤n-gram的长尾")
     # 解析命令行参数
     args = parser.parse_args()
     
@@ -373,14 +372,14 @@ def main():
         for species_name, sequences in gue_sequences_map.items():
             dataset_name = "GUE_" + species_name
             result = analyze_ngram_coverage(sequences, tokenizer, output_dir, dataset_name=dataset_name, 
-                                           ngram_df=ngram_df, encoder=encoder, stats_collector=stats_collector)
+                                           ngram_df=ngram_df, encoder=encoder, stats_collector=stats_collector, min_freq_filter=args.min_freq_filter)
             all_coverage_results[dataset_name] = result
     
     # 分析mspecies数据集的覆盖率
     if mspecies_sequences:
         logger.info("分析mspecies数据集的N-gram覆盖率...")
         result = analyze_ngram_coverage(mspecies_sequences, tokenizer, output_dir, dataset_name="mspecies", 
-                                       ngram_df=ngram_df, encoder=encoder, stats_collector=stats_collector)
+                                       ngram_df=ngram_df, encoder=encoder, stats_collector=stats_collector, min_freq_filter=args.min_freq_filter)
         all_coverage_results["mspecies"] = result
     
     # 将所有统计结果保存到一个CSV/Excel文件
@@ -407,6 +406,7 @@ def main():
     return 0
 
 # 添加一个函数用于生成HTML报告
+
 def generate_coverage_report(coverage_results, output_dir):
     """
     生成HTML报告展示不同数据集的N-gram覆盖率
@@ -459,7 +459,7 @@ def generate_coverage_report(coverage_results, output_dir):
     logger.info(f"汇总统计已保存到: {csv_path}")
     
     # 使用Plotly创建交互式图表
-    
+    #import ipdb; ipdb.set_trace()
     # 1. 覆盖率百分比条形图
     fig1 = px.bar(
         stats_df, 
@@ -467,7 +467,7 @@ def generate_coverage_report(coverage_results, output_dir):
         y="分词覆盖率",
         title="各数据集N-gram序列分词覆盖率",
         labels={"分词覆盖率": "分词覆盖率 (%)", "数据集": "数据集"},
-        color="分词覆盖率百分比",
+        color="分词覆盖率",
         color_continuous_scale="Viridis"
     )
     fig1.update_layout(yaxis_range=[0, 100])
