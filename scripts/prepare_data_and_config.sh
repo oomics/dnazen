@@ -99,19 +99,19 @@ fi
 case "$EXPERIMENT_ID" in
   1)
     EXPERIMENT_NAME="exp1_gue_mspecies"
-    EXPERIMENT_DESC="GUE数据集+mspecies/dev数据集"
+    EXPERIMENT_DESC="GUE数据集+mspecies/dev数据集抽取ngram"
     USE_GUE="--gue-dir ../data/GUE"
     USE_INPUT="--input ../data/pretrain/dev/dev.txt"
     ;;
   2)
     EXPERIMENT_NAME="exp2_mspecies"
-    EXPERIMENT_DESC="仅mspecies/dev数据集"
+    EXPERIMENT_DESC="仅mspecies/dev数据集抽取ngram"
     USE_GUE=""
     USE_INPUT="--input ../data/pretrain/dev/dev.txt"
     ;;
   3)
     EXPERIMENT_NAME="exp3_gue"
-    EXPERIMENT_DESC="仅GUE数据集"
+    EXPERIMENT_DESC="仅GUE数据集抽取ngram"
     USE_GUE="--gue-dir ../data/GUE"
     USE_INPUT=""
     ;;
