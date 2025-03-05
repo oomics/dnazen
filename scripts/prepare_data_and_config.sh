@@ -5,6 +5,9 @@ RUN_NGRAM_ENCODER=false
 RUN_TOKENIZE_TRAIN=false
 RUN_TOKENIZE_DEV=false
 RUN_PREPARE_DATASET=false
+RUN_PLOTS_ONLY=false
+RUN_COVERAGE_ANALYSIS=false
+EXPERIMENT_ID=1  # 默认实验ID
 
 # 显示帮助信息
 function show_help {
@@ -15,11 +18,19 @@ function show_help {
   echo "  --tokenize-train       为训练数据生成tokenized数据"
   echo "  --tokenize-dev         为验证数据生成tokenized数据"
   echo "  --prepare-dataset      准备预训练数据集"
+  echo "  --plots-only           只重新生成N-gram分布图"
+  echo "  --coverage-analysis    分析N-gram在GUE和mspecies数据集上的覆盖率"
+  echo "  --experiment <id>      指定实验ID (1-3)"
+  echo "                         1: GUE + mspecies/dev"
+  echo "                         2: 仅 mspecies/dev"
+  echo "                         3: 仅 GUE"
   echo "  -h, --help             显示此帮助信息"
   echo ""
   echo "示例:"
-  echo "  $0 --train-ngram --tokenize-train  # 只执行训练N-gram编码器和tokenize训练数据"
-  echo "  $0 --all                           # 执行所有步骤"
+  echo "  $0 --train-ngram --experiment 3  # 使用GUE数据集训练N-gram编码器"
+  echo "  $0 --all --experiment 1          # 使用GUE+mspecies/dev执行所有步骤"
+  echo "  $0 --plots-only --experiment 2   # 只重新生成实验2的N-gram分布图"
+  echo "  $0 --coverage-analysis --experiment 3  # 分析实验3的N-gram覆盖率"
 }
 
 # 解析命令行参数
@@ -48,6 +59,24 @@ while [[ $# -gt 0 ]]; do
       RUN_PREPARE_DATASET=true
       shift
       ;;
+    --plots-only)
+      RUN_PLOTS_ONLY=true
+      shift
+      ;;
+    --coverage-analysis)
+      RUN_COVERAGE_ANALYSIS=true
+      shift
+      ;;
+    --experiment)
+      if [[ $2 =~ ^[1-3]$ ]]; then
+        EXPERIMENT_ID=$2
+        shift 2
+      else
+        echo "错误: 实验ID必须是1-3之间的数字"
+        show_help
+        exit 1
+      fi
+      ;;
     -h|--help)
       show_help
       exit 0
@@ -61,15 +90,41 @@ while [[ $# -gt 0 ]]; do
 done
 
 # 如果没有指定任何参数，显示帮助信息
-if [[ "$RUN_NGRAM_ENCODER" == "false" && "$RUN_TOKENIZE_TRAIN" == "false" && "$RUN_TOKENIZE_DEV" == "false" && "$RUN_PREPARE_DATASET" == "false" ]]; then
+if [[ "$RUN_NGRAM_ENCODER" == "false" && "$RUN_TOKENIZE_TRAIN" == "false" && "$RUN_TOKENIZE_DEV" == "false" && "$RUN_PREPARE_DATASET" == "false" && "$RUN_PLOTS_ONLY" == "false" && "$RUN_COVERAGE_ANALYSIS" == "false" ]]; then
   show_help
   exit 0
 fi
 
+# 根据实验ID设置输出目录和参数
+case "$EXPERIMENT_ID" in
+  1)
+    EXPERIMENT_NAME="exp1_gue_mspecies"
+    EXPERIMENT_DESC="GUE数据集+mspecies/dev数据集"
+    USE_GUE="--gue-dir ../data/GUE"
+    USE_INPUT="--input ../data/pretrain/dev/dev.txt"
+    ;;
+  2)
+    EXPERIMENT_NAME="exp2_mspecies"
+    EXPERIMENT_DESC="仅mspecies/dev数据集"
+    USE_GUE=""
+    USE_INPUT="--input ../data/pretrain/dev/dev.txt"
+    ;;
+  3)
+    EXPERIMENT_NAME="exp3_gue"
+    EXPERIMENT_DESC="仅GUE数据集"
+    USE_GUE="--gue-dir ../data/GUE"
+    USE_INPUT=""
+    ;;
+esac
+
+# 创建实验目录
+EXPERIMENT_DIR="../data/pretrain/${EXPERIMENT_NAME}"
+mkdir -p ${EXPERIMENT_DIR}
+
 # 创建必要的目录
-# mkdir -p ../data/pretrain/tokenized
-# mkdir -p ../data/pretrain/dev
-# mkdir -p ../data/pretrain/train
+mkdir -p ../data/pretrain/tokenized
+mkdir -p ../data/pretrain/dev
+mkdir -p ../data/pretrain/train
 
 
 ###################################################################################
@@ -82,16 +137,19 @@ fi
 ###################################################################################
 
 
-
 ###################################################################################
-# 3. 数据准备
+# 3. 数据预处理
 ###################################################################################
-# Step1:训练N-gram编码器
+# Step1:提取N-gram编码
 if [[ "$RUN_NGRAM_ENCODER" == "true" ]]; then
-  echo "=====Step1 开始训练N-gram编码器 ====="
-  python scripts/train_ngram_encoder.py \
-    --input ../data/pretrain/dev/dev.txt \
-    --output ../data/pretrain/ngram_encoder.json \
+  echo "===== Step1 开始提取N-gram编码器 (实验${EXPERIMENT_ID}: ${EXPERIMENT_DESC}) ====="
+  
+  # 构建命令，添加--auto-coverage参数
+  CMD="python ../src/train/train_ngram_encoder.py \
+    ${USE_GUE} \
+    ${USE_INPUT} \
+    --output ${EXPERIMENT_DIR}/ngram_encoder.json \
+    --tok zhihan1996/DNABERT-2-117M \
     --min-ngram-len 2 \
     --max-ngram-len 5 \
     --max-ngrams 30 \
@@ -99,19 +157,51 @@ if [[ "$RUN_NGRAM_ENCODER" == "true" ]]; then
     --min-token-count 2 \
     --min-ngram-freq 2 \
     --method pmi \
-    --num-workers 4
+    --num-workers 4"
+  
+  echo "执行命令: $CMD"
+  eval $CMD
   
   if [[ $? -ne 0 ]]; then
-    echo "训练N-gram编码器失败"
+    echo "N-gram编码器训练失败"
     exit 1
   fi
   echo "===== N-gram编码器训练完成 ====="
 fi
 
+
+# Step1.1: N-gram编码在训练数据集上的覆盖率验证
+if [[ "$RUN_COVERAGE_ANALYSIS" == "true" ]]; then
+  echo "===== Step1.1 开始验证N-gram编码在训练数据集上的覆盖率 ====="
+  
+  # 构建命令
+  CMD="python ../src/dataset/ngram_encoder_analyze.py \
+    --encoder ${EXPERIMENT_DIR}/ngram_encoder.json \
+    --output-dir ${EXPERIMENT_DIR}/coverage_analysis \
+    --tok zhihan1996/DNABERT-2-117M \
+    --gue-dir ../data/GUE \
+    --mspecies-dir ../data/pretrain/dev/dev.txt \
+    --ngram-list ${EXPERIMENT_DIR}/ngram_list.txt"
+  
+  echo "执行命令: $CMD"
+  eval $CMD
+  
+  if [[ $? -ne 0 ]]; then
+    echo "N-gram编码覆盖率分析失败"
+    exit 1
+  fi
+  
+  echo "===== N-gram编码覆盖率分析完成 ====="
+fi
+
+
+
+
+
 # Step2: 为训练数据生成tokenized数据
 if [[ "$RUN_TOKENIZE_TRAIN" == "true" ]]; then
-  echo "=====Step2 开始为训练数据生成tokenized数据 ====="
-  python make_tokenized_dataset.py \
+  echo "===== Step2 开始为训练数据生成tokenized数据 ====="
+  python ../src/dataset/make_tokenized_dataset.py \
     --data ../data/pretrain/train/train.txt \
     --tok zhihan1996/DNABERT-2-117M \
     --out ../data/pretrain/train/train.pt \
@@ -130,7 +220,7 @@ fi
 # Step3:  为验证数据生成tokenized数据
 if [[ "$RUN_TOKENIZE_DEV" == "true" ]]; then
   echo "===== Step3 开始为验证数据生成tokenized数据 ====="
-  python make_tokenized_dataset.py \
+  python ../src/dataset/make_tokenized_dataset.py \
     --data ../data/pretrain/dev/dev.txt \
     --tok zhihan1996/DNABERT-2-117M \
     --out ../data/pretrain/dev/dev.pt \
@@ -146,16 +236,15 @@ fi
 
 # 准备预训练数据集，使用已经tokenized的数据
 if [[ "$RUN_PREPARE_DATASET" == "true" ]]; then
-  echo "===== 开始准备预训练数据集 ====="
-  python scripts/make_pretrain_dataset.py \
+  echo "===== 开始准备预训练数据集 使用实验${EXPERIMENT_ID}的N-gram编码器 ====="
+  python ../src/dataset/make_pretrain_dataset.py \
     --data-source tokenized \
-    #--data ../data/pretrain/tokenized \
     --data ../data/pretrain/train/train.pt \
     --tok-source huggingface \
     --tok zhihan1996/DNABERT-2-117M \
-    --ngram ../data/pretrain/ngram_encoder.json \
+    --ngram ${EXPERIMENT_DIR}/ngram_encoder.json \
     --max-ngrams 30 \
-    --out ../data/pretrain \
+    --out ${EXPERIMENT_DIR}/pretrain_data \
     --seed 42
   
   if [[ $? -ne 0 ]]; then
