@@ -79,9 +79,9 @@ def process_sequence(text, idx, tokenizer, ngram_encoder, ngram_freq_dict, min_f
             logger.debug(f"序列 {idx}: 匹配到 {len(matched_ngrams)} 个N-gram, 匹配率: {len(matched_ngrams)/total_tokens*100:.2f}%")
         
         coverage_ratio = len(matched_ngrams)/total_tokens*100 if total_tokens > 0 else 0
-        if coverage_ratio > 100:
-            logger.info(f"序列 {idx}: 匹配到 {len(matched_ngrams)} 个N-gram, 匹配率: {len(matched_ngrams)/total_tokens*100:.2f}%")
-            #import ipdb; ipdb.set_trace()
+        #if coverage_ratio > 100:
+        #    logger.info(f"序列 {idx}: 匹配到 {len(matched_ngrams)} 个N-gram, 匹配率: {len(matched_ngrams)/total_tokens*100:.2f}%")
+        #import ipdb; ipdb.set_trace()
         
         # 记录匹配的N-gram数量和覆盖率信息
         results["num_matches"][idx] = len(matched_ngrams)
@@ -464,10 +464,10 @@ def generate_coverage_report(coverage_results, output_dir):
     fig1 = px.bar(
         stats_df, 
         x="数据集", 
-        y="有匹配序列百分比",
-        title="各数据集N-gram覆盖率",
-        labels={"有匹配序列百分比": "覆盖率 (%)", "数据集": "数据集"},
-        color="有匹配序列百分比",
+        y="分词覆盖率",
+        title="各数据集N-gram序列分词覆盖率",
+        labels={"分词覆盖率": "分词覆盖率 (%)", "数据集": "数据集"},
+        color="分词覆盖率百分比",
         color_continuous_scale="Viridis"
     )
     fig1.update_layout(yaxis_range=[0, 100])
@@ -512,7 +512,7 @@ def generate_coverage_report(coverage_results, output_dir):
         stats_df, 
         x="数据集", 
         y="分词覆盖率",
-        title="各数据集分词覆盖率",
+        title="各数据集分词级别覆盖率",
         labels={"分词覆盖率": "分词覆盖率 (%)", "数据集": "数据集"},
         color="分词覆盖率",
         color_continuous_scale="Plasma"
@@ -547,7 +547,10 @@ def generate_coverage_report(coverage_results, output_dir):
                     color: #333;
                 }}
                 .chart {{
-                    margin-bottom: 30px;
+                    margin-bottom: 50px;
+                    height: 500px;
+                    width: 100%;
+                    position: relative;
                 }}
                 table {{
                     border-collapse: collapse;
@@ -578,7 +581,7 @@ def generate_coverage_report(coverage_results, output_dir):
                         <th>数据集</th>
                         <th>总序列数</th>
                         <th>有匹配序列数</th>
-                        <th>有匹配序列百分比</th>
+                        <th>序列覆盖率</th>
                         <th>无匹配序列数</th>
                         <th>无匹配序列百分比</th>
                         <th>匹配到的ngram总数</th>
@@ -591,16 +594,36 @@ def generate_coverage_report(coverage_results, output_dir):
                 </table>
                 
                 <h2>覆盖率可视化</h2>
-                <div id="chart1" class="chart"></div>
-                <div id="chart2" class="chart"></div>
-                <div id="chart3" class="chart"></div>
-                <div id="chart4" class="chart"></div>
+                <div id="chart1" class="chart">
+                    <h3>序列级别覆盖率</h3>
+                </div>
+                <div id="chart2" class="chart">
+                    <h3>平均每序列匹配数</h3>
+                </div>
+                <div id="chart3" class="chart">
+                    <h3>匹配与未匹配序列对比</h3>
+                </div>
+                <div id="chart4" class="chart">
+                    <h3>分词级别覆盖率</h3>
+                </div>
                 
                 <script>
                     var fig1 = {fig1.to_json()};
                     var fig2 = {fig2.to_json()};
                     var fig3 = {fig3.to_json()};
                     var fig4 = {fig4.to_json()};
+                    
+                    // 更新布局，设置图表高度
+                    fig1.layout.height = 450;
+                    fig2.layout.height = 450;
+                    fig3.layout.height = 450;
+                    fig4.layout.height = 450;
+                    
+                    // 确保图表有足够的边距
+                    fig1.layout.margin = {{t: 50, b: 50, l: 50, r: 50}};
+                    fig2.layout.margin = {{t: 50, b: 50, l: 50, r: 50}};
+                    fig3.layout.margin = {{t: 50, b: 50, l: 50, r: 50}};
+                    fig4.layout.margin = {{t: 50, b: 50, l: 50, r: 50}};
                     
                     Plotly.newPlot('chart1', fig1.data, fig1.layout);
                     Plotly.newPlot('chart2', fig2.data, fig2.layout);
