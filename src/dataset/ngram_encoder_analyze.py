@@ -39,6 +39,94 @@ def tokenize_data(texts: List[str], tokenizer) -> List[List[int]]:
     return tokenized_data
 
 
+def process_sequence(text, idx, tokenizer, ngram_encoder, ngram_freq_dict, min_freq, results, meta_datas, total_seqs):
+    """处理单个序列，计算N-gram匹配情况
+    
+    Args:
+        text: 输入文本序列
+        idx: 序列索引
+        tokenizer: 用于分词的tokenizer
+        ngram_encoder: N-gram编码器
+        ngram_freq_dict: N-gram频率字典（可选）
+        min_freq: 最小频率阈值
+        results: 结果字典，用于存储匹配信息
+        meta_datas: 元数据字典，用于存储统计信息
+        total_seqs: 总序列数
+        
+    Returns:
+        更新后的索引值
+    """
+    try:
+        # 使用tokenizer将文本转换为token IDs
+        token_ids = tokenizer(text, return_tensors="pt", return_attention_mask=False)["input_ids"].squeeze(0)
+        
+        # 获取序列的分词总数
+        total_tokens = len(token_ids)
+        
+        if ngram_freq_dict is not None:
+            # 如果提供了频率字典，只保留频率大于等于min_freq的N-gram
+            matched_ngrams_with_pos = ngram_encoder.get_matched_ngrams(token_ids)
+            matched_ngrams = [
+                ngrams
+                for ngrams, _ in matched_ngrams_with_pos
+                if ngram_freq_dict[ngrams] >= min_freq
+            ]
+            logger.debug(f"序列 {idx}: 使用频率过滤后匹配到 {len(matched_ngrams)} 个N-gram，匹配率: {len(matched_ngrams)/total_tokens*100:.2f}%")
+        else:
+            # 否则保留所有匹配的N-gram
+            matched_ngrams_with_pos = ngram_encoder.get_matched_ngrams(token_ids)
+            matched_ngrams = [ngrams for ngrams, _ in matched_ngrams_with_pos]
+            logger.debug(f"序列 {idx}: 匹配到 {len(matched_ngrams)} 个N-gram, 匹配率: {len(matched_ngrams)/total_tokens*100:.2f}%")
+        
+        coverage_ratio = len(matched_ngrams)/total_tokens*100 if total_tokens > 0 else 0
+        if coverage_ratio > 100:
+            logger.info(f"序列 {idx}: 匹配到 {len(matched_ngrams)} 个N-gram, 匹配率: {len(matched_ngrams)/total_tokens*100:.2f}%")
+            #import ipdb; ipdb.set_trace()
+        
+        # 记录匹配的N-gram数量和覆盖率信息
+        results["num_matches"][idx] = len(matched_ngrams)
+        
+        # 添加新的字段来存储分词数量和覆盖率
+        if idx == 0:  # 第一次迭代时初始化新字段
+            results["total_tokens"] = [0] * total_seqs
+            results["covered_tokens"] = [0] * total_seqs
+            results["token_coverage_ratio"] = [0.0] * total_seqs
+        
+        results["total_tokens"][idx] = total_tokens
+        results["covered_tokens"][idx] = len(matched_ngrams)
+        results["token_coverage_ratio"][idx] = coverage_ratio
+        
+        # 将N-gram的token IDs解码回文本形式，并去掉特殊标记
+        matched_ngrams_text = [
+            tokenizer.decode(list(ngram)).replace("[CLS] ", "").replace(" [SEP]", "")
+            for ngram in matched_ngrams
+        ]
+        
+        # 用冒号连接所有匹配的N-gram文本
+        results["matched_ngrams"][idx] = ":".join(matched_ngrams_text)
+
+        # 更新元数据统计信息
+        meta_datas["total_num_matches"] += len(matched_ngrams)  # 增加总匹配数
+        if len(matched_ngrams) == 0:
+            meta_datas["num_data_no_match"] += 1  # 增加无匹配数据计数
+        else:
+            meta_datas["num_data_has_match"] += 1  # 增加有匹配数据计数
+        meta_datas["total_num_data"] += 1  # 增加总数据计数
+        
+        # 添加新的元数据字段
+        if "total_tokens" not in meta_datas:
+            meta_datas["total_tokens"] = 0
+            meta_datas["covered_tokens"] = 0
+        
+        meta_datas["total_tokens"] += total_tokens
+        meta_datas["covered_tokens"] += len(matched_ngrams)
+        
+    except Exception as e:
+        logger.error(f"处理序列 {idx} 时出错: {str(e)}")
+        logger.debug(f"问题序列: {text[:50]}...")
+    
+    return idx + 1
+
 def analyze_ngram_coverage(data_sequence_list, tokenizer, output_dir, dataset_name=None, ngram_df=None, encoder=None, stats_collector=None):
     """分析N-gram在数据集上的覆盖率
     
@@ -96,76 +184,7 @@ def analyze_ngram_coverage(data_sequence_list, tokenizer, output_dir, dataset_na
     logger.info("开始处理序列...")
     idx = 0
     for text in tqdm(data_sequence_list, desc=f"处理{dataset_name or ''}序列"):
-         try:
-            # 使用tokenizer将文本转换为token IDs
-            token_ids = tokenizer(text, return_tensors="pt", return_attention_mask=False)["input_ids"].squeeze(0)
-            
-            # 获取序列的分词总数
-            total_tokens = len(token_ids)
-            
-            if ngram_freq_dict is not None:
-                # 如果提供了频率字典，只保留频率大于等于min_freq的N-gram
-                matched_ngrams_with_pos = ngram_encoder.get_matched_ngrams(token_ids)
-                matched_ngrams = [
-                    ngrams
-                    for ngrams, _ in matched_ngrams_with_pos
-                    if ngram_freq_dict[ngrams] >= min_freq
-                ]
-                logger.debug(f"序列 {idx}: 使用频率过滤后匹配到 {len(matched_ngrams)} 个N-gram，匹配率: {len(matched_ngrams)/total_tokens*100:.2f}%")
-            else:
-                # 否则保留所有匹配的N-gram
-                matched_ngrams_with_pos = ngram_encoder.get_matched_ngrams(token_ids)
-                matched_ngrams = [ngrams for ngrams, _ in matched_ngrams_with_pos]
-                logger.debug(f"序列 {idx}: 匹配到 {len(matched_ngrams)} 个N-gram, 匹配率: {len(matched_ngrams)/total_tokens*100:.2f}%")
-            
-            #logger.info(f"序列 {idx}: 匹配到 {len(matched_ngrams)} 个N-gram, 匹配率: {len(matched_ngrams)/total_tokens*100:.2f}%")
-            coverage_ratio = len(matched_ngrams)/total_tokens*100 if total_tokens > 0 else 0
-            
-            # 记录匹配的N-gram数量和覆盖率信息
-            results["num_matches"][idx] = len(matched_ngrams)
-            
-            # 添加新的字段来存储分词数量和覆盖率
-            if idx == 0:  # 第一次迭代时初始化新字段
-                results["total_tokens"] = [0] * total_seqs
-                results["covered_tokens"] = [0] * total_seqs
-                results["token_coverage_ratio"] = [0.0] * total_seqs
-            
-            results["total_tokens"][idx] = total_tokens
-            results["covered_tokens"][idx] = len(matched_ngrams)
-            results["token_coverage_ratio"][idx] = coverage_ratio
-            
-            # 将N-gram的token IDs解码回文本形式，并去掉特殊标记
-            matched_ngrams_text = [
-                tokenizer.decode(list(ngram)).replace("[CLS] ", "").replace(" [SEP]", "")
-                for ngram in matched_ngrams
-            ]
-            
-            # 用冒号连接所有匹配的N-gram文本
-            results["matched_ngrams"][idx] = ":".join(matched_ngrams_text)
-
-            # 更新元数据统计信息
-            meta_datas["total_num_matches"] += len(matched_ngrams)  # 增加总匹配数
-            if len(matched_ngrams) == 0:
-                meta_datas["num_data_no_match"] += 1  # 增加无匹配数据计数
-            else:
-                meta_datas["num_data_has_match"] += 1  # 增加有匹配数据计数
-            meta_datas["total_num_data"] += 1  # 增加总数据计数
-            
-            # 添加新的元数据字段
-            if "total_tokens" not in meta_datas:
-                meta_datas["total_tokens"] = 0
-                meta_datas["covered_tokens"] = 0
-            
-            meta_datas["total_tokens"] += total_tokens
-            meta_datas["covered_tokens"] += len(matched_ngrams)
-            
-            idx += 1
-            
-        except Exception as e:
-            logger.error(f"处理序列 {idx} 时出错: {str(e)}")
-            logger.debug(f"问题序列: {text[:50]}...")
-            idx += 1
-            continue
+        idx = process_sequence(text, idx, tokenizer, ngram_encoder, ngram_freq_dict, min_freq, results, meta_datas, total_seqs)
 
     # 模拟分类结果（实际应用中应该有真实的标签和预测）
     logger.info("生成标签数据...")
