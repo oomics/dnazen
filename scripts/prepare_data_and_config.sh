@@ -18,7 +18,6 @@ function show_help {
   echo "  --tokenize-train       为训练数据生成tokenized数据"
   echo "  --tokenize-dev         为验证数据生成tokenized数据"
   echo "  --prepare-dataset      准备预训练数据集"
-  echo "  --plots-only           只重新生成N-gram分布图"
   echo "  --coverage-analysis    分析N-gram在GUE和mspecies数据集上的覆盖率"
   echo "  --experiment <id>      指定实验ID (1-3)"
   echo "                         1: GUE + mspecies/dev"
@@ -57,10 +56,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --prepare-dataset)
       RUN_PREPARE_DATASET=true
-      shift
-      ;;
-    --plots-only)
-      RUN_PLOTS_ONLY=true
       shift
       ;;
     --coverage-analysis)
