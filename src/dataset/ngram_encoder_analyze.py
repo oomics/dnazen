@@ -40,7 +40,122 @@ def tokenize_data(texts: List[str], tokenizer) -> List[List[int]]:
     return tokenized_data
 
 
-def process_sequence(text, idx, tokenizer, ngram_encoder, ngram_freq_dict, min_freq, results, meta_datas, total_seqs):
+class NgramMetaData:
+    """N-gram元数据统计类，用于收集和管理N-gram匹配的统计信息"""
+    
+    def __init__(self):
+        """初始化元数据统计对象"""
+        self.total_num_matches = 0      # 匹配到的ngram总数
+        self.num_data_no_match = 0      # 无匹配的数据数量
+        self.num_data_has_match = 0     # 有匹配的数据数量
+        self.total_num_data = 0         # 总数据数量
+        self.total_tokens = 0           # 总分词数
+        self.covered_tokens = 0         # 匹配覆盖的分词数
+        self.num_ngram_filtered = 0     # 被过滤的ngram数量
+        self.filtered_ngrams = set()    # 存储已过滤的唯一N-gram
+        self.max_freq_ngram = ""        # 最高频率N-gram
+        self.max_freq_value = 0         # 最高频率值
+        self.min_freq_ngram = ""        # 最低频率N-gram
+        self.min_freq_value = float('inf')  # 最低频率值
+    
+    def update_match_stats(self, num_matches, num_tokens):
+        """更新匹配统计信息"""
+        self.total_num_matches += num_matches
+        self.total_num_data += 1
+        self.total_tokens += num_tokens
+        self.covered_tokens += num_matches
+        
+        if num_matches == 0:
+            self.num_data_no_match += 1
+        else:
+            self.num_data_has_match += 1
+    
+    def update_filtered_count(self, filtered_ngrams_list):
+        """更新被过滤的N-gram数量，避免重复计算
+        
+        Args:
+            filtered_ngrams_list: 包含(ngram, freq)元组的列表
+        """
+        new_filtered = 0
+        for ngram_text, _ in filtered_ngrams_list:
+            if ngram_text not in self.filtered_ngrams:
+                self.filtered_ngrams.add(ngram_text)
+                new_filtered += 1
+        
+        self.num_ngram_filtered += new_filtered
+    
+    def update_freq_stats(self, max_freq_ngram, max_freq_value, min_freq_ngram, min_freq_value):
+        """更新频率统计信息"""
+        if max_freq_value > self.max_freq_value:
+            self.max_freq_ngram = max_freq_ngram
+            self.max_freq_value = max_freq_value
+        
+        if min_freq_value < self.min_freq_value:
+            self.min_freq_ngram = min_freq_ngram
+            self.min_freq_value = min_freq_value
+    
+    def to_dict(self):
+        """将统计信息转换为字典"""
+        return {
+            "total_num_matches": self.total_num_matches,
+            "num_data_no_match": self.num_data_no_match,
+            "num_data_has_match": self.num_data_has_match,
+            "total_num_data": self.total_num_data,
+            "total_tokens": self.total_tokens,
+            "covered_tokens": self.covered_tokens,
+            "num_ngram_filtered": self.num_ngram_filtered,
+            "max_freq_ngram": self.max_freq_ngram,
+            "max_freq_value": self.max_freq_value,
+            "min_freq_ngram": self.min_freq_ngram,
+            "min_freq_value": self.min_freq_value
+        }
+    
+    def get_stats_info(self, dataset_name=None):
+        """获取用于统计收集器的信息字典"""
+        total_seqs = self.total_num_data
+        token_coverage = (self.covered_tokens / self.total_tokens * 100 
+                         if self.total_tokens > 0 else 0)
+        
+        return {
+            "数据集": dataset_name or "未命名",
+            "总序列数": total_seqs,
+            "有匹配序列数": self.num_data_has_match,
+            "有匹配序列百分比": self.num_data_has_match / total_seqs * 100 if total_seqs > 0 else 0,
+            "无匹配序列数": self.num_data_no_match,
+            "无匹配序列百分比": self.num_data_no_match / total_seqs * 100 if total_seqs > 0 else 0,
+            "匹配到的ngram总数": self.total_num_matches,
+            "平均每序列匹配数": self.total_num_matches / total_seqs if total_seqs > 0 else 0,
+            "总分词数": self.total_tokens,
+            "匹配覆盖的分词数": self.covered_tokens,
+            "分词覆盖率": token_coverage,
+            "被过滤的ngram数量": self.num_ngram_filtered,
+            "数据集最高频率N-gram": self.max_freq_ngram,
+            "数据集最高频率值": self.max_freq_value,
+            "数据集最低频率N-gram": self.min_freq_ngram,
+            "数据集最低频率值": self.min_freq_value
+        }
+    
+    def log_stats(self, dataset_name=None):
+        """输出统计信息到日志"""
+        total_seqs = self.total_num_data
+        
+        logger.info("===== N-gram匹配统计 =====")
+        logger.info(f"数据集: {dataset_name or '未命名'}")
+        logger.info(f"总序列数: {total_seqs}")
+        logger.info(f"有匹配序列数: {self.num_data_has_match} ({self.num_data_has_match/total_seqs*100:.1f}%)")
+        logger.info(f"无匹配序列数: {self.num_data_no_match} ({self.num_data_no_match/total_seqs*100:.1f}%)")
+        logger.info(f"匹配到的ngram总数: {self.total_num_matches}")
+        logger.info(f"平均每个序列匹配数: {self.total_num_matches/total_seqs:.2f}")
+        logger.info(f"总分词数: {self.total_tokens}")
+        logger.info(f"匹配覆盖的分词数: {self.covered_tokens}")
+        logger.info(f"分词覆盖率: {self.covered_tokens/self.total_tokens*100:.2f}%")
+        logger.info(f"被过滤的ngram数量: {self.num_ngram_filtered}")
+        logger.info(f"数据集最高频率N-gram: {self.max_freq_ngram} (频率: {self.max_freq_value})")
+        logger.info(f"数据集最低频率N-gram: {self.min_freq_ngram} (频率: {self.min_freq_value})")
+        logger.info("==========================")
+
+
+def process_sequence(text, idx, tokenizer, ngram_encoder, ngram_freq_dict, min_freq, results, meta_data, total_seqs):
     """处理单个序列，计算N-gram匹配情况
     
     Args:
@@ -51,7 +166,7 @@ def process_sequence(text, idx, tokenizer, ngram_encoder, ngram_freq_dict, min_f
         ngram_freq_dict: N-gram频率字典（可选）
         min_freq: 最小频率阈值
         results: 结果字典，用于存储匹配信息
-        meta_datas: 元数据字典，用于存储统计信息
+        meta_data: 元数据对象，用于存储统计信息
         total_seqs: 总序列数
         
     Returns:
@@ -97,60 +212,32 @@ def process_sequence(text, idx, tokenizer, ngram_encoder, ngram_freq_dict, min_f
         # 计算覆盖率
         coverage_ratio = len(matched_ngrams)/total_tokens*100 if total_tokens > 0 else 0
         
-        # 第一次迭代时初始化结果字典中的新字段
-        if idx == 0:
-            results["total_tokens"] = [0] * total_seqs
-            results["covered_tokens"] = [0] * total_seqs
-            results["token_coverage_ratio"] = [0.0] * total_seqs
-            
-            # 确保meta_datas包含所有必要的字段
-            meta_fields = {
-                "total_num_matches": 0,      # 匹配到的ngram总数
-                "num_data_no_match": 0,      # 无匹配的数据数量
-                "num_data_has_match": 0,     # 有匹配的数据数量
-                "total_num_data": 0,         # 总数据数量
-                "total_tokens": 0,           # 总分词数
-                "covered_tokens": 0,         # 匹配覆盖的分词数
-                "num_ngram_filtered": 0,     # 被过滤的ngram数量
-                "max_freq_ngram": "",        # 最高频率N-gram
-                "max_freq_value": 0,         # 最高频率值
-                "min_freq_ngram": "",        # 最低频率N-gram
-                "min_freq_value": float('inf')  # 最低频率值
-            }
-            
-            # 初始化缺失的字段
-            for field, default_value in meta_fields.items():
-                if field not in meta_datas:
-                    meta_datas[field] = default_value
+        # # 第一次迭代时初始化结果字典中的新字段
+        # if idx == 0:
+        #     results["total_tokens"] = [0] * total_seqs
+        #     results["covered_tokens"] = [0] * total_seqs
+        #     results["token_coverage_ratio"] = [0.0] * total_seqs
         
-        # 更新结果字典
-        results["num_matches"][idx] = len(matched_ngrams)
-        results["total_tokens"][idx] = total_tokens
-        results["covered_tokens"][idx] = len(matched_ngrams)
-        results["token_coverage_ratio"][idx] = coverage_ratio
+        # # 更新结果字典
+        # results["num_matches"][idx] = len(matched_ngrams)
+        # results["total_tokens"][idx] = total_tokens
+        # results["covered_tokens"][idx] = len(matched_ngrams)
+        # results["token_coverage_ratio"][idx] = coverage_ratio
         
-        # 将N-gram的token IDs解码回文本形式
-        matched_ngrams_text = [
-            tokenizer.decode(list(ngram)).replace("[CLS] ", "").replace(" [SEP]", "")
-            for ngram in matched_ngrams
-        ]
+        # # 将N-gram的token IDs解码回文本形式
+        # matched_ngrams_text = [
+        #     tokenizer.decode(list(ngram)).replace("[CLS] ", "").replace(" [SEP]", "")
+        #     for ngram in matched_ngrams
+        # ]
         
-        # 存储匹配的N-gram文本
-        results["matched_ngrams"][idx] = ":".join(matched_ngrams_text)
+        # # 存储匹配的N-gram文本
+        # results["matched_ngrams"][idx] = ":".join(matched_ngrams_text)
         
         # 更新元数据统计信息
-        meta_datas["total_num_matches"] += len(matched_ngrams)
-        meta_datas["total_num_data"] += 1
-        meta_datas["total_tokens"] += total_tokens
-        meta_datas["covered_tokens"] += len(matched_ngrams)
+        meta_data.update_match_stats(len(matched_ngrams), total_tokens)
         
-        if len(matched_ngrams) == 0:
-            meta_datas["num_data_no_match"] += 1
-        else:
-            meta_datas["num_data_has_match"] += 1
-            
         if len(filtered_ngrams) > 0:
-            meta_datas["num_ngram_filtered"] += len(filtered_ngrams)
+            meta_data.update_filtered_count(filtered_ngrams)
         
         # 处理频率信息
         if matched_ngrams_with_freq:
@@ -160,15 +247,11 @@ def process_sequence(text, idx, tokenizer, ngram_encoder, ngram_freq_dict, min_f
             max_freq_text = tokenizer.decode(list(max_freq_ngram[0]))
             min_freq_text = tokenizer.decode(list(min_freq_ngram[0]))
             
-            # 更新最高频率N-gram
-            if max_freq_ngram[1] > meta_datas["max_freq_value"]:
-                meta_datas["max_freq_ngram"] = max_freq_text
-                meta_datas["max_freq_value"] = max_freq_ngram[1]
-            
-            # 更新最低频率N-gram
-            if min_freq_ngram[1] < meta_datas["min_freq_value"]:
-                meta_datas["min_freq_ngram"] = min_freq_text
-                meta_datas["min_freq_value"] = min_freq_ngram[1]
+            # 更新频率统计信息
+            meta_data.update_freq_stats(
+                max_freq_text, max_freq_ngram[1],
+                min_freq_text, min_freq_ngram[1]
+            )
         
     except Exception as e:
         logger.error(f"处理序列 {idx} 时出错: {str(e)}")
@@ -204,37 +287,28 @@ def analyze_ngram_coverage(data_sequence_list, tokenizer, output_dir, dataset_na
         logger.warning("没有序列进行分析")
         return {}, {}, 0
     
-    # 初始化结果字典，用于存储文本和标签信息
+    # 初始化结果字典
     logger.info("初始化结果字典...")
     results = {
-        "text": data_sequence_list,  # 文本数据
-        "actual_label": [],          # 实际标签
-        "prediction_label": [],      # 预测标签
-        "num_matches": [0] * total_seqs,  # 每个文本匹配的N-gram数量
-        "matched_ngrams": [""] * total_seqs,  # 每个文本匹配的N-gram文本
-        "max_freq_ngram": [""] * total_seqs,  # 每个文本匹配的最高频率N-gram
-        "max_freq_value": [0] * total_seqs,   # 每个文本匹配的最高频率值
-        "min_freq_ngram": [""] * total_seqs,  # 每个文本匹配的最低频率N-gram
-        "min_freq_value": [0] * total_seqs    # 每个文本匹配的最低频率值
+        "num_matches": [0] * total_seqs,
+        "matched_ngrams": [""] * total_seqs
     }
     
-    # 初始化元数据统计字典
-    meta_datas = {
-        "total_num_matches": 0,      # 匹配到的ngram总数
-        "num_data_no_match": 0,      # 无匹配的数据数量
-        "num_data_has_match": 0,     # 有匹配的数据数量
-        "total_num_data": 0          # 总数据数量
-    }
+    # 初始化元数据统计对象
+    meta_data = NgramMetaData()
     
     # 初始化必要变量
     logger.info(f"使用编码器: {type(encoder).__name__}")
     ngram_encoder = encoder
-    #ipdb.set_trace()
-    #从ngram_df中创建ngram_freq_dict    
+    
+    # 从ngram_df中创建ngram_freq_dict    
     ngram_freq_dict = {}
-    for _, row in ngram_df.iterrows():
-        if 'N-gram' in row and '频率' in row:
-            ngram_freq_dict[row['N-gram']] = row['频率']
+    if ngram_df is not None:
+        for _, row in ngram_df.iterrows():
+            if 'N-gram' in row and '频率' in row:
+                ngram_freq_dict[row['N-gram']] = row['频率']
+    else:
+        logger.error("没有N-gram列表文件，将不进行频率过滤")
             
     includes_no_match = True  # 是否包含无匹配的数据
     
@@ -242,8 +316,8 @@ def analyze_ngram_coverage(data_sequence_list, tokenizer, output_dir, dataset_na
     logger.info(f"开始处理{dataset_name}序列...,最小频率阈值: {min_freq_filter}")
     idx = 0
     
-    for text in data_sequence_list:
-        idx = process_sequence(text, idx, tokenizer, ngram_encoder, ngram_freq_dict, min_freq_filter, results, meta_datas, total_seqs)
+    for text in tqdm(data_sequence_list, desc="处理序列"):
+        idx = process_sequence(text, idx, tokenizer, ngram_encoder, ngram_freq_dict, min_freq_filter, results, meta_data, total_seqs)
 
     # 模拟分类结果（实际应用中应该有真实的标签和预测）
     logger.info("生成标签数据...")
@@ -271,64 +345,26 @@ def analyze_ngram_coverage(data_sequence_list, tokenizer, output_dir, dataset_na
         results_wrong_ = results_wrong
         logger.info(f"保留所有 {total_seqs} 个序列")
 
-    # 定义一个辅助函数来生成元数据统计
-    def make_meta_data(results_dict):
-        """根据结果字典生成元数据统计"""
-        meta = {
-            "total_num_matches": sum(results_dict.get("num_matches", [])),
-            "num_data_no_match": sum(1 for n in results_dict.get("num_matches", []) if n == 0),
-            "num_data_has_match": sum(1 for n in results_dict.get("num_matches", []) if n > 0),
-            "total_num_data": len(results_dict.get("num_matches", []))
-        }
-        return meta
-
-    # 生成最终统计结果
-    meta_data_correct = make_meta_data(results_correct)
-    meta_data_wrong = make_meta_data(results_wrong)
+    # 使用NgramMetaData类替代旧的make_meta_data函数
+    # 正确分类数据的元数据已经在meta_data中
+    meta_data_correct = meta_data.to_dict()
+    
+    # 错误分类数据的元数据（在此示例中为空）
+    meta_data_wrong = NgramMetaData().to_dict()
         
     # 输出统计信息
-    logger.info("===== N-gram匹配统计 =====")
-    logger.info(f"数据集: {dataset_name or '未命名'}")
-    logger.info(f"总序列数: {total_seqs}")
-    logger.info(f"有匹配序列数: {meta_datas['num_data_has_match']} ({meta_datas['num_data_has_match']/total_seqs*100:.1f}%)")
-    logger.info(f"无匹配序列数: {meta_datas['num_data_no_match']} ({meta_datas['num_data_no_match']/total_seqs*100:.1f}%)")
-    logger.info(f"匹配到的ngram总数: {meta_datas['total_num_matches']}")
-    logger.info(f"平均每个序列匹配数: {meta_datas['total_num_matches']/total_seqs:.2f}")
-    logger.info(f"总分词数: {meta_datas['total_tokens']}")
-    logger.info(f"匹配覆盖的分词数: {meta_datas['covered_tokens']}")
-    logger.info(f"分词覆盖率: {meta_datas['covered_tokens']/meta_datas['total_tokens']*100:.2f}%")
-    logger.info(f"数据集最高频率N-gram: {meta_datas['max_freq_ngram']} (频率: {meta_datas['max_freq_value']})")
-    logger.info(f"数据集最低频率N-gram: {meta_datas['min_freq_ngram']} (频率: {meta_datas['min_freq_value']})")
-    logger.info("==========================")
+    meta_data.log_stats(dataset_name)
     
     # 收集统计结果到全局统计收集器
     if stats_collector is not None:
-        stats_info = {
-            "数据集": dataset_name or "未命名",
-            "总序列数": total_seqs,
-            "有匹配序列数": meta_datas['num_data_has_match'],
-            "有匹配序列百分比": meta_datas['num_data_has_match']/total_seqs*100,
-            "无匹配序列数": meta_datas['num_data_no_match'],
-            "无匹配序列百分比": meta_datas['num_data_no_match']/total_seqs*100,
-            "匹配到的ngram总数": meta_datas['total_num_matches'],
-            "平均每序列匹配数": meta_datas['total_num_matches']/total_seqs,
-            "总分词数": meta_datas['total_tokens'],
-            "匹配覆盖的分词数": meta_datas['covered_tokens'],
-            "分词覆盖率": meta_datas['covered_tokens']/meta_datas['total_tokens']*100 if meta_datas['total_tokens'] > 0 else 0,
-            "数据集最高频率N-gram": meta_datas['max_freq_ngram'],
-            "数据集最高频率值": meta_datas['max_freq_value'],
-            "数据集最低频率N-gram": meta_datas['min_freq_ngram'],
-            "数据集最低频率值": meta_datas['min_freq_value']
-        }
-            
-        stats_collector.append(stats_info)
+        stats_collector.append(meta_data.get_stats_info(dataset_name))
 
     # 返回包含各种分析结果的字典
     logger.info("分析完成，返回结果")
     return {
         "true": results_correct_,  # 模型正确分类的结果
         "false": results_wrong_,   # 模型错误分类的结果
-        "meta_data": meta_datas,   # 数据集的总体匹配结果
+        "meta_data": meta_data.to_dict(),   # 数据集的总体匹配结果
         "meta_data_correct": meta_data_correct,  # 正确分类数据的匹配结果
         "meta_data_wrong": meta_data_wrong,      # 错误分类数据的匹配结果
     }
@@ -442,14 +478,16 @@ def main():
         for species_name, sequences in gue_sequences_map.items():
             dataset_name = "GUE_" + species_name
             result = analyze_ngram_coverage(sequences, tokenizer, ngram_encoder_dir, dataset_name=dataset_name, 
-                                           ngram_df=ngram_df, encoder=encoder, stats_collector=stats_collector, min_freq_filter=args.min_freq_filter)
+                                           ngram_df=ngram_df, encoder=encoder, stats_collector=stats_collector, 
+                                           min_freq_filter=args.min_freq_filter)
             all_coverage_results[dataset_name] = result
     
     # 分析mspecies数据集的覆盖率
     if mspecies_sequences:
         logger.info("分析mspecies数据集的N-gram覆盖率...")
         result = analyze_ngram_coverage(mspecies_sequences, tokenizer, ngram_encoder_dir, dataset_name="mspecies", 
-                                       ngram_df=ngram_df, encoder=encoder, stats_collector=stats_collector, min_freq_filter=args.min_freq_filter)
+                                       ngram_df=ngram_df, encoder=encoder, stats_collector=stats_collector, 
+                                       min_freq_filter=args.min_freq_filter)
         all_coverage_results["mspecies"] = result
     
     # 将所有统计结果保存到一个CSV/Excel文件
@@ -461,11 +499,6 @@ def main():
         csv_path = os.path.join(args.output_dir, "ngram_coverage_all_datasets.csv")
         stats_df.to_csv(csv_path, index=False, encoding='utf-8')
         logger.info(f"所有数据集的统计结果已保存到: {csv_path}")
-        
-        # # 保存为Excel
-        # excel_path = os.path.join(args.output_dir, "ngram_coverage_all_datasets.xlsx")
-        # stats_df.to_excel(excel_path, index=False, engine='openpyxl')
-        # logger.info(f"所有数据集的统计结果已保存到: {excel_path}")
     
     # 生成HTML报告
     if all_coverage_results:
@@ -515,6 +548,7 @@ def generate_coverage_report(coverage_results, output_dir, experiment_desc=None)
             "总分词数": total_tokens,
             "匹配覆盖的分词数": covered_tokens,
             "分词覆盖率": token_coverage,
+            "被过滤的ngram数量": meta.get("num_ngram_filtered", 0),   
             "数据集最高频率N-gram": meta.get("max_freq_ngram", ""),
             "数据集最高频率值": meta.get("max_freq_value", 0),
             "数据集最低频率N-gram": meta.get("min_freq_ngram", ""),
@@ -691,12 +725,13 @@ def generate_coverage_report(coverage_results, output_dir, experiment_desc=None)
                         <th>总分词数</th>
                         <th>匹配覆盖的分词数</th>
                         <th>分词覆盖率</th>
+                        <th>被过滤的ngram数量</th>
                         <th>数据集最高频率N-gram</th>
                         <th>数据集最高频率值</th>
                         <th>数据集最低频率N-gram</th>
                         <th>数据集最低频率值</th>
                     </tr>
-                    {"".join(f"<tr><td>{row['数据集']}</td><td>{row['总序列数']}</td><td>{row['有匹配序列数']}</td><td>{row['有匹配序列百分比']:.2f}%</td><td>{row['无匹配序列数']}</td><td>{row['无匹配序列百分比']:.2f}%</td><td>{row['匹配到的ngram总数']}</td><td>{row['平均每序列匹配数']:.2f}</td><td>{row['总分词数']}</td><td>{row['匹配覆盖的分词数']}</td><td>{row['分词覆盖率']:.2f}%</td><td>{row['数据集最高频率N-gram']}</td><td>{row['数据集最高频率值']}</td><td>{row['数据集最低频率N-gram']}</td><td>{row['数据集最低频率值']}</td></tr>" for _, row in stats_df.iterrows())}
+                    {"".join(f"<tr><td>{row['数据集']}</td><td>{row['总序列数']}</td><td>{row['有匹配序列数']}</td><td>{row['有匹配序列百分比']:.2f}%</td><td>{row['无匹配序列数']}</td><td>{row['无匹配序列百分比']:.2f}%</td><td>{row['匹配到的ngram总数']}</td><td>{row['平均每序列匹配数']:.2f}</td><td>{row['总分词数']}</td><td>{row['匹配覆盖的分词数']}</td><td>{row['分词覆盖率']:.2f}%</td><td>{row['被过滤的ngram数量']}</td><td>{row['数据集最高频率N-gram']}</td><td>{row['数据集最高频率值']}</td><td>{row['数据集最低频率N-gram']}</td><td>{row['数据集最低频率值']}</td></tr>" for _, row in stats_df.iterrows())}
                 </table>
                 
                 
