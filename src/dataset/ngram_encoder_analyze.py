@@ -155,7 +155,7 @@ class NgramMetaData:
         logger.info("==========================")
 
 
-def process_sequence(text, idx, tokenizer, ngram_encoder, ngram_freq_dict, min_freq, results, meta_data, total_seqs):
+def process_sequence(text, idx, tokenizer, ngram_encoder, ngram_freq_dict, ngram_token_freq_dict, min_freq, results, meta_data, total_seqs):
     """处理单个序列，计算N-gram匹配情况
     
     Args:
@@ -186,23 +186,18 @@ def process_sequence(text, idx, tokenizer, ngram_encoder, ngram_freq_dict, min_f
         matched_ngrams = []
         matched_ngrams_with_freq = []
         filtered_ngrams = []
-        
-        # 根据频率过滤N-gram
-        if ngram_freq_dict is not None:
-            for ngrams, pos in matched_ngrams_with_pos:
-                ngram_text = tokenizer.decode(ngrams)
-                freq = ngram_freq_dict.get(ngram_text, 0)
+        #ipdb.set_trace()
+        # 根据频率过滤N-gram - 优化版本
+        if ngram_token_freq_dict:  # 使用ngram_token_freq_dict而不是ngram_freq_dict
+            for ngrams, pos in matched_ngrams_with_pos:               
+                freq = ngram_token_freq_dict[str(ngrams)]
                 
                 if freq >= min_freq:
                     matched_ngrams.append(ngrams)
                     matched_ngrams_with_freq.append((ngrams, freq))
                 else:
-                    filtered_ngrams.append((ngrams, freq))
+                    filtered_ngrams.append((ngrams, freq))  # 不需要文本时使用空字符串
                     
-            # 记录被过滤的N-gram信息
-            if filtered_ngrams and logger.isEnabledFor(logging.DEBUG):
-                logger.debug(f"序列 {idx}: 被过滤的N-gram数量: {len(filtered_ngrams)}")
-                
             logger.debug(f"序列 {idx}: 使用频率过滤后匹配到 {len(matched_ngrams)} 个N-gram，匹配率: {len(matched_ngrams)/total_tokens*100:.2f}%")
         else:
             # 不过滤，保留所有匹配的N-gram
@@ -211,27 +206,6 @@ def process_sequence(text, idx, tokenizer, ngram_encoder, ngram_freq_dict, min_f
         
         # 计算覆盖率
         coverage_ratio = len(matched_ngrams)/total_tokens*100 if total_tokens > 0 else 0
-        
-        # # 第一次迭代时初始化结果字典中的新字段
-        # if idx == 0:
-        #     results["total_tokens"] = [0] * total_seqs
-        #     results["covered_tokens"] = [0] * total_seqs
-        #     results["token_coverage_ratio"] = [0.0] * total_seqs
-        
-        # # 更新结果字典
-        # results["num_matches"][idx] = len(matched_ngrams)
-        # results["total_tokens"][idx] = total_tokens
-        # results["covered_tokens"][idx] = len(matched_ngrams)
-        # results["token_coverage_ratio"][idx] = coverage_ratio
-        
-        # # 将N-gram的token IDs解码回文本形式
-        # matched_ngrams_text = [
-        #     tokenizer.decode(list(ngram)).replace("[CLS] ", "").replace(" [SEP]", "")
-        #     for ngram in matched_ngrams
-        # ]
-        
-        # # 存储匹配的N-gram文本
-        # results["matched_ngrams"][idx] = ":".join(matched_ngrams_text)
         
         # 更新元数据统计信息
         meta_data.update_match_stats(len(matched_ngrams), total_tokens)
@@ -244,6 +218,8 @@ def process_sequence(text, idx, tokenizer, ngram_encoder, ngram_freq_dict, min_f
             # 找出最高和最低频率的N-gram
             max_freq_ngram = max(matched_ngrams_with_freq, key=lambda x: x[1])
             min_freq_ngram = min(matched_ngrams_with_freq, key=lambda x: x[1])
+            
+            # 只在需要时解码
             max_freq_text = tokenizer.decode(list(max_freq_ngram[0]))
             min_freq_text = tokenizer.decode(list(min_freq_ngram[0]))
             
@@ -301,14 +277,22 @@ def analyze_ngram_coverage(data_sequence_list, tokenizer, output_dir, dataset_na
     logger.info(f"使用编码器: {type(encoder).__name__}")
     ngram_encoder = encoder
     
-    # 从ngram_df中创建ngram_freq_dict    
+    # 从ngram_df中创建ngram_freq_dict - 优化版本
     ngram_freq_dict = {}
+    ngram_token_freq_dict = {}  # 新增：基于token ID的频率字典
+    
     if ngram_df is not None:
+        logger.info("创建N-gram频率字典...")
         for _, row in ngram_df.iterrows():
             if 'N-gram' in row and '频率' in row:
-                ngram_freq_dict[row['N-gram']] = row['频率']
+                ngram_text = row['N-gram']
+                freq = row['频率']
+                ngram_freq_dict[row['N-gram']] = freq
+                ngram_token_freq_dict[row['token_ids']] = freq
+        
+        logger.info(f"创建了 {len(ngram_token_freq_dict)} 个token ID映射（总N-gram数: {len(ngram_freq_dict)}）")
     else:
-        logger.error("没有N-gram列表文件，将不进行频率过滤")
+        logger.warning("没有N-gram列表文件，将不进行频率过滤")
             
     includes_no_match = True  # 是否包含无匹配的数据
     
@@ -317,7 +301,7 @@ def analyze_ngram_coverage(data_sequence_list, tokenizer, output_dir, dataset_na
     idx = 0
     
     for text in tqdm(data_sequence_list, desc="处理序列"):
-        idx = process_sequence(text, idx, tokenizer, ngram_encoder, ngram_freq_dict, min_freq_filter, results, meta_data, total_seqs)
+        idx = process_sequence(text, idx, tokenizer, ngram_encoder, ngram_freq_dict, ngram_token_freq_dict, min_freq_filter, results, meta_data, total_seqs)
 
     # 模拟分类结果（实际应用中应该有真实的标签和预测）
     logger.info("生成标签数据...")
