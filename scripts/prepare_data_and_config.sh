@@ -19,7 +19,7 @@ function show_help {
   echo "  --tokenize-dev         为验证数据生成tokenized数据"
   echo "  --prepare-dataset      准备预训练数据集"
   echo "  --coverage-analysis    分析N-gram在GUE和mspecies数据集上的覆盖率"
-  echo "  --experiment <id>      指定实验ID (1-3)"
+  echo "  --experiment <id>      指定实验ID (1-10)"
   echo "                         1: GUE + mspecies/dev"
   echo "                         2: 仅 mspecies/dev"
   echo "                         3: 仅 GUE"
@@ -63,14 +63,8 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --experiment)
-      if [[ $2 =~ ^[1-3]$ ]]; then
-        EXPERIMENT_ID=$2
-        shift 2
-      else
-        echo "错误: 实验ID必须是1-3之间的数字"
-        show_help
-        exit 1
-      fi
+      EXPERIMENT_ID="$2"
+      shift 2
       ;;
     -h|--help)
       show_help
@@ -88,6 +82,22 @@ done
 if [[ "$RUN_NGRAM_ENCODER" == "false" && "$RUN_TOKENIZE_TRAIN" == "false" && "$RUN_TOKENIZE_DEV" == "false" && "$RUN_PREPARE_DATASET" == "false" && "$RUN_PLOTS_ONLY" == "false" && "$RUN_COVERAGE_ANALYSIS" == "false" ]]; then
   show_help
   exit 0
+fi
+
+# 检查实验ID是否有效
+if [[ -n "$EXPERIMENT_ID" ]]; then
+  if [[ "$EXPERIMENT_ID" -lt 1 || "$EXPERIMENT_ID" -gt 6 ]]; then
+    echo "错误: 实验ID必须是1-6之间的数字"
+    echo "用法: ./prepare_data_and_config.sh [选项]"
+    echo "选项:"
+    echo "  --experiment N    选择实验配置 (1-6)"
+    show_help
+    exit 1
+  fi
+else
+  echo "错误: 需要指定实验ID"
+  show_help
+  exit 1
 fi
 
 # 根据实验ID设置输出目录和参数
@@ -109,12 +119,46 @@ case "$EXPERIMENT_ID" in
     EXPERIMENT_DESC="仅GUE数据集抽取ngram"
     USE_GUE="--gue-dir ../data/GUE"
     USE_INPUT=""
+    MIN_FREQ_FILTER=5
+    ;;
+  4)
+    EXPERIMENT_NAME="exp3_gue_ngram_ref_5"
+    EXPERIMENT_DESC="基于实验3数据进行分析，仅GUE数据集抽取ngram，分析时ngram最小频率为5"
+    USE_GUE="--gue-dir ../data/GUE"
+    USE_INPUT=""
+    MIN_FREQ_FILTER=5
+    PARENT_EXPERIMENT="exp3_gue"
+    ;;
+  5)
+    EXPERIMENT_NAME="exp3_gue_ngram_ref_1"
+    EXPERIMENT_DESC="基于实验3数据进行分析，仅GUE数据集抽取ngram，分析时ngram最小频率为1"
+    USE_GUE="--gue-dir ../data/GUE"
+    USE_INPUT=""
+    MIN_FREQ_FILTER=1
+    PARENT_EXPERIMENT="exp3_gue"
+    ;;
+  6)
+    EXPERIMENT_NAME="exp3_gue_ngram_ref_100"
+    EXPERIMENT_DESC="基于实验3数据进行分析，仅GUE数据集抽取ngram，分析时ngram最小频率为100"
+    USE_GUE="--gue-dir ../data/GUE"
+    USE_INPUT=""
+    MIN_FREQ_FILTER=100
+    PARENT_EXPERIMENT="exp3_gue"
     ;;
 esac
 
 # 创建实验目录
-EXPERIMENT_DIR="../data/pretrain/${EXPERIMENT_NAME}"
+if [[ -n "$PARENT_EXPERIMENT" ]]; then
+  # 如果是子实验，使用父实验的目录
+  EXPERIMENT_DIR="../data/pretrain/${PARENT_EXPERIMENT}"
+  COVERAGE_DIR="${EXPERIMENT_DIR}/coverage_analysis_${EXPERIMENT_NAME}"
+else
+  # 否则创建新的实验目录
+  EXPERIMENT_DIR="../data/pretrain/${EXPERIMENT_NAME}"
+  COVERAGE_DIR="${EXPERIMENT_DIR}/coverage_analysis"
+fi
 mkdir -p ${EXPERIMENT_DIR}
+mkdir -p ${COVERAGE_DIR}
 
 # 创建必要的目录
 mkdir -p ../data/pretrain/tokenized
@@ -170,12 +214,12 @@ if [[ "$RUN_COVERAGE_ANALYSIS" == "true" ]]; then
   # 构建命令
   CMD="python ../src/dataset/ngram_encoder_analyze.py \
     --encoder ${EXPERIMENT_DIR}/ngram_encoder.json \
-    --output-dir ${EXPERIMENT_DIR}/coverage_analysis \
+    --output-dir ${COVERAGE_DIR} \
     --tok zhihan1996/DNABERT-2-117M \
     --gue-dir ../data/GUE \
     --mspecies-dir ../data/pretrain/dev/dev.txt \
     --ngram-list ${EXPERIMENT_DIR}/ngram_list.txt \
-    --min-freq-filter 5"
+    --min-freq-filter ${MIN_FREQ_FILTER}"
   
   echo "执行命令: $CMD"
   eval $CMD

@@ -72,15 +72,32 @@ def find_mspecies_files(data_dir: str) -> List[str]:
     return []
 
 
-def is_dna_sequence(text: str) -> bool:
-    """判断一个字符串是否为DNA序列"""
-    if not isinstance(text, str) or not text:
-        return False
+def is_dna_sequence(text):
+    """
+    检查文本是否为DNA序列（只包含A、T、G、C字符）
     
-    # 计算ATGC比例
-    dna_chars = set("ATGCNatgcn")
+    Args:
+        text: 要检查的文本
+        
+    Returns:
+        bool: 如果是DNA序列则返回True，否则返回False
+    """
+    if not isinstance(text, str):
+        return False
+        
+    # 防止处理None或空字符串
+    if not text:
+        return False
+        
+    dna_chars = set('ATGC')
+    # 转换为大写并移除可能的空白字符
+    text = text.upper().strip()
+    
+    # 计算DNA字符的数量
     dna_count = sum(c in dna_chars for c in text)
-    return dna_count / len(text) > 0.9
+    
+    # 如果至少95%的字符是DNA字符，则认为是DNA序列
+    return len(text) > 0 and dna_count / len(text) >= 0.95
 
 
 def extract_dna_sequences_from_csv(csv_file: str, min_length: int = 20) -> List[str]:
