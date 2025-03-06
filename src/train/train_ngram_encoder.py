@@ -165,7 +165,7 @@ def main():
         # 写入N-gram列表和频率信息
         ngram_file_path = os.path.join(output_dir, "ngram_list.txt")
         with open(ngram_file_path, "w") as f:
-            f.write("序号\t频率\t字符长度\tBPE分词长度\tID\tN-gram\n")
+            f.write("序号\t频率\t字符长度\tBPE分词长度\tID\tN-gram\ttoken_ids\n")
             
             # 按频率排序（从高到低）
             sorted_ngrams = sorted(
@@ -181,7 +181,7 @@ def main():
                 # 获取ngram的BPE分词表示
                 bpe_tokens = tokenizer.tokenize(ngram_text)
                 # 只保存BPE分词长度，不保存分词文本
-                f.write(f"{idx}\t{freq}\t{len(ngram_text)}\t{len(bpe_tokens)}\t{ngram_id}\t{ngram_text}\n")
+                f.write(f"{idx}\t{freq}\t{len(ngram_text)}\t{len(bpe_tokens)}\t{ngram_id}\t{ngram_text}\t{ngram}\n")
         
         logger.info(f"N-gram列表已保存到: {ngram_file_path}")
         
