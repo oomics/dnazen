@@ -4,7 +4,6 @@ from argparse import ArgumentParser
 import logging
 
 import os
-import json
 import numpy as np
 
 # import sklearn
@@ -17,18 +16,11 @@ from sklearn.metrics import (
 )
 import transformers
 import torch
-from transformers import (
-    AutoTokenizer,
-    PreTrainedTokenizer,
-    AutoModelForSequenceClassification,
-    HfArgumentParser,
-)
 from transformers.models.bert.configuration_bert import BertConfig
 
-from dnazen.data.mlm_dataset import MlmDataset, MlmData
-from dnazen.model.bert_models import BertForMaskedLM, BertForSequenceClassification
+from dnazen.data.mlm_dataset import MlmDataset
+from dnazen.model.bert_models import BertForMaskedLM
 from dnazen.model.bert_config import ZenConfig
-from dnazen.ngram import NgramEncoder
 
 logging.basicConfig(
     level=logging.INFO,
