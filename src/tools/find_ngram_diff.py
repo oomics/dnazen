@@ -3,8 +3,6 @@ import json
 
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
-from dnazen.ngram import NgramEncoder
-
 
 def token_id_to_text(ngrams: set[str], tokenizer: PreTrainedTokenizer) -> list[str]:
     ret = []

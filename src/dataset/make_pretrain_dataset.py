@@ -5,17 +5,18 @@
 
 import random  # 用于生成随机数，确保实验可复现
 from typing import Literal  # 用于类型注解，限制变量取值
-from argparse import ArgumentParser  # 可用于命令行参数解析（此处未直接使用）
 import time  # 用于计算加载和下载时间
 
 import logging  # 日志记录模块，用于输出调试信息
 
-import torch  # PyTorch库，用于深度学习相关操作
 import click  # 用于简化命令行界面开发
-from transformers import AutoTokenizer, PreTrainedTokenizer  # 加载预训练的Tokenizer
+from transformers import AutoTokenizer  # 加载预训练的Tokenizer
 
 from dnazen.ngram import NgramEncoder  # 导入n-gram编码器模块，用于处理n-gram特征
-from dnazen.data.mlm_dataset import MlmDataset, _load_core_ngrams  # 导入构建MLM数据集的工具和加载核心n-gram的函数
+from dnazen.data.mlm_dataset import (
+    MlmDataset,
+    _load_core_ngrams,
+)  # 导入构建MLM数据集的工具和加载核心n-gram的函数
 
 # 配置日志输出格式和级别，方便调试和记录运行信息
 logging.basicConfig(
@@ -26,7 +27,12 @@ logging.basicConfig(
 
 
 @click.command()
-@click.option("--data-source", type=click.Choice(["raw", "tokenized"]), default="raw", help="数据类型：原始数据(raw)或已分词数据(tokenized)")
+@click.option(
+    "--data-source",
+    type=click.Choice(["raw", "tokenized"]),
+    default="raw",
+    help="数据类型：原始数据(raw)或已分词数据(tokenized)",
+)
 @click.option(
     "-d",
     "--data",
@@ -36,9 +42,19 @@ logging.basicConfig(
     help="数据文件的路径目录",
 )
 @click.option(
-    "--tok-source", "tokenizer_source", type=click.Choice(["file", "huggingface"]), default="huggingface", help="Tokenizer的加载方式：文件或Huggingface模型"
+    "--tok-source",
+    "tokenizer_source",
+    type=click.Choice(["file", "huggingface"]),
+    default="huggingface",
+    help="Tokenizer的加载方式：文件或Huggingface模型",
 )
-@click.option("--tok", "tokenizer_cfg", type=str, default="zhihan1996/DNABERT-2-117M", help="Tokenizer的配置，支持模型名称或路径")
+@click.option(
+    "--tok",
+    "tokenizer_cfg",
+    type=str,
+    default="zhihan1996/DNABERT-2-117M",
+    help="Tokenizer的配置，支持模型名称或路径",
+)
 @click.option("--ngram", "ngram_file", type=str, help="n-gram解码器的配置文件路径")
 @click.option("--core-ngram", type=str, default=None, help="核心n-gram文件路径，可选")
 @click.option("--max-ngrams", default=30, type=int, help="最大允许匹配的n-gram数量")
@@ -56,7 +72,7 @@ def main(
     seed: int,
 ):
     random.seed(seed)  # 设置随机种子，保证实验结果可复现
-    
+
     # 获取logger对象，用于打印调试信息
     logger = logging.getLogger(__name__)
 
@@ -143,4 +159,3 @@ def main(
 if __name__ == "__main__":
     # 当脚本作为主程序执行时，调用main函数
     main()
-

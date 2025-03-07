@@ -17,16 +17,14 @@ from sklearn.metrics import (
 import pandas as pd
 import transformers
 import torch
-from torch.utils.data import DataLoader
 from transformers import (
     AutoTokenizer,
     PreTrainedTokenizer,
-    AutoModelForSequenceClassification,
 )
 from transformers.models.bert.configuration_bert import BertConfig
 
-from dnazen.model.bert_models import BertForMaskedLM, BertForSequenceClassification
-from dnazen.data.labeled_dataset import LabeledDataset, LabeledData, ZenLabeledData
+from dnazen.model.bert_models import BertForSequenceClassification
+from dnazen.data.labeled_dataset import LabeledDataset
 from dnazen.ngram import NgramEncoder
 
 

@@ -2,12 +2,10 @@
 
 import random
 from typing import Literal
-from argparse import ArgumentParser
 import logging
 
-import torch
 import click
-from transformers import AutoTokenizer, PreTrainedTokenizer
+from transformers import AutoTokenizer
 
 from dnazen.ngram import NgramEncoder
 from dnazen.data.mlm_dataset import MlmDataset, _load_core_ngrams
