@@ -64,6 +64,7 @@ def main(
 
     # 开始记录加载tokenizer的时间
     start_time = time.time()
+    logger.info(f"加载tokenizer: {tokenizer_cfg}，tokenizer_source: {tokenizer_source}")
     if tokenizer_source == "huggingface":
         # 从Huggingface模型库中加载预训练tokenizer
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_cfg)
@@ -77,6 +78,7 @@ def main(
 
     # 开始记录加载n-gram编码器的时间
     start_time = time.time()
+    logger.info(f"加载n-gram编码器: {ngram_file}")
     ngram_encoder = NgramEncoder.from_file(ngram_file)
     ngram_encoder.set_max_ngram_match(max_ngrams=max_ngrams)
     end_time = time.time()

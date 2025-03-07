@@ -107,12 +107,14 @@ case "$EXPERIMENT_ID" in
     EXPERIMENT_DESC="GUE数据集+mspecies/dev数据集抽取ngram"
     USE_GUE="--gue-dir ../data/GUE"
     USE_INPUT="--input ../data/pretrain/dev/dev.txt"
+    MIN_FREQ_FILTER=5    
     ;;
   2)
     EXPERIMENT_NAME="exp2_mspecies"
     EXPERIMENT_DESC="仅mspecies/dev数据集抽取ngram"
     USE_GUE=""
     USE_INPUT="--input ../data/pretrain/dev/dev.txt"
+    MIN_FREQ_FILTER=5
     ;;
   3)
     EXPERIMENT_NAME="exp3_gue"
@@ -272,9 +274,9 @@ if [[ "$RUN_TOKENIZE_DEV" == "true" ]]; then
   echo "===== 验证数据tokenized完成 ====="
 fi
 
-# 准备预训练数据集，使用已经tokenized的数据
+# Step4:  准备预训练数据集，使用已经tokenized的数据
 if [[ "$RUN_PREPARE_DATASET" == "true" ]]; then
-  echo "===== 开始准备预训练数据集 使用实验${EXPERIMENT_ID}的N-gram编码器 ====="
+  echo "===== Step4 开始准备预训练数据集 使用实验${EXPERIMENT_ID}的N-gram编码器 ====="
   python ../src/dataset/make_pretrain_dataset.py \
     --data-source tokenized \
     --data ../data/pretrain/train/train.pt \
