@@ -264,7 +264,7 @@ def analyze_ngram_coverage(data_sequence_list, tokenizer, output_dir, dataset_na
         return {}, {}, 0
     
     # 初始化结果字典
-    logger.info("初始化结果字典...")
+    #logger.info("初始化结果字典...")
     results = {
         "num_matches": [0] * total_seqs,
         "matched_ngrams": [""] * total_seqs
@@ -274,7 +274,7 @@ def analyze_ngram_coverage(data_sequence_list, tokenizer, output_dir, dataset_na
     meta_data = NgramMetaData()
     
     # 初始化必要变量
-    logger.info(f"使用编码器: {type(encoder).__name__}")
+    #logger.info(f"使用编码器: {type(encoder).__name__}")
     ngram_encoder = encoder
     
     # 从ngram_df中创建ngram_freq_dict - 优化版本
@@ -282,7 +282,7 @@ def analyze_ngram_coverage(data_sequence_list, tokenizer, output_dir, dataset_na
     ngram_token_freq_dict = {}  # 新增：基于token ID的频率字典
     
     if ngram_df is not None:
-        logger.info("创建N-gram频率字典...")
+        #logger.info("创建N-gram频率字典...")
         for _, row in ngram_df.iterrows():
             if 'N-gram' in row and '频率' in row:
                 ngram_text = row['N-gram']
@@ -710,12 +710,10 @@ def generate_coverage_report(coverage_results, output_dir, experiment_desc=None)
                         <th>匹配覆盖的分词数</th>
                         <th>分词覆盖率</th>
                         <th>被过滤的ngram数量</th>
-                        <th>数据集最高频率N-gram</th>
                         <th>数据集最高频率值</th>
-                        <th>数据集最低频率N-gram</th>
                         <th>数据集最低频率值</th>
                     </tr>
-                    {"".join(f"<tr><td>{row['数据集']}</td><td>{row['总序列数']}</td><td>{row['有匹配序列数']}</td><td>{row['有匹配序列百分比']:.2f}%</td><td>{row['无匹配序列数']}</td><td>{row['无匹配序列百分比']:.2f}%</td><td>{row['匹配到的ngram总数']}</td><td>{row['平均每序列匹配数']:.2f}</td><td>{row['总分词数']}</td><td>{row['匹配覆盖的分词数']}</td><td>{row['分词覆盖率']:.2f}%</td><td>{row['被过滤的ngram数量']}</td><td>{row['数据集最高频率N-gram']}</td><td>{row['数据集最高频率值']}</td><td>{row['数据集最低频率N-gram']}</td><td>{row['数据集最低频率值']}</td></tr>" for _, row in stats_df.iterrows())}
+                    {"".join(f"<tr><td>{row['数据集']}</td><td>{row['总序列数']}</td><td>{row['有匹配序列数']}</td><td>{row['有匹配序列百分比']:.2f}%</td><td>{row['无匹配序列数']}</td><td>{row['无匹配序列百分比']:.2f}%</td><td>{row['匹配到的ngram总数']}</td><td>{row['平均每序列匹配数']:.2f}</td><td>{row['总分词数']}</td><td>{row['匹配覆盖的分词数']}</td><td>{row['分词覆盖率']:.2f}%</td><td>{row['被过滤的ngram数量']}</td><td>{row['数据集最高频率值']}</td><td>{row['数据集最低频率值']}</td></tr>" for _, row in stats_df.iterrows())}
                 </table>
                 
                 
