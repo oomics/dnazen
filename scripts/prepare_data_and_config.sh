@@ -149,6 +149,104 @@ case "$EXPERIMENT_ID" in
     ;;
 esac
 
+
+
+# 创建必要的目录
+#mkdir -p ../data/pretrain/tokenized
+#mkdir -p ../data/pretrain/dev
+#mkdir -p ../data/pretrain/train
+
+
+###################################################################################
+# 1. 数据下载准备
+###################################################################################
+echo "===== 开始下载数据 ====="
+mkdir -p ../data/downloads
+cd ../data/downloads
+
+# 下载GUE数据集
+if [ ! -f "GUE.zip" ]; then
+  echo "正在下载GUE数据集..."
+  echo "如果自动下载失败，请手动下载："
+  echo "GUE数据集下载链接: https://drive.google.com/file/d/1GRtbzTe3UXYF1oW27ASNhYX3SZ16D7N2/view?usp=sharing"
+  echo "下载后请将文件保存为: ../data/downloads/GUE.zip"
+  echo "或使用以下命令下载:"
+  echo "wget --load-cookies /tmp/cookies.txt \"https://docs.google.com/uc?export=download&confirm=\$(wget --quiet --save-cookies /tmp/cookies.txt --keep-session-cookies --no-check-certificate 'https://docs.google.com/uc?export=download&id=1GRtbzTe3UXYF1oW27ASNhYX3SZ16D7N2' -O- | sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\\1\\n/p')&id=1GRtbzTe3UXYF1oW27ASNhYX3SZ16D7N2\" -O GUE.zip && rm -rf /tmp/cookies.txt"
+  curl -L -o GUE.zip "https://drive.usercontent.google.com/download?id=1GRtbzTe3UXYF1oW27ASNhYX3SZ16D7N2&export=download&authuser=0&confirm=t"
+  
+  # 检查下载是否成功
+  if [ ! -f "GUE.zip" ] || [ ! -s "GUE.zip" ]; then
+    echo "警告: GUE.zip下载失败或文件为空，请使用上述手动方法下载"
+  fi
+else
+  echo "GUE.zip已存在，跳过下载"
+fi
+
+# 下载预训练数据集
+if [ ! -f "dnabert_2_pretrain.zip" ]; then
+  echo "正在下载预训练数据集..."
+  echo "如果自动下载失败，请手动下载："
+  echo "预训练数据集下载链接: https://drive.google.com/file/d/1dSXJfwGpDSJ59ry9KAp8SugQLK35V83f/view?usp=sharing"
+  echo "下载后请将文件保存为: ../data/downloads/dnabert_2_pretrain.zip"
+  echo "或使用以下命令下载:"
+  echo "wget --load-cookies /tmp/cookies.txt \"https://docs.google.com/uc?export=download&confirm=\$(wget --quiet --save-cookies /tmp/cookies.txt --keep-session-cookies --no-check-certificate 'https://docs.google.com/uc?export=download&id=1dSXJfwGpDSJ59ry9KAp8SugQLK35V83f' -O- | sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\\1\\n/p')&id=1dSXJfwGpDSJ59ry9KAp8SugQLK35V83f\" -O dnabert_2_pretrain.zip && rm -rf /tmp/cookies.txt"
+  curl -L -o dnabert_2_pretrain.zip "https://drive.usercontent.google.com/download?id=1dSXJfwGpDSJ59ry9KAp8SugQLK35V83f&export=download&authuser=0&confirm=t"
+  
+  # 检查下载是否成功
+  if [ ! -f "dnabert_2_pretrain.zip" ] || [ ! -s "dnabert_2_pretrain.zip" ]; then
+    echo "警告: dnabert_2_pretrain.zip下载失败或文件为空，请使用上述手动方法下载"
+  fi
+else
+  echo "dnabert_2_pretrain.zip已存在，跳过下载"
+fi
+
+cd - > /dev/null  # 返回原目录
+echo "===== 数据下载完成 ====="
+
+###################################################################################
+# 2. 数据解压
+###################################################################################
+echo "===== 开始解压数据 ====="
+
+# 解压GUE数据集
+if [ ! -d "../data/GUE" ]; then
+  echo "正在解压GUE数据集..."
+  mkdir -p ../data/GUE
+  echo "解压进度:"
+  unzip ../data/downloads/GUE.zip -d ../data/ | grep -E '^\s*[0-9]+%' | awk 'NR % 100 == 0'
+else
+  echo "GUE数据集目录已存在，跳过解压"
+fi
+
+# 解压预训练数据集
+if [ ! -d "../data/pretrain/train" ] || [ ! -d "../data/pretrain/dev" ]; then
+  echo "正在解压预训练数据集..."
+  echo "解压进度:"
+  unzip ../data/downloads/dnabert_2_pretrain.zip -d ../data/pretrain | grep -E '^\s*[0-9]+%' | awk 'NR % 100 == 0'
+  
+  # 确保目录结构正确
+  mkdir -p ../data/pretrain/train
+  mkdir -p ../data/pretrain/dev
+  
+  # 如果解压后的文件结构不同，可能需要移动文件
+  if [ -f "../data/pretrain/train.txt" ] && [ ! -f "../data/pretrain/train/train.txt" ]; then
+    mv ../data/pretrain/train.txt ../data/pretrain/train/
+  fi
+  
+  if [ -f "../data/pretrain/dev.txt" ] && [ ! -f "../data/pretrain/dev/dev.txt" ]; then
+    mv ../data/pretrain/dev.txt ../data/pretrain/dev/
+  fi
+else
+  echo "预训练数据集目录已存在，跳过解压"
+fi
+
+echo "===== 数据解压完成 ====="
+
+
+
+###################################################################################
+# 3. 实验目录准备
+###################################################################################
 # 创建实验目录
 if [[ -n "$PARENT_EXPERIMENT" ]]; then
   # 如果是子实验，使用父实验的目录
@@ -162,24 +260,11 @@ fi
 mkdir -p ${EXPERIMENT_DIR}
 mkdir -p ${COVERAGE_DIR}
 
-# 创建必要的目录
-mkdir -p ../data/pretrain/tokenized
-mkdir -p ../data/pretrain/dev
-mkdir -p ../data/pretrain/train
+
 
 
 ###################################################################################
-# 1. 环境准备
-###################################################################################
-
-
-###################################################################################
-# 2. 数据下载
-###################################################################################
-
-
-###################################################################################
-# 3. 数据预处理
+# 4. 数据预处理
 ###################################################################################
 # Step1:提取N-gram编码
 if [[ "$RUN_NGRAM_ENCODER" == "true" ]]; then
@@ -296,17 +381,8 @@ fi
 
 
 ###################################################################################
-# 4. 启动第一阶段训练进程
+# 5. 启动预备训练进程
 ###################################################################################
-
-
-
-
-
-###################################################################################
-# 5. 启动第二阶段训练进程
-###################################################################################
-
 
 
 
