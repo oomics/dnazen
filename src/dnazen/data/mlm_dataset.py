@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 class MlmData(TypedDict):
     """MLM数据的输出格式，包含所有模型输入所需的字段"""
+
     input_ids: torch.Tensor  # 输入token IDs
     ngram_input_ids: torch.Tensor  # N-gram IDs
     attention_mask: torch.Tensor  # 注意力掩码
@@ -37,12 +38,14 @@ class MlmData(TypedDict):
 
 class MlmDataSaved(TypedDict):
     """保存到磁盘的MLM数据格式"""
+
     input_ids: torch.Tensor  # 输入token IDs
     attention_mask: torch.Tensor  # 注意力掩码
 
 
 class MlmDataConfig(TypedDict):
     """MLM数据集配置"""
+
     whole_ngram_masking: bool  # 是否使用全N-gram掩码
     mlm_prob: float  # MLM掩码概率
     mlm_data_symlink: str | None  # MLM数据符号链接
@@ -58,7 +61,7 @@ def _save_core_ngrams(
 ):
     """
     保存核心N-gram到文件
-    
+
     参数:
         path: 保存路径
         core_ngrams: 核心N-gram集合，每个N-gram是token ID的元组
@@ -75,10 +78,10 @@ def _load_core_ngrams(
 ):
     """
     从文件加载核心N-gram
-    
+
     参数:
         path: 加载路径
-        
+
     返回:
         核心N-gram集合，每个N-gram是token ID的元组
     """
@@ -92,14 +95,14 @@ def _load_core_ngrams(
 class TokenMasker:
     """
     Token掩码器，用于MLM任务中的token掩码
-    
+
     支持两种掩码策略：
     1. 随机token掩码：随机选择token进行掩码
     2. 全N-gram掩码：整个N-gram一起掩码
-    
+
     同时支持核心N-gram保护，防止重要的N-gram被掩码
     """
-    
+
     def __init__(
         self,
         core_ngrams: set[tuple[int, ...]],
@@ -112,7 +115,7 @@ class TokenMasker:
     ):
         """
         初始化Token掩码器
-        
+
         参数:
             core_ngrams: 核心N-gram集合，这些N-gram不会被掩码
             cls_token: CLS token的ID
@@ -152,13 +155,13 @@ class TokenMasker:
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         创建MLM预测任务的输入和标签
-        
+
         参数:
             token_seq: 输入token序列
             mlm_prob: 掩码概率
             vocab_list: 词汇表列表
             ngram_encoder: N-gram编码器
-            
+
         返回:
             masked_token_seq: 掩码后的token序列
             labels: MLM任务的标签，被掩码的位置为原始token ID，其他位置为-100
@@ -200,16 +203,16 @@ class TokenMasker:
                 num = random.random()
                 if num < mlm_prob:
                     ngram_mask[idx : idx + len(ngram)] = 1
-            
+
             # 统计N-gram掩码的数量
             num_ngram_mask = int(ngram_mask.sum().item())
-            
+
             # 应用掩码策略：80%替换为[MASK]，10%保持不变，10%替换为随机token
             rand = torch.rand_like(token_seq, dtype=torch.float)
             ngram_mask_80 = ngram_mask & (rand < 0.8)  # 80%替换为[MASK]
             ngram_mask_10 = ngram_mask & (rand >= 0.8) & (rand < 0.9)  # 10%保持不变
             ngram_mask_10_rand = ngram_mask & (rand >= 0.9)  # 10%替换为随机token
-            
+
             # 应用掩码
             masked_token_seq[ngram_mask_80] = self.MASK
             masked_token_seq[ngram_mask_10] = token_seq[ngram_mask_10]
@@ -226,7 +229,7 @@ class TokenMasker:
             [idx for idx in candidate_idxes_list if idx not in non_candidiate_idxes],
             dtype=torch.int32,
         )
-        
+
         # 调整掩码概率，考虑已经被N-gram掩码的token
         len_prop = (seq_len - num_ngram_mask) / len(candidate_idxes) if len(candidate_idxes) > 0 else 0
         mlm_prob *= len_prop  # 修改掩码概率
@@ -261,7 +264,7 @@ class TokenMasker:
 class MlmDataset(Dataset):
     """
     MLM任务数据集
-    
+
     特点：
     1. 支持运行时token掩码
     2. 支持N-gram特征提取
@@ -291,7 +294,7 @@ class MlmDataset(Dataset):
     ):
         """
         初始化MLM数据集
-        
+
         参数:
             tokens: 分词器生成的token ID
             attn_mask: 分词器生成的注意力掩码
@@ -343,7 +346,7 @@ class MlmDataset(Dataset):
     ):
         """
         从原始文本数据创建MLM数据集
-        
+
         参数:
             data_path: 原始数据文件路径
             tokenizer: transformers分词器
@@ -351,7 +354,7 @@ class MlmDataset(Dataset):
             core_ngrams: 核心N-gram集合
             whole_ngram_masking: 是否使用全N-gram掩码
             mlm_prob: 掩码概率
-            
+
         返回:
             MLM数据集实例
         """
@@ -390,7 +393,7 @@ class MlmDataset(Dataset):
     ):
         """
         从已分词数据创建MLM数据集
-        
+
         参数:
             data_dir: 已分词数据目录
             tokenizer: transformers分词器
@@ -398,7 +401,7 @@ class MlmDataset(Dataset):
             core_ngrams: 核心N-gram集合
             whole_ngram_masking: 是否使用全N-gram掩码
             mlm_prob: 掩码概率
-            
+
         返回:
             MLM数据集实例
         """
@@ -420,7 +423,7 @@ class MlmDataset(Dataset):
     def save(self, save_dir: str):
         """
         保存数据集到磁盘
-        
+
         参数:
             save_dir: 保存目录
         """
@@ -428,7 +431,7 @@ class MlmDataset(Dataset):
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
             logger.warning(f"目录{save_dir}不存在，已创建。")
-        
+
         # 构建文件路径
         ngram_encoder_path = os.path.join(save_dir, self.NGRAM_ENCODER_FNAME)
         data_path = os.path.join(save_dir, self.DATA_FNAME)
@@ -440,7 +443,7 @@ class MlmDataset(Dataset):
         self.ngram_encoder.save(ngram_encoder_path)
         self.tokenizer.save_pretrained(tokenizer_path)
         _save_core_ngrams(core_ngram_path, core_ngrams=self.core_ngrams)
-        
+
         # 保存数据或创建符号链接
         if self.mlm_data_symlink is None:
             mlm_data_hash_val = None
@@ -473,19 +476,18 @@ class MlmDataset(Dataset):
         cls,
         save_dir,
         tokenizer=None,
-        max_seq_len=512,
         max_ngrams=20,
-        **kwargs,
+        check_hash: bool = False,
     ):
         """从保存目录加载MLM数据集。
-        
+
         Args:
             save_dir: 保存目录路径
             tokenizer: 分词器，如果为None则从保存目录加载
             max_seq_len: 最大序列长度
             max_ngrams: 每个序列最多匹配的N-gram数量
             **kwargs: 其他参数
-            
+
         Returns:
             MLMDataset实例
         """
@@ -495,7 +497,7 @@ class MlmDataset(Dataset):
         data_path = os.path.join(save_dir, cls.DATA_FNAME)
         core_ngram_path = os.path.join(save_dir, cls.CORE_NGRAMS_FNAME)
         data_config_path = os.path.join(save_dir, cls.CONFIG_FNAME)
-        
+
         # 打印详细的加载信息
         print(f"正在从目录加载MLM数据集: {save_dir}")
         print(f"  N-gram编码器路径: {ngram_encoder_path}")
@@ -503,18 +505,18 @@ class MlmDataset(Dataset):
         print(f"  数据路径: {data_path}")
         print(f"  核心N-gram路径: {core_ngram_path}")
         print(f"  配置文件路径: {data_config_path}")
-        
+
         # 加载N-gram编码器
         print("加载N-gram编码器...")
         ngram_encoder = NgramEncoder.from_file(ngram_encoder_path)
         print(f"  N-gram词汇表大小: {ngram_encoder.get_vocab_size()}")
         print(f"  N-gram长度范围: {ngram_encoder._min_ngram_len}-{ngram_encoder._max_ngram_len}")
         print(f"  最大N-gram匹配数: {ngram_encoder._max_ngrams}")
-        
+
         # 设置最大N-gram匹配数
         ngram_encoder.set_max_ngram_match(max_ngrams)
         print(f"  更新后的最大N-gram匹配数: {max_ngrams}")
-        
+
         # 加载分词器
         if tokenizer is None:
             print(f"从{tokenizer_path}加载分词器...")
@@ -522,35 +524,49 @@ class MlmDataset(Dataset):
             print(f"  分词器词汇表大小: {len(tokenizer)}")
         else:
             print("使用提供的分词器")
-        
+
         # 加载数据
         print(f"从{data_path}加载数据...")
-        data = torch.load(data_path)
+        data = torch.load(data_path, weights_only=True)
         print(f"  加载的数据条目数: {len(data)}")
-        
+
         # 加载核心N-gram
         print(f"从{core_ngram_path}加载核心N-gram...")
-        core_ngrams = torch.load(core_ngram_path)
+        core_ngrams = _load_core_ngrams(core_ngram_path)
         print(f"  核心N-gram数量: {len(core_ngrams)}")
-        
+
         # 加载配置
         print(f"从{data_config_path}加载配置...")
         with open(data_config_path, "r") as f:
             config = json.load(f)
         print(f"  配置信息: {config}")
-        
+        if config["mlm_data_symlink"] is not None and check_hash:
+            assert config["mlm_data_hash_val"] is not None
+            # check hashval
+            logger.info("在加载数据时使用符号链接。正在检查 MD5 值。")
+            hash_identical = check_hash_of_file_md5(data_path, config["mlm_data_hash_val"])
+            if not hash_identical:
+                raise ValueError(
+                    f"尝试打开文件 {data_path}, ",
+                    "但原始数据似乎已被修改。",
+                )
+        elif check_hash:
+            logger.warning("当不使用符号链接时，无法支持哈希检查。")
+
         # 创建数据集实例
         print("创建MLM数据集实例...")
         dataset = cls(
-            data=data,
+            tokens=data["input_ids"],
+            attn_mask=data["attention_mask"],
             tokenizer=tokenizer,
             ngram_encoder=ngram_encoder,
             core_ngrams=core_ngrams,
-            max_seq_len=max_seq_len,
-            **kwargs,
+            whole_ngram_masking=config.get("whole_ngram_masking", False),
+            mlm_prob=config["mlm_prob"],
+            mlm_data_symlink=config["mlm_data_symlink"],
         )
         print("MLM数据集加载完成!")
-        
+
         return dataset
 
     def __len__(self):
@@ -560,10 +576,10 @@ class MlmDataset(Dataset):
     def __getitem__(self, index) -> MlmData:
         """
         获取数据集中的一个样本
-        
+
         参数:
             index: 样本索引
-            
+
         返回:
             包含所有模型输入所需字段的字典
         """
