@@ -11,13 +11,10 @@ dependencies = [
     "peft>=0.14.0,<0.15", 
     "click>=8.1.8,<9",
 ]
-description = "Ngram utilities for Large Language Model Pre-training."
+description = "Tools and resources for DNA sequence analysis with pretraining and finetuning."
 name = "dnazen"
-requires-python = ">= 3.11"
+requires-python = "==3.13" # make it accurate to avoid dependency problems
 version = "0.2.3"
-
-[project.optional-dependencies]
-dev = ["pybind11", "pybind11_stubgen", "pytest", "ruff>=0.9.1,<0.10", "matplotlib", "biopython>=1.84,<2", "pandas>=2.2.3,<3", "pre-commit>=4.1.0,<5", "clang-format>=19.1.7,<20", "plotly==6.0"]
 
 [build-system]
 build-backend = "setuptools.build_meta"
@@ -45,3 +42,10 @@ pip = ">=24.3.1,<25"
 make = "*"
 gcc = ">=14.2.0,<14.3"
 
+[dependency-groups]
+dev = [
+    "pybind11", "pybind11_stubgen", "pytest", 
+    "ruff>=0.9.1,<0.10", "matplotlib", 
+    "biopython>=1.84,<2", "pandas>=2.2.3,<3", 
+    "pre-commit>=4.1.0,<5", "clang-format>=19.1.7,<20",
+    "plotly==6.0"]
