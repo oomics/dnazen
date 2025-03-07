@@ -7,8 +7,8 @@ from tqdm import tqdm
 import pandas as pd
 from dnazen.ngram import NgramEncoder
 import plotly.express as px
-from tools.get_seq_form_dir import get_mspecies_sequences, get_gue_each_sequences
-from tools.ngrm_plot import plot_ngram_zipfs_law, plot_ngram_distribution
+from dnazen.misc.dna_sequences import get_mspecies_sequences, get_gue_each_sequences
+from dnazen.misc.ngrm_plot import plot_ngram_zipfs_law, plot_ngram_distribution
 
 from transformers import AutoTokenizer
 

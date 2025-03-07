@@ -100,33 +100,36 @@ else
   exit 1
 fi
 
+GUE_DATA_DIR=${GUE_DATA_DIR:-"../data/GUE"}
+PRETRAIN_DATA_DIR=${PRETRAIN_DATA_DIR:-"../data/pretrain"}
+
 # 根据实验ID设置输出目录和参数
 case "$EXPERIMENT_ID" in
   1)
     EXPERIMENT_NAME="exp1_gue_mspecies"
     EXPERIMENT_DESC="GUE数据集+mspecies/dev数据集抽取ngram"
-    USE_GUE="--gue-dir ../data/GUE"
-    USE_INPUT="--input ../data/pretrain/dev/dev.txt"
+    USE_GUE="--gue-dir ${GUE_DATA_DIR}"
+    USE_INPUT="--input ${PRETRAIN_DATA_DIR}/dev/dev.txt"
     MIN_FREQ_FILTER=5    
     ;;
   2)
     EXPERIMENT_NAME="exp2_mspecies"
     EXPERIMENT_DESC="仅mspecies/dev数据集抽取ngram"
     USE_GUE=""
-    USE_INPUT="--input ../data/pretrain/dev/dev.txt"
+    USE_INPUT="--input ${PRETRAIN_DATA_DIR}/dev/dev.txt"
     MIN_FREQ_FILTER=5
     ;;
   3)
     EXPERIMENT_NAME="exp3_gue"
     EXPERIMENT_DESC="仅GUE数据集抽取ngram"
-    USE_GUE="--gue-dir ../data/GUE"
+    USE_GUE="--gue-dir ${GUE_DATA_DIR}"
     USE_INPUT=""
     MIN_FREQ_FILTER=5
     ;;
   4)
     EXPERIMENT_NAME="exp3_gue_ngram_ref_5"
     EXPERIMENT_DESC="基于实验3数据进行分析，仅GUE数据集抽取ngram，分析时ngram最小频率为5"
-    USE_GUE="--gue-dir ../data/GUE"
+    USE_GUE="--gue-dir ${GUE_DATA_DIR}"
     USE_INPUT=""
     MIN_FREQ_FILTER=5
     PARENT_EXPERIMENT="exp3_gue"
@@ -134,7 +137,7 @@ case "$EXPERIMENT_ID" in
   5)
     EXPERIMENT_NAME="exp3_gue_ngram_ref_1"
     EXPERIMENT_DESC="基于实验3数据进行分析，仅GUE数据集抽取ngram，分析时ngram最小频率为1"
-    USE_GUE="--gue-dir ../data/GUE"
+    USE_GUE="--gue-dir ${GUE_DATA_DIR}"
     USE_INPUT=""
     MIN_FREQ_FILTER=1
     PARENT_EXPERIMENT="exp3_gue"
@@ -142,7 +145,7 @@ case "$EXPERIMENT_ID" in
   6)
     EXPERIMENT_NAME="exp3_gue_ngram_ref_100"
     EXPERIMENT_DESC="基于实验3数据进行分析，仅GUE数据集抽取ngram，分析时ngram最小频率为100"
-    USE_GUE="--gue-dir ../data/GUE"
+    USE_GUE="--gue-dir ${GUE_DATA_DIR}"
     USE_INPUT=""
     MIN_FREQ_FILTER=100
     PARENT_EXPERIMENT="exp3_gue"
@@ -163,9 +166,9 @@ mkdir -p ${EXPERIMENT_DIR}
 mkdir -p ${COVERAGE_DIR}
 
 # 创建必要的目录
-mkdir -p ../data/pretrain/tokenized
-mkdir -p ../data/pretrain/dev
-mkdir -p ../data/pretrain/train
+mkdir -p ${PRETRAIN_DATA_DIR}/tokenized
+mkdir -p ${PRETRAIN_DATA_DIR}/dev
+mkdir -p ${PRETRAIN_DATA_DIR}/train
 
 
 ###################################################################################
@@ -218,8 +221,8 @@ if [[ "$RUN_COVERAGE_ANALYSIS" == "true" ]]; then
     --encoder ${EXPERIMENT_DIR}/ngram_encoder.json \
     --output-dir ${COVERAGE_DIR} \
     --tok zhihan1996/DNABERT-2-117M \
-    --gue-dir ../data/GUE \
-    --mspecies-dir ../data/pretrain/dev/dev.txt \
+    --gue-dir ${GUE_DATA_DIR} \
+    --mspecies-dir ${PRETRAIN_DATA_DIR}/dev/dev.txt \
     --ngram-list ${EXPERIMENT_DIR}/ngram_list.txt \
     --min-freq-filter ${MIN_FREQ_FILTER}"
   
@@ -242,9 +245,9 @@ fi
 if [[ "$RUN_TOKENIZE_TRAIN" == "true" ]]; then
   echo "===== Step2 开始为训练数据生成tokenized数据 ====="
   python ../src/dataset/make_tokenized_dataset.py \
-    --data ../data/pretrain/train/train.txt \
+    --data ${PRETRAIN_DATA_DIR}/train/train.txt \
     --tok zhihan1996/DNABERT-2-117M \
-    --out ../data/pretrain/train/train.pt \
+    --out ${PRETRAIN_DATA_DIR}/train/train.pt \
     --batch-size 500000 \
     --max-length 256 \
     --resume
@@ -261,9 +264,9 @@ fi
 if [[ "$RUN_TOKENIZE_DEV" == "true" ]]; then
   echo "===== Step3 开始为验证数据生成tokenized数据 ====="
   python ../src/dataset/make_tokenized_dataset.py \
-    --data ../data/pretrain/dev/dev.txt \
+    --data ${PRETRAIN_DATA_DIR}/dev/dev.txt \
     --tok zhihan1996/DNABERT-2-117M \
-    --out ../data/pretrain/dev/dev.pt \
+    --out ${PRETRAIN_DATA_DIR}/dev/dev.pt \
     --batch-size 500000 \
     --max-length 256
   
@@ -279,7 +282,7 @@ if [[ "$RUN_PREPARE_DATASET" == "true" ]]; then
   echo "===== Step4 开始准备预训练数据集 使用实验${EXPERIMENT_ID}的N-gram编码器 ====="
   python ../src/dataset/make_pretrain_dataset.py \
     --data-source tokenized \
-    --data ../data/pretrain/train/train.pt \
+    --data ${PRETRAIN_DATA_DIR}/train/train.pt \
     --tok-source huggingface \
     --tok zhihan1996/DNABERT-2-117M \
     --ngram ${EXPERIMENT_DIR}/ngram_encoder.json \

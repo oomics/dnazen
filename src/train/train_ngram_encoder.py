@@ -15,7 +15,7 @@ from datetime import timedelta
 import traceback
 
 from transformers import AutoTokenizer
-from tools.get_seq_form_dir import (
+from dnazen.misc.dna_sequences import (
     print_sequence_stats,
     get_mspecies_sequences,
     get_gue_sequences,

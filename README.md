@@ -107,7 +107,7 @@ We keep all scripts you might find useful in `scripts` directory. The usage of s
 
 1. 使用GUE数据集训练N-gram编码器（实验3）:
    ```bash
-   ./scripts/prepare_data_and_config.sh --train-ngram --experiment 3
+   cd scripts && ./prepare_data_and_config.sh --train-ngram --experiment 3
    ```
 
 2. 使用GUE+mspecies/dev执行所有步骤（实验1）:

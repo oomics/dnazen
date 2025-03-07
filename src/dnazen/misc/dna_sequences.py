@@ -1,9 +1,8 @@
 #!/usr/bin/env python
 """
-训练N-gram编码器并保存配置文件
+Utilities for getting dna sequences from multiple data sources.
 
-此脚本从文本文件或GUE数据集加载DNA序列数据，训练N-gram编码器，
-并将结果保存为正确格式的配置文件。
+Currently supported data sources: GUE, mspecies
 """
 
 import os
@@ -200,7 +199,7 @@ def get_gue_each_sequences(gue_dir: str) -> Dict[str, List[str]]:
     return each_sequences
 
 
-def get_gue_sequences(gue_dir: str, sequences):
+def get_gue_sequences(gue_dir: str, sequences: List[str]):
     logger.info(f"从GUE数据集加载数据: {gue_dir}")
     csv_files = find_csv_files(gue_dir)
 
@@ -223,7 +222,7 @@ def get_gue_sequences(gue_dir: str, sequences):
             logger.info(f"从 {csv_file} 提取了 {len(file_sequences)} 条DNA序列，累计: {total_extracted}")
 
 
-def get_mspecies_sequences(data_dir: str, sequences):
+def get_mspecies_sequences(data_dir: str, sequences: List[str]):
     logger.info(f"从输入文件加载mspecies数据: {data_dir}")
     start_time = time.time()
 
