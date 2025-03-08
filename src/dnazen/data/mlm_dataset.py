@@ -606,3 +606,100 @@ class MlmDataset(Dataset):
             "ngram_input_ids": ngram_encoder_outputs["ngram_ids"],
             "ngram_position_matrix": ngram_encoder_outputs["ngram_position_matrix"],
         }
+
+
+class MlmDatasetV2(Dataset):
+    def __init__(
+        self,
+        sequences: list[str],
+        tokenizer: PreTrainedTokenizer,
+        ngram_encoder: NgramEncoder,
+        core_ngrams: set[tuple[int, ...]],
+        mlm_prob: float = 0.15,
+        whole_ngram_masking: bool = True,
+    ):
+        super().__init__()
+
+        if whole_ngram_masking:
+            raise NotImplementedError("全N-gram掩码尚未实现")
+
+        self.tokenizer = tokenizer
+        self.ngram_encoder = ngram_encoder
+        self.core_ngrams = core_ngrams
+        self.mlm_prob = mlm_prob
+        self.sequences = sequences
+        self.token_masker = TokenMasker(
+            core_ngrams,
+            cls_token=tokenizer.cls_token_id,
+            sep_token=tokenizer.sep_token_id,
+            pad_token=tokenizer.pad_token_id,
+            mask_token=tokenizer.mask_token_id,
+            whole_ngram_masking=whole_ngram_masking,
+        )
+
+    @classmethod
+    def from_raw_data_file(
+        cls,
+        data_path: str,
+        tokenizer: PreTrainedTokenizer,
+        ngram_encoder: NgramEncoder,
+        core_ngrams: set[tuple[int, ...]],
+        whole_ngram_masking: bool = False,
+        mlm_prob: float = 0.15,
+    ):
+        """从原始数据文件创建MLM数据集。
+
+        Args:
+            data_path (str): _description_
+            tokenizer (PreTrainedTokenizer): _description_
+            ngram_encoder (NgramEncoder): _description_
+            core_ngrams (set[tuple[int, ...]]): _description_
+            whole_ngram_masking (bool, optional): _description_. Defaults to False.
+            mlm_prob (float, optional): _description_. Defaults to 0.15.
+
+        Returns:
+            _type_: _description_
+        """
+        with open(data_path, "r") as f:
+            sequences = f.read().split("\n")
+        # 移除空字符串
+        sequences = [seq for seq in sequences if seq]
+
+        return cls(
+            sequences=sequences,
+            tokenizer=tokenizer,
+            ngram_encoder=ngram_encoder,
+            core_ngrams=core_ngrams,
+            whole_ngram_masking=whole_ngram_masking,
+            mlm_prob=mlm_prob,
+        )
+
+    def __len__(self):
+        return len(self.sequences)
+
+    def __getitem__(self, index):
+        sequence = self.sequences[index]
+        tokens = self.tokenizer(sequence, return_tensors="pt", padding="max_length", truncation=True)
+        input_ids = tokens["input_ids"].squeeze()
+        attention_mask = tokens["attention_mask"].squeeze()
+
+        input_ids, labels = self.token_masker.create_mlm_predictions(
+            token_seq=input_ids,
+            mlm_prob=self.mlm_prob,
+            vocab_list=list(self.tokenizer.get_vocab().values()),
+            ngram_encoder=self.ngram_encoder,
+        )
+
+        ngram_encoder_outputs = self.ngram_encoder.encode(
+            input_ids,
+            pad_token_id=self.tokenizer.pad_token_id,
+        )
+
+        return {
+            "input_ids": input_ids,
+            "labels": labels,
+            "attention_mask": attention_mask,
+            "ngram_attention_mask": ngram_encoder_outputs["ngram_attention_mask"],
+            "ngram_input_ids": ngram_encoder_outputs["ngram_ids"],
+            "ngram_position_matrix": ngram_encoder_outputs["ngram_position_matrix"],
+        }

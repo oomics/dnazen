@@ -78,3 +78,24 @@ def test_mlm_dataset_from_tokenized(
     for d in dataset:
         pass
     shutil.rmtree(current_dir + "/.cache")
+
+
+@pytest.mark.usefixtures("tokenizer", "ngram_encoder")
+def test_mlm_dataset_v2(tokenizer, ngram_encoder):
+    from dnazen.data.mlm_dataset import MlmDatasetV2
+
+    dataset = MlmDatasetV2(
+        sequences=[
+            "ATCGATCGATCGATCGATCG",
+            "TGAACGTTGACGTTGACGTT",
+            "AATCGAATCGAATCGAATCGGAC",
+        ],
+        tokenizer=tokenizer,
+        ngram_encoder=ngram_encoder,
+        core_ngrams=set([(1, 10), (23, 24, 25)]),
+        whole_ngram_masking=False,
+        mlm_prob=0.15,
+    )
+
+    for d in dataset:
+        assert isinstance(d, dict)
