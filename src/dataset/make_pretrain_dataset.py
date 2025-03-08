@@ -21,10 +21,10 @@ from dnazen.data.mlm_dataset import (
 # 配置日志输出格式和级别，方便调试和记录运行信息
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    format="%(asctime)s - %(name)s - %(levelname)s  - [%(filename)s:%(lineno)d] - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
-
+logger = logging.getLogger(__name__)
 
 @click.command()
 @click.option(
@@ -113,7 +113,7 @@ def main(
     if data_source == "raw":
         # 当数据源为原始文本时，从原始文本创建验证数据集
         val_dataset = MlmDataset.from_raw_data(
-            f"{data_dir}/dev.txt",
+            f"{data_dir}/dev/dev.txt",
             tokenizer=tokenizer,
             ngram_encoder=ngram_encoder,
             core_ngrams=core_ngrams,
@@ -124,7 +124,7 @@ def main(
 
         # 从原始文本创建训练数据集
         train_dataset = MlmDataset.from_raw_data(
-            f"{data_dir}/train.txt",
+            f"{data_dir}/train/train.txt",
             tokenizer=tokenizer,
             ngram_encoder=ngram_encoder,
             core_ngrams=core_ngrams,
@@ -135,7 +135,7 @@ def main(
     else:
         # 当数据源为预处理后的分词数据时，从tokenized数据创建验证数据集
         val_dataset = MlmDataset.from_tokenized_data(
-            data_dir=f"{data_dir}/dev.pt",
+            data_dir=f"{data_dir}/dev/dev.pt",
             tokenizer=tokenizer,
             ngram_encoder=ngram_encoder,
             core_ngrams=core_ngrams,
@@ -146,7 +146,7 @@ def main(
 
         # 从tokenized数据创建训练数据集
         train_dataset = MlmDataset.from_tokenized_data(
-            data_dir=f"{data_dir}/train.pt",
+            data_dir=f"{data_dir}/train/train.pt",
             tokenizer=tokenizer,
             ngram_encoder=ngram_encoder,
             core_ngrams=core_ngrams,

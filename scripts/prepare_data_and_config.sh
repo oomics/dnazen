@@ -349,7 +349,6 @@ if [[ "$RUN_TOKENIZE_DEV" == "true" ]]; then
     --data ../data/pretrain/dev/dev.txt \
     --tok zhihan1996/DNABERT-2-117M \
     --out ../data/pretrain/dev/dev.pt \
-    --batch-size 500000 \
     --max-length 256
   
   if [[ $? -ne 0 ]]; then
@@ -364,7 +363,7 @@ if [[ "$RUN_PREPARE_DATASET" == "true" ]]; then
   echo "===== Step4 开始准备预训练数据集 使用实验${EXPERIMENT_ID}的N-gram编码器 ====="
   python ../src/dataset/make_pretrain_dataset.py \
     --data-source tokenized \
-    --data ../data/pretrain/train/train.pt \
+    --data ../data/pretrain/ \
     --tok-source huggingface \
     --tok zhihan1996/DNABERT-2-117M \
     --ngram ${EXPERIMENT_DIR}/ngram_encoder.json \
