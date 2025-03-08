@@ -22,5 +22,6 @@ tests/*_test
 # ignore them for now
 datasets
 resources
+data
 #scripts
 nohup.out

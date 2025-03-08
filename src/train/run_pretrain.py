@@ -759,13 +759,13 @@ def main():
     
     
     
-    train_dataset = MlmDataset.from_data_path(save_dir=train_dir, 
+    train_dataset = MlmDataset.from_data_path(
                                         tokenizer=tokenizer, 
                                         ngram_encoder=ngram_encoder, 
                                         data_path=train_data_file,
                                         data_config_path=train_dir+"/config.json",
                                         check_hash=False)
-    val_dataset = MlmDataset.from_data_path(save_dir=dev_dir, 
+    val_dataset = MlmDataset.from_data_path(
                                       tokenizer=tokenizer, 
                                       ngram_encoder=ngram_encoder, 
                                       data_path=dev_data_file,
