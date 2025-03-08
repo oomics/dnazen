@@ -515,109 +515,161 @@ class MlmDataset(Dataset):
         
         logger.info(f"MLM数据集保存完成: {save_dir}")
 
-    # @classmethod
-    # def from_dir(
-    #     cls,
-    #     save_dir,
-    #     tokenizer=None,
-    #     max_ngrams=20,
-    #     check_hash: bool = False,
-    # ):
-    #     """从保存目录加载MLM数据集。
+    @classmethod
+    def from_data_path(
+        cls,
+        data_path: str,
+        ngram_encoder: NgramEncoder,
+        data_config_path: str,
+        tokenizer=None,
+        max_ngrams=20,
+        check_hash: bool = False,
+    ):
+        """从数据的保存目录加载MLM数据集。
 
-    #     Args:
-    #         save_dir: 保存目录路径
-    #         tokenizer: 分词器，如果为None则从保存目录加载
-    #         max_seq_len: 最大序列长度
-    #         max_ngrams: 每个序列最多匹配的N-gram数量
-    #         **kwargs: 其他参数
+        Args:
+            data_path: 保存目录路径
+            ngram_encoder: ngram编码器
+            data_config_path: 数据集配置文件，是一个json文件，字典内容为MlmDataConfig
+            tokenizer: 分词器，如果为None则从保存目录加载
+            max_ngrams: 每个序列最多匹配的N-gram数量
+            check_hash: 如果data_path是软连接，那么检查软链接的目标的哈希值，判断原文件是否被修改
 
-    #     Returns:
-    #         MLMDataset实例
-    #     """
-    #     logger.info(f"正在从目录加载MLM数据集: {save_dir}")
+        Returns:
+            MLMDataset实例
+
+        示例：
+            >>> mlm_dataset = MlmDataset.from_data_path(
+            >>>     data_path,
+            >>>     ngram_encoder,
+            >>>     data_config_path,
+            >>>     tokenizer,
+            >>>     max_ngrams,
+            >>>     check_hash
+            >>> )
+            
+            >>> mlm_dataset[1]
+            
+            >>> {
+                "input_ids": xxx,
+                "ngram_input_ids": xxx,
+                "attention_mask": xxx,
+                "ngram_attention_mask": xxx,
+                "ngram_position_matrix": xxx,
+                "labels": xxx
+            }
+            
+        """
+        logger.info(f"N-gram词汇表大小: {ngram_encoder.get_vocab_size()}")
+        logger.info(f"N-gram长度范围: {ngram_encoder._min_ngram_len}-{ngram_encoder._max_ngram_len}")
+        # 设置最大N-gram匹配数
+        logger.info(f"设置最大N-gram匹配数: {max_ngrams}")
+        ngram_encoder.set_max_ngram_match(max_ngrams)
+
+        # 加载分词器
+        if tokenizer is None:
+            logger.error("使用提供的分词器")
+            exit(1)
+
+        # 加载数据
+        logger.info(f"从{data_path}加载数据...")
+        try:
+            # 检查文件格式
+            with open(data_path, 'rb') as f:
+                first_bytes = f.read(10)  # 读取前10个字节来判断文件类型
+            
+            # 重置文件指针
+            if first_bytes.startswith(b'PK\x03\x04'):
+                logger.info("检测到ZIP格式文件，尝试使用torch.load加载...")
+                data = torch.load(data_path)
+            elif first_bytes.startswith(b'\x80\x03'):
+                logger.info("检测到pickle格式文件，使用pickle加载...")
+                import pickle
+                with open(data_path, 'rb') as f:
+                    data = pickle.load(f)
+            else:
+                logger.info("未知文件格式，尝试使用numpy加载...")
+                import numpy as np
+                data = {}
+                # 尝试加载.npz文件
+                try:
+                    npz_data = np.load(data_path)
+                    for key in npz_data.files:
+                        data[key] = torch.from_numpy(npz_data[key])
+                    logger.info(f"成功从numpy文件加载数据，包含键: {list(data.keys())}")
+                except Exception as e:
+                    logger.error(f"numpy加载失败: {e}")
+                    # 尝试加载文本文件
+                    logger.info("尝试作为文本文件加载...")
+                    with open(data_path, 'r', encoding='utf-8') as f:
+                        lines = f.readlines()
+                    
+                    # 假设文件是每行一个序列的格式
+                    sequences = [line.strip() for line in lines if line.strip()]
+                    logger.info(f"加载了{len(sequences)}个文本序列")
+                    
+                    # 使用tokenizer处理序列
+                    logger.info("使用tokenizer处理序列...")
+                    input_ids = []
+                    attention_mask = []
+                    for seq in sequences:
+                        encoded = tokenizer(seq, padding="max_length", truncation=True, max_length=512, return_tensors="pt")
+                        input_ids.append(encoded["input_ids"][0])
+                        attention_mask.append(encoded["attention_mask"][0])
+                    
+                    data["input_ids"] = torch.stack(input_ids)
+                    data["attention_mask"] = torch.stack(attention_mask)
+                    logger.info(f"处理完成，生成了形状为{data['input_ids'].shape}的张量")
+            
+            logger.info(f"数据加载成功，包含键: {list(data.keys())}")
+            logger.info(f"输入ID形状: {data['input_ids'].shape}")
+            
+        except Exception as e:
+            logger.error(f"所有加载方法都失败: {e}")
+            logger.error(f"请检查数据文件格式: {data_path}")
+            raise ValueError(f"无法加载数据文件: {data_path}")
+
+        # 加载配置
+        logger.info(f"从{data_config_path}加载配置...")
+        with open(data_config_path, "r") as f:
+            config = json.load(f)
+        logger.info(f"配置信息: {config}")
         
-    #     # 构建文件路径
-    #     ngram_encoder_path = os.path.join(save_dir, cls.NGRAM_ENCODER_FNAME)
-    #     tokenizer_path = os.path.join(save_dir, cls.TOKENIZER_DIR)
-    #     data_path = os.path.join(save_dir, cls.DATA_FNAME)
-    #     core_ngram_path = os.path.join(save_dir, cls.CORE_NGRAMS_FNAME)
-    #     data_config_path = os.path.join(save_dir, cls.CONFIG_FNAME)
+        # 检查哈希值
+        if config["mlm_data_symlink"] is not None and check_hash:
+            assert config["mlm_data_hash_val"] is not None
+            logger.info(f"检查数据文件{data_path}的MD5哈希值...")
+            hash_identical = check_hash_of_file_md5(data_path, config["mlm_data_hash_val"])
+            if not hash_identical:
+                logger.error(f"哈希值不匹配！原始数据可能已被修改")
+                raise ValueError(
+                    f"尝试打开文件 {data_path}, ",
+                    "但原始数据似乎已被修改。",
+                )
+            logger.info("哈希值匹配，数据完整性验证通过")
+        elif check_hash:
+            logger.warning("当不使用符号链接时，无法支持哈希检查")
 
-    #     # 加载N-gram编码器
-    #     logger.info(f"加载N-gram编码器: {ngram_encoder_path}")
-    #     ngram_encoder = NgramEncoder.from_file(ngram_encoder_path)
-    #     logger.info(f"N-gram词汇表大小: {ngram_encoder.get_vocab_size()}")
-    #     logger.info(f"N-gram长度范围: {ngram_encoder._min_ngram_len}-{ngram_encoder._max_ngram_len}")
-        
-    #     # 设置最大N-gram匹配数
-    #     logger.info(f"设置最大N-gram匹配数: {max_ngrams}")
-    #     ngram_encoder.set_max_ngram_match(max_ngrams)
+        # 创建数据集实例
+        logger.info("创建MLM数据集实例...")
+        dataset = MlmDataset(
+            tokens=data["input_ids"],
+            attn_mask=data["attention_mask"],
+            tokenizer=tokenizer,
+            ngram_encoder=ngram_encoder,
+            core_ngrams=set(),  # 暂时使用空集合
+            whole_ngram_masking=config.get("whole_ngram_masking", False),
+            mlm_prob=config["mlm_prob"],
+            mlm_data_symlink=config["mlm_data_symlink"],
+        )
+        logger.info("MLM数据集加载完成!")
 
-    #     # 加载分词器
-    #     if tokenizer is None:
-    #         logger.info(f"从{tokenizer_path}加载分词器...")
-    #         tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
-    #         logger.info(f"分词器词汇表大小: {len(tokenizer)}")
-    #     else:
-    #         logger.info("使用提供的分词器")
-
-    #     # 加载数据
-    #     logger.info(f"从{data_path}加载数据...")
-    #     data = torch.load(data_path, weights_only=True)
-    #     logger.info(f"加载了{len(data['input_ids'])}个序列，形状为{data['input_ids'].shape}")
-
-    #     # 加载核心N-gram
-    #     logger.info(f"从{core_ngram_path}加载核心N-gram...")
-    #     core_ngrams = _load_core_ngrams(core_ngram_path)
-    #     logger.info(f"加载了{len(core_ngrams)}个核心N-gram")
-
-    #     # 加载配置
-    #     logger.info(f"从{data_config_path}加载配置...")
-    #     with open(data_config_path, "r") as f:
-    #         config = json.load(f)
-    #     logger.info(f"配置信息: {config}")
-        
-    #     # 检查哈希值
-    #     if config["mlm_data_symlink"] is not None and check_hash:
-    #         assert config["mlm_data_hash_val"] is not None
-    #         logger.info(f"检查数据文件{data_path}的MD5哈希值...")
-    #         hash_identical = check_hash_of_file_md5(data_path, config["mlm_data_hash_val"])
-    #         if not hash_identical:
-    #             logger.error(f"哈希值不匹配！原始数据可能已被修改")
-    #             raise ValueError(
-    #                 f"尝试打开文件 {data_path}, ",
-    #                 "但原始数据似乎已被修改。",
-    #             )
-    #         logger.info("哈希值匹配，数据完整性验证通过")
-    #     elif check_hash:
-    #         logger.warning("当不使用符号链接时，无法支持哈希检查")
-
-    #     # 创建数据集实例
-    #     logger.info("创建MLM数据集实例...")
-    #     dataset = cls(
-    #         tokens=data["input_ids"],
-    #         attn_mask=data["attention_mask"],
-    #         tokenizer=tokenizer,
-    #         ngram_encoder=ngram_encoder,
-    #         core_ngrams=core_ngrams,
-    #         whole_ngram_masking=config.get("whole_ngram_masking", False),
-    #         mlm_prob=config["mlm_prob"],
-    #         mlm_data_symlink=config["mlm_data_symlink"],
-    #     )
-    #     logger.info("MLM数据集加载完成!")
-
-    #     return dataset
-
+        return dataset
 
     @classmethod
-    def from_dir_v2(
+    def from_dir(
+        cls,
         save_dir,
-        ngram_encoder: NgramEncoder,
-        tokenizer_path: str,
-        data_path: str,
-        #core_ngram_path: str,
-        data_config_path: str,
         tokenizer=None,
         max_ngrams=20,
         check_hash: bool = False,
@@ -637,15 +689,15 @@ class MlmDataset(Dataset):
         logger.info(f"正在从目录加载MLM数据集: {save_dir}")
         
         # 构建文件路径
-        # ngram_encoder_path = os.path.join(save_dir, cls.NGRAM_ENCODER_FNAME)
-        # tokenizer_path = os.path.join(save_dir, cls.TOKENIZER_DIR)
-        # data_path = os.path.join(save_dir, cls.DATA_FNAME)
-        # core_ngram_path = os.path.join(save_dir, cls.CORE_NGRAMS_FNAME)
-        # data_config_path = os.path.join(save_dir, cls.CONFIG_FNAME)
+        ngram_encoder_path = os.path.join(save_dir, cls.NGRAM_ENCODER_FNAME)
+        tokenizer_path = os.path.join(save_dir, cls.TOKENIZER_DIR)
+        data_path = os.path.join(save_dir, cls.DATA_FNAME)
+        core_ngram_path = os.path.join(save_dir, cls.CORE_NGRAMS_FNAME)
+        data_config_path = os.path.join(save_dir, cls.CONFIG_FNAME)
 
         # 加载N-gram编码器
-        #logger.info(f"加载N-gram编码器: {ngram_encoder_path}")
-        #ngram_encoder = NgramEncoder.from_file(ngram_encoder_path)
+        logger.info(f"加载N-gram编码器: {ngram_encoder_path}")
+        ngram_encoder = NgramEncoder.from_file(ngram_encoder_path)
         logger.info(f"N-gram词汇表大小: {ngram_encoder.get_vocab_size()}")
         logger.info(f"N-gram长度范围: {ngram_encoder._min_ngram_len}-{ngram_encoder._max_ngram_len}")
         
@@ -655,18 +707,21 @@ class MlmDataset(Dataset):
 
         # 加载分词器
         if tokenizer is None:
-            logger.error("使用提供的分词器")
-            exit(1)
+            logger.info(f"从{tokenizer_path}加载分词器...")
+            tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+            logger.info(f"分词器词汇表大小: {len(tokenizer)}")
+        else:
+            logger.info("使用提供的分词器")
 
         # 加载数据
         logger.info(f"从{data_path}加载数据...")
         data = torch.load(data_path, weights_only=True)
         logger.info(f"加载了{len(data['input_ids'])}个序列，形状为{data['input_ids'].shape}")
 
-        # # 加载核心N-gram
-        # logger.info(f"从{core_ngram_path}加载核心N-gram...")
-        # core_ngrams = _load_core_ngrams(core_ngram_path)
-        # logger.info(f"加载了{len(core_ngrams)}个核心N-gram")
+        # 加载核心N-gram
+        logger.info(f"从{core_ngram_path}加载核心N-gram...")
+        core_ngrams = _load_core_ngrams(core_ngram_path)
+        logger.info(f"加载了{len(core_ngrams)}个核心N-gram")
 
         # 加载配置
         logger.info(f"从{data_config_path}加载配置...")
@@ -704,7 +759,6 @@ class MlmDataset(Dataset):
         logger.info("MLM数据集加载完成!")
 
         return dataset
-    
 
     def __len__(self):
         """返回数据集大小"""
@@ -739,6 +793,103 @@ class MlmDataset(Dataset):
             "input_ids": input_ids_,
             "labels": labels_,
             "attention_mask": self.attn_mask[index],
+            "ngram_attention_mask": ngram_encoder_outputs["ngram_attention_mask"],
+            "ngram_input_ids": ngram_encoder_outputs["ngram_ids"],
+            "ngram_position_matrix": ngram_encoder_outputs["ngram_position_matrix"],
+        }
+
+
+class MlmDatasetV2(Dataset):
+    def __init__(
+        self,
+        sequences: list[str],
+        tokenizer: PreTrainedTokenizer,
+        ngram_encoder: NgramEncoder,
+        core_ngrams: set[tuple[int, ...]],
+        mlm_prob: float = 0.15,
+        whole_ngram_masking: bool = True,
+    ):
+        super().__init__()
+
+        if whole_ngram_masking:
+            raise NotImplementedError("全N-gram掩码尚未实现")
+
+        self.tokenizer = tokenizer
+        self.ngram_encoder = ngram_encoder
+        self.core_ngrams = core_ngrams
+        self.mlm_prob = mlm_prob
+        self.sequences = sequences
+        self.token_masker = TokenMasker(
+            core_ngrams,
+            cls_token=tokenizer.cls_token_id,
+            sep_token=tokenizer.sep_token_id,
+            pad_token=tokenizer.pad_token_id,
+            mask_token=tokenizer.mask_token_id,
+            whole_ngram_masking=whole_ngram_masking,
+        )
+
+    @classmethod
+    def from_raw_data_file(
+        cls,
+        data_path: str,
+        tokenizer: PreTrainedTokenizer,
+        ngram_encoder: NgramEncoder,
+        core_ngrams: set[tuple[int, ...]],
+        whole_ngram_masking: bool = False,
+        mlm_prob: float = 0.15,
+    ):
+        """从原始数据文件创建MLM数据集。
+
+        Args:
+            data_path (str): _description_
+            tokenizer (PreTrainedTokenizer): _description_
+            ngram_encoder (NgramEncoder): _description_
+            core_ngrams (set[tuple[int, ...]]): _description_
+            whole_ngram_masking (bool, optional): _description_. Defaults to False.
+            mlm_prob (float, optional): _description_. Defaults to 0.15.
+
+        Returns:
+            _type_: _description_
+        """
+        with open(data_path, "r") as f:
+            sequences = f.read().split("\n")
+        # 移除空字符串
+        sequences = [seq for seq in sequences if seq]
+
+        return cls(
+            sequences=sequences,
+            tokenizer=tokenizer,
+            ngram_encoder=ngram_encoder,
+            core_ngrams=core_ngrams,
+            whole_ngram_masking=whole_ngram_masking,
+            mlm_prob=mlm_prob,
+        )
+
+    def __len__(self):
+        return len(self.sequences)
+
+    def __getitem__(self, index):
+        sequence = self.sequences[index]
+        tokens = self.tokenizer(sequence, return_tensors="pt", padding="max_length", truncation=True)
+        input_ids = tokens["input_ids"].squeeze()
+        attention_mask = tokens["attention_mask"].squeeze()
+
+        input_ids, labels = self.token_masker.create_mlm_predictions(
+            token_seq=input_ids,
+            mlm_prob=self.mlm_prob,
+            vocab_list=list(self.tokenizer.get_vocab().values()),
+            ngram_encoder=self.ngram_encoder,
+        )
+
+        ngram_encoder_outputs = self.ngram_encoder.encode(
+            input_ids,
+            pad_token_id=self.tokenizer.pad_token_id,
+        )
+
+        return {
+            "input_ids": input_ids,
+            "labels": labels,
+            "attention_mask": attention_mask,
             "ngram_attention_mask": ngram_encoder_outputs["ngram_attention_mask"],
             "ngram_input_ids": ngram_encoder_outputs["ngram_ids"],
             "ngram_position_matrix": ngram_encoder_outputs["ngram_position_matrix"],
