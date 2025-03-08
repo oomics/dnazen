@@ -81,9 +81,9 @@ echo "实验目录: $EXPERIMENT_DIR"
 # 基础数据目录
 DATA_DIR="../data/pretrain"
 # 训练数据目录文件
-TRAIN_DIR_FILE="$DATA_DIR/train/train.txt" 
+TRAIN_DIR_FILE="$DATA_DIR/train/train.pt" 
 # 验证数据目录文件
-DEV_DIR_FILE="$DATA_DIR/dev/dev.txt"
+DEV_DIR_FILE="$DATA_DIR/dev/dev.pt"
 # 模型保存输出目录
 OUTPUT_DIR="$EXPERIMENT_DIR/output"
 # 数据缓存目录
@@ -185,9 +185,11 @@ CMD="python ../src/train/run_pretrain.py \
   --n-epoch $N_EPOCH \
   --seed $SEED \
   --num-workers $NUM_WORKERS \
-  --resume ../resources/DNABERT-2-117M \
-  --train_dir \"$TRAIN_DIR\" \
-  --dev_dir \"$DEV_DIR\"  "
+  --train_dir \"$EXPERIMENT_DIR/pretrain_data/train\" \
+  --dev_dir \"$EXPERIMENT_DIR/pretrain_data/dev\" "
+
+  # --train_dir \"$TRAIN_DIR\" \
+  # --dev_dir \"$DEV_DIR\"  "
 
 # 根据数据加载模式添加相应参数
 if [ "$USE_STREAMING" = true ]; then

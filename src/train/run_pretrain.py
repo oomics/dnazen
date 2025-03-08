@@ -24,6 +24,7 @@ from typing import Any, Dict, Tuple, Union
 from argparse import ArgumentParser
 import hashlib
 import math
+import json
 
 # 科学计算库
 import numpy as np
@@ -484,6 +485,139 @@ class StreamingDNADataset(torch.utils.data.IterableDataset):
         return {"input_ids": input_ids, "attention_mask": attention_mask, "labels": labels}
 
 
+
+def mlmdataset_builder(
+        save_dir,
+        ngram_encoder: NgramEncoder,
+        data_path: str,
+        data_config_path: str,
+        tokenizer=None,
+        max_ngrams=20,
+        check_hash: bool = False,
+    ):
+        """从保存目录加载MLM数据集。
+
+        Args:
+            save_dir: 保存目录路径
+            tokenizer: 分词器，如果为None则从保存目录加载
+            max_seq_len: 最大序列长度
+            max_ngrams: 每个序列最多匹配的N-gram数量
+            **kwargs: 其他参数
+
+        Returns:
+            MLMDataset实例
+        """
+        logger.info(f"正在从目录加载MLM数据集: {save_dir}")
+        
+
+        logger.info(f"N-gram词汇表大小: {ngram_encoder.get_vocab_size()}")
+        logger.info(f"N-gram长度范围: {ngram_encoder._min_ngram_len}-{ngram_encoder._max_ngram_len}")
+        
+        # 设置最大N-gram匹配数
+        logger.info(f"设置最大N-gram匹配数: {max_ngrams}")
+        ngram_encoder.set_max_ngram_match(max_ngrams)
+
+        # 加载分词器
+        if tokenizer is None:
+            logger.error("使用提供的分词器")
+            exit(1)
+
+        # 加载数据
+        logger.info(f"从{data_path}加载数据...")
+        try:
+            # 检查文件格式
+            with open(data_path, 'rb') as f:
+                first_bytes = f.read(10)  # 读取前10个字节来判断文件类型
+            
+            # 重置文件指针
+            if first_bytes.startswith(b'PK\x03\x04'):
+                logger.info("检测到ZIP格式文件，尝试使用torch.load加载...")
+                data = torch.load(data_path)
+            elif first_bytes.startswith(b'\x80\x03'):
+                logger.info("检测到pickle格式文件，使用pickle加载...")
+                import pickle
+                with open(data_path, 'rb') as f:
+                    data = pickle.load(f)
+            else:
+                logger.info("未知文件格式，尝试使用numpy加载...")
+                import numpy as np
+                data = {}
+                # 尝试加载.npz文件
+                try:
+                    npz_data = np.load(data_path)
+                    for key in npz_data.files:
+                        data[key] = torch.from_numpy(npz_data[key])
+                    logger.info(f"成功从numpy文件加载数据，包含键: {list(data.keys())}")
+                except Exception as e:
+                    logger.error(f"numpy加载失败: {e}")
+                    # 尝试加载文本文件
+                    logger.info("尝试作为文本文件加载...")
+                    with open(data_path, 'r', encoding='utf-8') as f:
+                        lines = f.readlines()
+                    
+                    # 假设文件是每行一个序列的格式
+                    sequences = [line.strip() for line in lines if line.strip()]
+                    logger.info(f"加载了{len(sequences)}个文本序列")
+                    
+                    # 使用tokenizer处理序列
+                    logger.info("使用tokenizer处理序列...")
+                    input_ids = []
+                    attention_mask = []
+                    for seq in sequences:
+                        encoded = tokenizer(seq, padding="max_length", truncation=True, max_length=512, return_tensors="pt")
+                        input_ids.append(encoded["input_ids"][0])
+                        attention_mask.append(encoded["attention_mask"][0])
+                    
+                    data["input_ids"] = torch.stack(input_ids)
+                    data["attention_mask"] = torch.stack(attention_mask)
+                    logger.info(f"处理完成，生成了形状为{data['input_ids'].shape}的张量")
+            
+            logger.info(f"数据加载成功，包含键: {list(data.keys())}")
+            logger.info(f"输入ID形状: {data['input_ids'].shape}")
+            
+        except Exception as e:
+            logger.error(f"所有加载方法都失败: {e}")
+            logger.error(f"请检查数据文件格式: {data_path}")
+            raise ValueError(f"无法加载数据文件: {data_path}")
+
+        # 加载配置
+        logger.info(f"从{data_config_path}加载配置...")
+        with open(data_config_path, "r") as f:
+            config = json.load(f)
+        logger.info(f"配置信息: {config}")
+        
+        # 检查哈希值
+        if config["mlm_data_symlink"] is not None and check_hash:
+            assert config["mlm_data_hash_val"] is not None
+            logger.info(f"检查数据文件{data_path}的MD5哈希值...")
+            hash_identical = check_hash_of_file_md5(data_path, config["mlm_data_hash_val"])
+            if not hash_identical:
+                logger.error(f"哈希值不匹配！原始数据可能已被修改")
+                raise ValueError(
+                    f"尝试打开文件 {data_path}, ",
+                    "但原始数据似乎已被修改。",
+                )
+            logger.info("哈希值匹配，数据完整性验证通过")
+        elif check_hash:
+            logger.warning("当不使用符号链接时，无法支持哈希检查")
+
+        # 创建数据集实例
+        logger.info("创建MLM数据集实例...")
+        dataset = MlmDataset(
+            tokens=data["input_ids"],
+            attn_mask=data["attention_mask"],
+            tokenizer=tokenizer,
+            ngram_encoder=ngram_encoder,
+            core_ngrams=set(),  # 暂时使用空集合
+            whole_ngram_masking=config.get("whole_ngram_masking", False),
+            mlm_prob=config["mlm_prob"],
+            mlm_data_symlink=config["mlm_data_symlink"],
+        )
+        logger.info("MLM数据集加载完成!")
+
+        return dataset
+    
+
 def main():
     """主函数：执行预训练流程"""
     start_time = time.time()
@@ -585,24 +719,59 @@ def main():
     logger.info(f"分词器加载完成，用时: {tokenizer_time:.2f}秒")
     logger.info(f"分词器词汇表大小: {len(tokenizer)}")
     
-    # 2. 加载数据集
+      
+    # 加载或创建N-gram编码器
+    logger.info("步骤2: 加载N-gram编码器...")
+    ngram_start_time = time.time()
+    if args.ngram_encoder_path and os.path.exists(args.ngram_encoder_path):
+        logger.info(f"从文件加载N-gram编码器: {args.ngram_encoder_path}")
+        ngram_encoder = NgramEncoder.from_file(args.ngram_encoder_path)
+        logger.info(f"N-gram词汇表大小: {ngram_encoder.get_vocab_size()}")
+    else:
+        logger.error("N-gram编码器未指定且无法找到默认编码器，请使用--ngram-encoder-path指定路径或使用--train-ngram训练新的编码器")
+        exit(1)
+    
+    # 获取N-gram词汇表大小
+    ngram_vocab_size = ngram_encoder.get_vocab_size()
+    logger.info(f"N-gram词汇表大小: {ngram_vocab_size}")
+    ngram_time = time.time() - ngram_start_time
+    logger.info(f"N-gram编码器加载完成，用时: {ngram_time:.2f}秒")
+    
+    
+    # 3. 加载数据集
     logger.info("步骤3: 加载训练数据集...")
     dataset_start_time = time.time()
-    if args.streaming:
-        logger.info("使用流式数据加载...")
-        train_dataset = StreamingDNADataset(train_data_file, tokenizer, buffer_size=args.buffer_size)
-        logger.info(f"训练数据集初始化完成 (流式)")
+    # if args.streaming:
+    #     logger.info("使用流式数据加载...")
+    #     train_dataset = StreamingDNADataset(train_data_file, tokenizer, buffer_size=args.buffer_size)
+    #     logger.info(f"训练数据集初始化完成 (流式)")
         
-        val_dataset = StreamingDNADataset(dev_data_file, tokenizer, buffer_size=args.buffer_size)
-        logger.info(f"验证数据集初始化完成 (流式)")
-    else:
-        logger.info(f"从文件加载训练数据集: {train_data_file}")
-        train_dataset = load_data_from_file(train_data_file, tokenizer, cache_dir=args.cache_dir)
-        logger.info(f"训练数据集加载完成，大小: {len(train_dataset)} 条序列")
+    #     val_dataset = StreamingDNADataset(dev_data_file, tokenizer, buffer_size=args.buffer_size)
+    #     logger.info(f"验证数据集初始化完成 (流式)")
+    # else:
+    #     logger.info(f"从文件加载训练数据集: {train_data_file}")
+    #     train_dataset = load_data_from_file(train_data_file, tokenizer, cache_dir=args.cache_dir)
+    #     logger.info(f"训练数据集加载完成，大小: {len(train_dataset)} 条序列")
         
-        logger.info(f"从文件加载验证数据集: {dev_data_file}")
-        val_dataset = load_data_from_file(dev_data_file, tokenizer, cache_dir=args.cache_dir)
-        logger.info(f"验证数据集加载完成，大小: {len(val_dataset)} 条序列")
+    #     logger.info(f"从文件加载验证数据集: {dev_data_file}")
+    #     val_dataset = load_data_from_file(dev_data_file, tokenizer, cache_dir=args.cache_dir)
+    #     logger.info(f"验证数据集加载完成，大小: {len(val_dataset)} 条序列")
+    
+    
+    
+    train_dataset = mlmdataset_builder(save_dir=train_dir, 
+                                        tokenizer=tokenizer, 
+                                        ngram_encoder=ngram_encoder, 
+                                        data_path=train_data_file,
+                                        data_config_path=train_dir+"/config.json",
+                                        check_hash=False)
+    val_dataset = mlmdataset_builder(save_dir=dev_dir, 
+                                      tokenizer=tokenizer, 
+                                      ngram_encoder=ngram_encoder, 
+                                      data_path=dev_data_file,
+                                      data_config_path=dev_dir+"/config.json",
+                                      check_hash=False)
+
     
     dataset_time = time.time() - dataset_start_time
     logger.info(f"数据集加载完成，用时: {dataset_time:.2f}秒")
@@ -632,23 +801,7 @@ def main():
         bert_config_path = os.path.join(current_dir, "..", "resources", "DNABERT-2-117M")
         os.makedirs(bert_config_path, exist_ok=True)
         bert_config.save_pretrained(bert_config_path)
-    
-    # 加载或创建N-gram编码器
-    logger.info("步骤5: 加载N-gram编码器...")
-    ngram_start_time = time.time()
-    if args.ngram_encoder_path and os.path.exists(args.ngram_encoder_path):
-        logger.info(f"从文件加载N-gram编码器: {args.ngram_encoder_path}")
-        ngram_encoder = NgramEncoder.from_file(args.ngram_encoder_path)
-        logger.info(f"N-gram词汇表大小: {ngram_encoder.get_vocab_size()}")
-    else:
-        logger.error("N-gram编码器未指定且无法找到默认编码器，请使用--ngram-encoder-path指定路径或使用--train-ngram训练新的编码器")
-        exit(1)
-    
-    # 获取N-gram词汇表大小
-    ngram_vocab_size = ngram_encoder.get_vocab_size()
-    logger.info(f"N-gram词汇表大小: {ngram_vocab_size}")
-    ngram_time = time.time() - ngram_start_time
-    logger.info(f"N-gram编码器加载完成，用时: {ngram_time:.2f}秒")
+  
     
     # 创建ZEN配置（扩展的BERT配置，包含Ngram信息）
     logger.info("步骤6: 创建ZEN配置...")

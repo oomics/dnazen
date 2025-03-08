@@ -204,10 +204,13 @@ class TokenMasker:
         masked_token_seq = token_seq.clone()
         labels = torch.empty_like(token_seq).fill_(-100)  # 默认标签为-100（不计算损失）
 
+        # 初始化ngram_mask，无论是否使用全N-gram掩码
+        ngram_mask = torch.zeros_like(token_seq, dtype=torch.bool)
+        num_ngram_mask = 0
+        
         # 全N-gram掩码策略
         if self.whole_ngram_masking:
             # 创建N-gram掩码
-            ngram_mask = torch.zeros_like(token_seq, dtype=torch.bool)
             for ngram, idx in ngram_encoder.get_matched_ngrams(token_seq, pad_token_id=self.PAD):
                 # 随机决定是否掩码这个N-gram
                 num = random.random()
@@ -230,8 +233,6 @@ class TokenMasker:
                 random.choices(vocab_list, k=int(ngram_mask_10_rand.sum().item())),
                 dtype=torch.long,
             )
-        else:
-            num_ngram_mask = 0
 
         # 计算序列长度和候选位置数量
         seq_len = len(candidate_idxes_list)
@@ -610,12 +611,12 @@ class MlmDataset(Dataset):
 
 
     @classmethod
-    def from_dir(
+    def from_dir_v2(
         save_dir,
-        ngram_encoder_path: str,
+        ngram_encoder: NgramEncoder,
         tokenizer_path: str,
         data_path: str,
-        core_ngram_path: str,
+        #core_ngram_path: str,
         data_config_path: str,
         tokenizer=None,
         max_ngrams=20,
@@ -643,8 +644,8 @@ class MlmDataset(Dataset):
         # data_config_path = os.path.join(save_dir, cls.CONFIG_FNAME)
 
         # 加载N-gram编码器
-        logger.info(f"加载N-gram编码器: {ngram_encoder_path}")
-        ngram_encoder = NgramEncoder.from_file(ngram_encoder_path)
+        #logger.info(f"加载N-gram编码器: {ngram_encoder_path}")
+        #ngram_encoder = NgramEncoder.from_file(ngram_encoder_path)
         logger.info(f"N-gram词汇表大小: {ngram_encoder.get_vocab_size()}")
         logger.info(f"N-gram长度范围: {ngram_encoder._min_ngram_len}-{ngram_encoder._max_ngram_len}")
         
@@ -654,21 +655,18 @@ class MlmDataset(Dataset):
 
         # 加载分词器
         if tokenizer is None:
-            logger.info(f"从{tokenizer_path}加载分词器...")
-            tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
-            logger.info(f"分词器词汇表大小: {len(tokenizer)}")
-        else:
-            logger.info("使用提供的分词器")
+            logger.error("使用提供的分词器")
+            exit(1)
 
         # 加载数据
         logger.info(f"从{data_path}加载数据...")
         data = torch.load(data_path, weights_only=True)
         logger.info(f"加载了{len(data['input_ids'])}个序列，形状为{data['input_ids'].shape}")
 
-        # 加载核心N-gram
-        logger.info(f"从{core_ngram_path}加载核心N-gram...")
-        core_ngrams = _load_core_ngrams(core_ngram_path)
-        logger.info(f"加载了{len(core_ngrams)}个核心N-gram")
+        # # 加载核心N-gram
+        # logger.info(f"从{core_ngram_path}加载核心N-gram...")
+        # core_ngrams = _load_core_ngrams(core_ngram_path)
+        # logger.info(f"加载了{len(core_ngrams)}个核心N-gram")
 
         # 加载配置
         logger.info(f"从{data_config_path}加载配置...")
