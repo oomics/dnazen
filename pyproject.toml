@@ -13,7 +13,7 @@ dependencies = [
 ]
 description = "Tools and resources for DNA sequence analysis with pretraining and finetuning."
 name = "dnazen"
-requires-python = "==3.13" # make it accurate to avoid dependency problems
+requires-python = "==3.13.1" # make it accurate to avoid dependency problems
 version = "0.2.3"
 
 [build-system]
