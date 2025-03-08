@@ -152,3 +152,11 @@ We keep all scripts you might find useful in `scripts` directory. The usage of s
 
 
 
+
+安装正确的 NVIDIA apex 库
+卸载当前安装的 apex，并手动安装 NVIDIA 官方版本：
+bash
+pip uninstall apex
+git clone https://github.com/NVIDIA/apex
+cd apex
+pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation ./

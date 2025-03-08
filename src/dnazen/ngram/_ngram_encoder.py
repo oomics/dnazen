@@ -9,6 +9,8 @@ import json
 import warnings
 from copy import deepcopy
 import pathlib
+import os
+import logging
 
 import torch
 from transformers import AutoTokenizer
@@ -19,6 +21,12 @@ from ._find_ngram import (
     PmiNgramFinderConfig,
     FreqNgramFinderConfig,
 )
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s  - [%(filename)s:%(lineno)d] - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
 
 
 class _NgramEncoderConfig(TypedDict):
@@ -258,7 +266,7 @@ class NgramEncoder:
     @classmethod
     def from_file(cls, path):
         """
-        从文件加载N-gram编码器。
+        从文件加载N-gram编码器配置。
 
         步骤:
         1. 从JSON文件加载配置
@@ -269,7 +277,7 @@ class NgramEncoder:
             path: 配置文件路径
 
         Returns:
-            加载的N-gram编码器实例
+            加载的NgramEncoder实例
         """
         with open(path, "r") as f:
             config: _NgramEncoderConfig = json.load(f)

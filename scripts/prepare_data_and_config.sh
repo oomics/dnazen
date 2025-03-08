@@ -7,6 +7,7 @@ RUN_TOKENIZE_DEV=false
 RUN_PREPARE_DATASET=false
 RUN_PLOTS_ONLY=false
 RUN_COVERAGE_ANALYSIS=false
+RUN_PRETRAIN=false  # 新增：是否运行预训练
 EXPERIMENT_ID=1  # 默认实验ID
 
 # 显示帮助信息
@@ -19,17 +20,20 @@ function show_help {
   echo "  --tokenize-dev         为验证数据生成tokenized数据"
   echo "  --prepare-dataset      准备预训练数据集"
   echo "  --coverage-analysis    分析N-gram在GUE和mspecies数据集上的覆盖率"
-  echo "  --experiment <id>      指定实验ID (1-10)"
+  echo "  --pretrain             执行预训练"
+  echo "  --experiment <id>      指定实验ID (1-6)"
   echo "                         1: GUE + mspecies/dev"
   echo "                         2: 仅 mspecies/dev"
   echo "                         3: 仅 GUE"
+  echo "                         4: 基于实验3，ngram最小频率为5"
+  echo "                         5: 基于实验3，ngram最小频率为1"
+  echo "                         6: 基于实验3，ngram最小频率为100"
   echo "  -h, --help             显示此帮助信息"
   echo ""
   echo "示例:"
   echo "  $0 --train-ngram --experiment 3  # 使用GUE数据集训练N-gram编码器"
   echo "  $0 --all --experiment 1          # 使用GUE+mspecies/dev执行所有步骤"
-  echo "  $0 --plots-only --experiment 2   # 只重新生成实验2的N-gram分布图"
-  echo "  $0 --coverage-analysis --experiment 3  # 分析实验3的N-gram覆盖率"
+  echo "  $0 --pretrain --experiment 3     # 使用实验3的配置执行预训练"
 }
 
 # 解析命令行参数
@@ -40,6 +44,7 @@ while [[ $# -gt 0 ]]; do
       RUN_TOKENIZE_TRAIN=true
       RUN_TOKENIZE_DEV=true
       RUN_PREPARE_DATASET=true
+      RUN_PRETRAIN=true
       shift
       ;;
     --train-ngram)
@@ -62,6 +67,10 @@ while [[ $# -gt 0 ]]; do
       RUN_COVERAGE_ANALYSIS=true
       shift
       ;;
+    --pretrain)
+      RUN_PRETRAIN=true
+      shift
+      ;;
     --experiment)
       EXPERIMENT_ID="$2"
       shift 2
@@ -79,7 +88,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # 如果没有指定任何参数，显示帮助信息
-if [[ "$RUN_NGRAM_ENCODER" == "false" && "$RUN_TOKENIZE_TRAIN" == "false" && "$RUN_TOKENIZE_DEV" == "false" && "$RUN_PREPARE_DATASET" == "false" && "$RUN_PLOTS_ONLY" == "false" && "$RUN_COVERAGE_ANALYSIS" == "false" ]]; then
+if [[ "$RUN_NGRAM_ENCODER" == "false" && "$RUN_TOKENIZE_TRAIN" == "false" && "$RUN_TOKENIZE_DEV" == "false" && "$RUN_PREPARE_DATASET" == "false" && "$RUN_PLOTS_ONLY" == "false" && "$RUN_COVERAGE_ANALYSIS" == "false" && "$RUN_PRETRAIN" == "false" ]]; then
   show_help
   exit 0
 fi
@@ -148,8 +157,6 @@ case "$EXPERIMENT_ID" in
     PARENT_EXPERIMENT="exp3_gue"
     ;;
 esac
-
-
 
 # 创建必要的目录
 #mkdir -p ../data/pretrain/tokenized
@@ -242,8 +249,6 @@ fi
 
 echo "===== 数据解压完成 ====="
 
-
-
 ###################################################################################
 # 3. 实验目录准备
 ###################################################################################
@@ -259,9 +264,6 @@ else
 fi
 mkdir -p ${EXPERIMENT_DIR}
 mkdir -p ${COVERAGE_DIR}
-
-
-
 
 ###################################################################################
 # 4. 数据预处理
@@ -293,7 +295,6 @@ if [[ "$RUN_NGRAM_ENCODER" == "true" ]]; then
   echo "===== N-gram编码器训练完成 ====="
 fi
 
-
 # Step1.1: N-gram编码在训练数据集上的覆盖率验证
 if [[ "$RUN_COVERAGE_ANALYSIS" == "true" ]]; then
   echo "===== Step1.1 开始验证N-gram编码在训练数据集上的覆盖率 ====="
@@ -318,10 +319,6 @@ if [[ "$RUN_COVERAGE_ANALYSIS" == "true" ]]; then
   
   echo "===== N-gram编码覆盖率分析完成 ====="
 fi
-
-
-
-
 
 # Step2: 为训练数据生成tokenized数据
 if [[ "$RUN_TOKENIZE_TRAIN" == "true" ]]; then
@@ -378,22 +375,26 @@ if [[ "$RUN_PREPARE_DATASET" == "true" ]]; then
   echo "===== 预训练数据集准备完成 ====="
 fi
 
-
 ###################################################################################
-# 5. 启动预备训练进程
+# 5. 启动预训练进程
 ###################################################################################
-
-
-
-
-###################################################################################
-# 6. 启动微调训练进程
-###################################################################################
-
-
-###################################################################################
-# 7. 评估测试
-###################################################################################
-
+if [[ "$RUN_PRETRAIN" == "true" ]]; then
+  echo "===== Step5 开始预训练 使用实验${EXPERIMENT_ID}的配置 ====="
+  
+  # 构建预训练命令，传递实验ID和父实验名称
+  PRETRAIN_CMD="bash ./pretrain.sh --experiment ${EXPERIMENT_ID}"
+  if [[ -n "$PARENT_EXPERIMENT" ]]; then
+    PRETRAIN_CMD="${PRETRAIN_CMD} --parent-experiment ${PARENT_EXPERIMENT}"
+  fi
+  
+  echo "执行命令: ${PRETRAIN_CMD}"
+  eval ${PRETRAIN_CMD}
+  
+  if [[ $? -ne 0 ]]; then
+    echo "预训练失败"
+    exit 1
+  fi
+  echo "===== 预训练完成 ====="
+fi
 
 echo "所有选定的任务已完成"

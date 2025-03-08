@@ -23,6 +23,7 @@ import time  # 添加time模块
 from typing import Any, Dict, Tuple, Union
 from argparse import ArgumentParser
 import hashlib
+import math
 
 # 科学计算库
 import numpy as np
@@ -59,6 +60,7 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
 
 
 ###################################################################################
@@ -130,53 +132,48 @@ def preprocess_logits_for_metrics(logits: Union[torch.Tensor, Tuple[torch.Tensor
 
 
 def parse_args() -> argparse.Namespace:
-    """
-    解析命令行参数
-
-    返回:
-        包含所有命令行参数的命名空间对象
-    """
+    """解析命令行参数"""
     parser = ArgumentParser(description="DNA序列预训练模型训练脚本")
-    parser.add_argument(
-        "--resume",
-        type=str,
-        default=None,
-        help="要恢复训练的检查点目录",
-    )
-    parser.add_argument("--train", type=str, required=True, help="训练数据文件路径")
-    parser.add_argument("--dev", type=str, required=True, help="验证数据文件路径")
-    parser.add_argument("--out", type=str, required=True, help="输出目录")
-
-    parser.add_argument("--train_dir", type=str, help="Directory for training data")
-    parser.add_argument("--dev_dir", type=str, help="Directory for validation data")
-
-    parser.add_argument(
-        "--num_ngram_hidden_layer",
-        type=int,
-        default=6,
-        help="Ngram隐藏层数量",
-    )
-    parser.add_argument(
-        "--per-device-train-batch-size", type=int, default=16, help="每个设备的训练批量大小"
-    )
-    parser.add_argument("--grad-accumulation-steps", type=int, default=128 // 4, help="梯度累积步数")
-    parser.add_argument("--lr", type=float, default=1e-4, help="优化器学习率")
-    parser.add_argument("--n-epoch", type=int, default=2, help="训练轮数")
-    parser.add_argument("--seed", type=int, default=42, help="随机种子")
-    parser.add_argument("--cache-dir", type=str, default=None, help="数据缓存目录，不设置则不使用缓存")
-    parser.add_argument("--num-workers", type=int, default=16, help="数据加载器的工作线程数")
-    parser.add_argument("--streaming", action="store_true", help="使用流式数据加载（适用于超大数据集）")
-    parser.add_argument("--buffer-size", type=int, default=10000, help="流式数据加载的缓冲区大小")
-    parser.add_argument("--ngram-encoder-path", type=str, default=None, help="N-gram编码器文件路径")
-    parser.add_argument("--min-ngram-len", type=int, default=2, help="N-gram编码器最小n-gram长度")
-    parser.add_argument("--max-ngram-len", type=int, default=5, help="N-gram编码器最大n-gram长度")
-    parser.add_argument("--max-ngrams-per-seq", type=int, default=1000, help="每个序列的最大n-gram数量")
-    parser.add_argument("--train-ngram", action="store_true", help="是否训练N-gram编码器")
-    parser.add_argument("--min-ngram-freq", type=int, default=5, help="N-gram编码器最小n-gram频率")
-    parser.add_argument("--ngram-method", type=str, default="tf-idf", help="N-gram编码器方法")
-    parser.add_argument(
-        "--max-train-sequences", type=int, default=10000, help="N-gram编码器最大训练序列数量"
-    )
+    
+    # 数据相关参数
+    data_group = parser.add_argument_group("数据参数")
+    data_group.add_argument("--train", type=str, required=True, help="训练数据文件路径")
+    data_group.add_argument("--dev", type=str, required=True, help="验证数据文件路径")
+    data_group.add_argument("--out", type=str, required=True, help="输出目录路径")
+    data_group.add_argument("--train_dir", type=str, help="训练数据目录路径")
+    data_group.add_argument("--dev_dir", type=str, help="验证数据目录路径")
+    data_group.add_argument("--cache-dir", type=str, help="数据缓存目录")
+    
+    # 模型相关参数
+    model_group = parser.add_argument_group("模型参数")
+    model_group.add_argument("--resume", type=str, help="从检查点恢复训练的路径")
+    model_group.add_argument("--num_ngram_hidden_layer", type=int, default=6, help="N-gram隐藏层数量")
+    
+    # N-gram相关参数
+    ngram_group = parser.add_argument_group("N-gram参数")
+    ngram_group.add_argument("--ngram-encoder-path", type=str, help="N-gram编码器路径")
+    ngram_group.add_argument("--train-ngram", action="store_true", help="是否训练N-gram编码器")
+    ngram_group.add_argument("--min-ngram-len", type=int, default=2, help="最小N-gram长度")
+    ngram_group.add_argument("--max-ngram-len", type=int, default=5, help="最大N-gram长度")
+    ngram_group.add_argument("--max-ngrams-per-seq", type=int, default=30, help="每个序列最大N-gram数量")
+    ngram_group.add_argument("--min-ngram-freq", type=int, default=2, help="最小N-gram频率")
+    ngram_group.add_argument("--ngram-method", type=str, choices=["freq", "pmi"], default="pmi", help="N-gram选择方法")
+    ngram_group.add_argument("--max-train-sequences", type=int, default=10000, help="训练N-gram时使用的最大序列数")
+    
+    # 训练相关参数
+    train_group = parser.add_argument_group("训练参数")
+    train_group.add_argument("--per-device-train-batch-size", type=int, default=32, help="每个设备的训练批量大小")
+    train_group.add_argument("--grad-accumulation-steps", type=int, default=1, help="梯度累积步数")
+    train_group.add_argument("--lr", type=float, default=5e-5, help="学习率")
+    train_group.add_argument("--n-epoch", type=int, default=3, help="训练轮数")
+    train_group.add_argument("--seed", type=int, default=42, help="随机种子")
+    train_group.add_argument("--num-workers", type=int, default=4, help="数据加载器工作线程数")
+    
+    # 数据加载模式
+    load_group = parser.add_argument_group("数据加载模式")
+    load_group.add_argument("--streaming", action="store_true", help="是否使用流式数据加载")
+    load_group.add_argument("--buffer-size", type=int, default=10000, help="流式加载的缓冲区大小")
+    
     return parser.parse_args()
 
 
@@ -489,31 +486,80 @@ class StreamingDNADataset(torch.utils.data.IterableDataset):
 
 def main():
     """主函数：执行预训练流程"""
+    start_time = time.time()
+    
+    # 步骤0: 初始化
+    logger.info("="*80)
+    logger.info("DNA序列预训练开始")
+    logger.info("="*80)
+    
     # 解析命令行参数
+    logger.info("步骤1: 解析命令行参数...")
     args = parse_args()
-
+    
     # 设置随机种子
+    logger.info(f"设置随机种子: {args.seed}")
     set_random_seed(args.seed)
-
-    # 提取参数
+    
+    # 提取参数并添加日志记录
+    logger.info("提取命令行参数...")
+    
+    # 数据文件和目录参数
     train_data_file = args.train
     dev_data_file = args.dev
     train_dir = args.train_dir
     dev_dir = args.dev_dir
     output_dir = args.out
+    cache_dir = args.cache_dir
+    
+    # 模型参数
     num_ngram_hidden_layer = args.num_ngram_hidden_layer
     learning_rate = args.lr
-
+    
+    # 检查必要参数
+    logger.info("检查必要参数...")
+    if not os.path.exists(train_data_file):
+        logger.error(f"训练数据文件不存在: {train_data_file}")
+        raise FileNotFoundError(f"训练数据文件不存在: {train_data_file}")
+        
+    if not os.path.exists(dev_data_file):
+        logger.error(f"验证数据文件不存在: {dev_data_file}")
+        raise FileNotFoundError(f"验证数据文件不存在: {dev_data_file}")
+    
+    # 创建输出目录
+    logger.info(f"创建输出目录: {output_dir}")
+    os.makedirs(output_dir, exist_ok=True)
+    
     # 获取并打印文件大小
     train_file_size = os.path.getsize(train_data_file) / (1024 * 1024)  # 转换为MB
     dev_file_size = os.path.getsize(dev_data_file) / (1024 * 1024)  # 转换为MB
-
+    
+    logger.info("-"*50)
+    logger.info("数据文件信息:")
     logger.info(f"训练数据文件: {train_data_file} (大小: {train_file_size:.2f} MB)")
     logger.info(f"验证数据文件: {dev_data_file} (大小: {dev_file_size:.2f} MB)")
     logger.info(f"输出目录: {output_dir}")
-
+    
+    # 打印训练参数
+    logger.info("-"*50)
+    logger.info("训练参数:")
+    logger.info(f"  每设备批量大小: {args.per_device_train_batch_size}")
+    logger.info(f"  梯度累积步数: {args.grad_accumulation_steps}")
+    logger.info(f"  实际批大小: {args.per_device_train_batch_size * args.grad_accumulation_steps}")
+    logger.info(f"  学习率: {learning_rate}")
+    logger.info(f"  训练轮数: {args.n_epoch}")
+    logger.info(f"  随机种子: {args.seed}")
+    logger.info(f"  N-gram隐藏层数: {num_ngram_hidden_layer}")
+    logger.info(f"  数据加载器工作线程数: {args.num_workers}")
+    logger.info(f"  数据加载模式: {('流式加载' if args.streaming else '标准加载')}")
+    
+    if args.streaming:
+        logger.info(f"  流式加载缓冲区大小: {args.buffer_size}")
+    logger.info("-"*50)
+    
     # 1. 加载分词器
-    logger.info("加载分词器...")
+    logger.info("步骤2: 加载分词器...")
+    tokenizer_start_time = time.time()
     try:
         # 尝试直接从Hugging Face加载预训练分词器
         tokenizer = AutoTokenizer.from_pretrained("zhihan1996/DNABERT-2-117M")
@@ -523,7 +569,7 @@ def main():
         # 如果无法从HuggingFace加载，尝试从本地路径加载
         current_dir = os.path.dirname(os.path.abspath(__file__))
         bert_config_path = os.path.join(current_dir, "..", "resources", "DNABERT-2-117M")
-
+        
         if os.path.exists(os.path.join(bert_config_path, "tokenizer.json")):
             logger.info(f"从本地路径加载分词器: {bert_config_path}")
             tokenizer = AutoTokenizer.from_pretrained(bert_config_path)
@@ -534,24 +580,39 @@ def main():
             # 保存到本地路径以便后续使用
             os.makedirs(bert_config_path, exist_ok=True)
             tokenizer.save_pretrained(bert_config_path)
-
+    
+    tokenizer_time = time.time() - tokenizer_start_time
+    logger.info(f"分词器加载完成，用时: {tokenizer_time:.2f}秒")
+    logger.info(f"分词器词汇表大小: {len(tokenizer)}")
+    
     # 2. 加载数据集
-    logger.info("加载训练数据集...")
-    # if args.streaming:
-    #     logger.info("使用流式数据加载...")
-    #     train_dataset = StreamingDNADataset(train_data_file, tokenizer, buffer_size=args.buffer_size)
-    #     val_dataset = StreamingDNADataset(dev_data_file, tokenizer, buffer_size=args.buffer_size)
-    # else:
-    #     train_dataset = load_data_from_file(train_data_file, tokenizer, cache_dir=args.cache_dir)
-    #     val_dataset = load_data_from_file(dev_data_file, tokenizer, cache_dir=args.cache_dir)
-
-    train_dataset = MlmDataset.from_dir(train_dir, check_hash=False)
-    val_dataset = MlmDataset.from_dir(dev_dir, check_hash=False)
-
-    # 2. 加载和配置模型
-    logger.info("配置模型...")
+    logger.info("步骤3: 加载训练数据集...")
+    dataset_start_time = time.time()
+    if args.streaming:
+        logger.info("使用流式数据加载...")
+        train_dataset = StreamingDNADataset(train_data_file, tokenizer, buffer_size=args.buffer_size)
+        logger.info(f"训练数据集初始化完成 (流式)")
+        
+        val_dataset = StreamingDNADataset(dev_data_file, tokenizer, buffer_size=args.buffer_size)
+        logger.info(f"验证数据集初始化完成 (流式)")
+    else:
+        logger.info(f"从文件加载训练数据集: {train_data_file}")
+        train_dataset = load_data_from_file(train_data_file, tokenizer, cache_dir=args.cache_dir)
+        logger.info(f"训练数据集加载完成，大小: {len(train_dataset)} 条序列")
+        
+        logger.info(f"从文件加载验证数据集: {dev_data_file}")
+        val_dataset = load_data_from_file(dev_data_file, tokenizer, cache_dir=args.cache_dir)
+        logger.info(f"验证数据集加载完成，大小: {len(val_dataset)} 条序列")
+    
+    dataset_time = time.time() - dataset_start_time
+    logger.info(f"数据集加载完成，用时: {dataset_time:.2f}秒")
+    
+    # 3. 配置模型
+    logger.info("步骤4: 配置模型...")
+    model_config_start_time = time.time()
     try:
         # 尝试直接从Hugging Face加载预训练模型配置
+        logger.info("尝试从HuggingFace加载DNABERT-2-117M模型配置...")
         bert_config = BertConfig.from_pretrained("zhihan1996/DNABERT-2-117M")
         logger.info("成功从HuggingFace加载zhihan1996/DNABERT-2-117M模型BertConfig配置")
     except Exception as e:
@@ -571,64 +632,32 @@ def main():
         bert_config_path = os.path.join(current_dir, "..", "resources", "DNABERT-2-117M")
         os.makedirs(bert_config_path, exist_ok=True)
         bert_config.save_pretrained(bert_config_path)
-
+    
     # 加载或创建N-gram编码器
+    logger.info("步骤5: 加载N-gram编码器...")
+    ngram_start_time = time.time()
     if args.ngram_encoder_path and os.path.exists(args.ngram_encoder_path):
         logger.info(f"从文件加载N-gram编码器: {args.ngram_encoder_path}")
         ngram_encoder = NgramEncoder.from_file(args.ngram_encoder_path)
         logger.info(f"N-gram词汇表大小: {ngram_encoder.get_vocab_size()}")
     else:
-        logger.info("创建新的N-gram编码器")
-        # 设置N-gram参数
-        ngram_encoder = NgramEncoder(
-            vocab_dict={},  # 初始化为空词典，稍后训练
-            min_ngram_len=args.min_ngram_len,
-            max_ngram_len=args.max_ngram_len,
-            max_ngrams=args.max_ngrams_per_seq,
-        )
-
-        # 如果指定了训练数据，则训练N-gram编码器
-        if args.train_ngram:
-            logger.info("训练N-gram编码器...")
-            # 加载训练数据
-            train_sequences = []
-            with open(args.train, "r") as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith(">"):
-                        train_sequences.append(line)
-
-            # 将序列转换为token ID
-            train_tokens = []
-            for seq in train_sequences[: args.max_train_sequences]:
-                tokens = tokenizer.encode(seq, add_special_tokens=False)
-                train_tokens.append(tokens)
-
-            # 训练N-gram编码器
-            ngram_encoder.train(
-                tokens=train_tokens,
-                min_ngram_freq=args.min_ngram_freq,
-                num_workers=args.num_workers,
-                method=args.ngram_method,
-            )
-
-            # 保存N-gram编码器
-            if args.ngram_encoder_path:
-                logger.info(f"保存N-gram编码器到: {args.ngram_encoder_path}")
-                os.makedirs(os.path.dirname(args.ngram_encoder_path), exist_ok=True)
-                ngram_encoder.save(args.ngram_encoder_path)
-
+        logger.error("N-gram编码器未指定且无法找到默认编码器，请使用--ngram-encoder-path指定路径或使用--train-ngram训练新的编码器")
+        exit(1)
+    
     # 获取N-gram词汇表大小
     ngram_vocab_size = ngram_encoder.get_vocab_size()
     logger.info(f"N-gram词汇表大小: {ngram_vocab_size}")
-
+    ngram_time = time.time() - ngram_start_time
+    logger.info(f"N-gram编码器加载完成，用时: {ngram_time:.2f}秒")
+    
     # 创建ZEN配置（扩展的BERT配置，包含Ngram信息）
+    logger.info("步骤6: 创建ZEN配置...")
     zen_config = ZenConfig(
         num_word_hidden_layers=num_ngram_hidden_layer,
         ngram_vocab_size=ngram_vocab_size,
         **bert_config.to_dict(),
     )
-
+    
     # 打印ZEN配置信息
     logger.info("ZEN配置详情:")
     logger.info(f"  词汇表大小: {zen_config.vocab_size}")
@@ -637,55 +666,142 @@ def main():
     logger.info(f"  隐藏层数量: {zen_config.num_hidden_layers}")
     logger.info(f"  N-gram词汇表大小: {zen_config.ngram_vocab_size}")
     logger.info(f"  N-gram隐藏层数量: {zen_config.num_word_hidden_layers}")
-
+    
     # 加载预训练模型或从检查点恢复
-    if args.resume is None:
-        logger.info("从预训练模型初始化...")
-        try:
-            model = BertForMaskedLM.from_pretrained("zhihan1996/DNABERT-2-117M", config=zen_config)
-            logger.info("成功从HuggingFace下载预训练模型")
-        except Exception as e:
-            logger.warning(f"无法从HuggingFace下载模型: {e}")
-            logger.info("从零开始初始化模型")
-            model = BertForMaskedLM(zen_config)
-    else:
-        logger.info(f"从检查点恢复: {args.resume}")
-        model = BertForMaskedLM.from_pretrained(args.resume, config=zen_config)
+    logger.info("步骤7: 加载预训练模型...")
+    model_load_start_time = time.time()
+    logger.info("从预训练模型初始化...")
+    try:
+        logger.info("尝试从HuggingFace下载预训练模型...")
+        model = BertForMaskedLM.from_pretrained("zhihan1996/DNABERT-2-117M", config=zen_config)
+        logger.info("成功从HuggingFace下载预训练模型")
+    except Exception as e:
+        logger.error(f"无法从HuggingFace下载模型: {e}")
+        exit(1)
+
+    
+    model_load_time = time.time() - model_load_start_time
+    logger.info(f"模型加载完成，用时: {model_load_time:.2f}秒")
+    
+    # 打印模型参数数量
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    logger.info(f"模型总参数数量: {total_params:,}")
+    logger.info(f"可训练参数数量: {trainable_params:,}")
+    logger.info(f"参数比例: {trainable_params/total_params*100:.2f}%")
 
     # 3. 配置优化器
+    logger.info("步骤8: 配置优化器...")
     # 排除LayerNorm参数，因为它们通常不需要权重衰减
-    logger.info("配置优化器...")
     model_params = [param for name, param in model.named_parameters() if ("Norm" not in name)]
     optimizer = torch.optim.AdamW(model_params, learning_rate, weight_decay=0.01)
-
+    logger.info(f"使用AdamW优化器，学习率: {learning_rate}, 权重衰减: 0.01")
+    
     # 4. 配置训练参数
-    logger.info("配置训练参数...")
-    train_args = transformers.training_args.TrainingArguments(
-        output_dir=output_dir,
-        do_train=True,
-        do_eval=True,
-        eval_strategy="steps",  # 按步数进行评估
-        eval_steps=1_000,  # 每1000步进行一次评估
-        save_steps=1_000,  # 每1000步保存一次模型
-        max_grad_norm=1,  # 梯度裁剪，防止梯度爆炸
-        per_device_train_batch_size=args.per_device_train_batch_size,
-        gradient_accumulation_steps=args.grad_accumulation_steps,
-        per_device_eval_batch_size=args.per_device_train_batch_size,  # 评估批量大小与训练相同
-        num_train_epochs=args.n_epoch,
-        logging_steps=100,  # 每100步记录一次日志
-        dataloader_num_workers=args.num_workers,  # 使用命令行参数设置工作线程数
-        dataloader_prefetch_factor=2,  # 数据预取因子
-        warmup_steps=100,  # 学习率预热步数
-        save_safetensors=False,  # 必要的，因为我们有共享张量权重
-        seed=args.seed,  # 随机种子
-        data_seed=args.seed,  # 数据随机种子
-        save_total_limit=10,  # 保存的检查点最大数量
-        load_best_model_at_end=True,  # 训练结束时加载最佳模型
-        metric_for_best_model="eval_loss",  # 用于确定最佳模型的指标
-    )
-
+    logger.info("步骤9: 配置训练参数...")
+    
+    # 处理流式数据集的max_steps问题
+    if args.streaming:
+        # 流式数据集需要明确指定max_steps
+        estimated_train_size = 1_000_000  # 估计的训练样本数
+        max_steps = math.ceil(estimated_train_size / (args.per_device_train_batch_size * args.grad_accumulation_steps) * args.n_epoch)
+        logger.info(f"流式数据集模式: 估计的训练样本数: {estimated_train_size}, 设置max_steps: {max_steps}")
+        
+        train_args = transformers.training_args.TrainingArguments(
+            output_dir=output_dir,
+            do_train=True,
+            do_eval=True,
+            eval_strategy="steps",
+            eval_steps=1_000,
+            save_steps=1_000,
+            max_grad_norm=1,
+            per_device_train_batch_size=args.per_device_train_batch_size,
+            gradient_accumulation_steps=args.grad_accumulation_steps,
+            per_device_eval_batch_size=args.per_device_train_batch_size,
+            max_steps=max_steps,  # 使用计算的最大步数
+            logging_steps=100,
+            dataloader_num_workers=args.num_workers,
+            dataloader_prefetch_factor=2,
+            warmup_steps=100,
+            save_safetensors=False,
+            seed=args.seed,
+            data_seed=args.seed,
+            save_total_limit=10,
+            load_best_model_at_end=True,
+            metric_for_best_model="eval_loss",
+            report_to="tensorboard",
+            logging_dir=os.path.join(output_dir, "logs"),
+            logging_first_step=True,
+        )
+    else:
+        # 标准数据集使用epochs
+        train_args = transformers.training_args.TrainingArguments(
+            output_dir=output_dir,
+            do_train=True,
+            do_eval=True,
+            eval_strategy="steps",
+            eval_steps=1_000,
+            save_steps=1_000,
+            max_grad_norm=1,
+            per_device_train_batch_size=args.per_device_train_batch_size,
+            gradient_accumulation_steps=args.grad_accumulation_steps,
+            per_device_eval_batch_size=args.per_device_train_batch_size,
+            num_train_epochs=args.n_epoch,
+            logging_steps=100,
+            dataloader_num_workers=args.num_workers,
+            dataloader_prefetch_factor=2,
+            warmup_steps=100,
+            save_safetensors=False,
+            seed=args.seed,
+            data_seed=args.seed,
+            save_total_limit=10,
+            load_best_model_at_end=True,
+            metric_for_best_model="eval_loss",
+            report_to="tensorboard",
+            logging_dir=os.path.join(output_dir, "logs"),
+            logging_first_step=True,
+        )
+    
+    # 创建日志目录
+    os.makedirs(os.path.join(output_dir, "logs"), exist_ok=True)
+    logger.info(f"训练日志将保存到: {os.path.join(output_dir, 'logs')}")
+    
     # 5. 创建Trainer实例
-    logger.info("创建Trainer实例...")
+    logger.info("步骤10: 创建Trainer实例...")
+    
+    # 定义回调函数，用于记录训练进度
+    class TrainingProgressCallback(transformers.TrainerCallback):
+        def __init__(self, total_steps):
+            self.total_steps = total_steps
+            self.start_time = time.time()
+            self.last_log_time = time.time()
+            
+        def on_step_end(self, args, state, control, **kwargs):
+            current_time = time.time()
+            # 每100步或者时间间隔超过60秒记录一次进度
+            if state.global_step % 100 == 0 or (current_time - self.last_log_time) > 60:
+                elapsed = current_time - self.start_time
+                progress = state.global_step / self.total_steps * 100
+                steps_per_second = state.global_step / elapsed
+                remaining = (self.total_steps - state.global_step) / steps_per_second if steps_per_second > 0 else 0
+                
+                logger.info(
+                    f"训练进度: {progress:.2f}% ({state.global_step}/{self.total_steps}) "
+                    f"速度: {steps_per_second:.2f}步/秒 "
+                    f"已用时间: {elapsed/60:.2f}分钟 "
+                    f"预计剩余: {remaining/60:.2f}分钟"
+                )
+                self.last_log_time = current_time
+    
+    # 计算总步数用于进度显示
+    if args.streaming:
+        total_steps = max_steps  # 使用之前计算的max_steps
+    else:
+        total_steps = math.ceil(len(train_dataset) / (args.per_device_train_batch_size * args.grad_accumulation_steps) * args.n_epoch)
+    
+    logger.info(f"总训练步数: {total_steps}")
+    progress_callback = TrainingProgressCallback(total_steps)
+    
     trainer = transformers.Trainer(
         model=model,
         args=train_args,
@@ -694,14 +810,26 @@ def main():
         eval_dataset=val_dataset,
         compute_metrics=compute_metrics,  # 评估指标计算函数
         preprocess_logits_for_metrics=preprocess_logits_for_metrics,  # logits预处理函数
+        callbacks=[progress_callback],  # 添加进度回调
     )
-
+    
     # 6. 开始训练
-    logger.info("开始训练...")
+    logger.info("="*80)
+    logger.info("步骤11: 开始训练...")
+    logger.info("="*80)
+    train_start_time = time.time()
     trainer.train()
-
+    train_time = time.time() - train_start_time
+    
     # 7. 训练完成，保存最终模型
-    logger.info(f"训练完成！最终模型已保存到 {output_dir}")
+    logger.info("="*80)
+    logger.info(f"训练完成！总用时: {train_time/60:.2f}分钟")
+    logger.info(f"最终模型已保存到 {output_dir}")
+    
+    # 计算总用时
+    total_time = time.time() - start_time
+    logger.info(f"总运行时间: {total_time/60:.2f}分钟")
+    logger.info("="*80)
 
 
 if __name__ == "__main__":

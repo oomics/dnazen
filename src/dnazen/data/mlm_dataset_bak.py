@@ -178,7 +178,7 @@ class TokenMasker:
         return masked_token_seq, labels
 
 
-class MlmDataset(Dataset):
+class MlmDataset_old(Dataset):
     """
     Dataset for mlm task.
 

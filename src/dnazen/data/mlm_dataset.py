@@ -514,10 +514,109 @@ class MlmDataset(Dataset):
         
         logger.info(f"MLM数据集保存完成: {save_dir}")
 
+    # @classmethod
+    # def from_dir(
+    #     cls,
+    #     save_dir,
+    #     tokenizer=None,
+    #     max_ngrams=20,
+    #     check_hash: bool = False,
+    # ):
+    #     """从保存目录加载MLM数据集。
+
+    #     Args:
+    #         save_dir: 保存目录路径
+    #         tokenizer: 分词器，如果为None则从保存目录加载
+    #         max_seq_len: 最大序列长度
+    #         max_ngrams: 每个序列最多匹配的N-gram数量
+    #         **kwargs: 其他参数
+
+    #     Returns:
+    #         MLMDataset实例
+    #     """
+    #     logger.info(f"正在从目录加载MLM数据集: {save_dir}")
+        
+    #     # 构建文件路径
+    #     ngram_encoder_path = os.path.join(save_dir, cls.NGRAM_ENCODER_FNAME)
+    #     tokenizer_path = os.path.join(save_dir, cls.TOKENIZER_DIR)
+    #     data_path = os.path.join(save_dir, cls.DATA_FNAME)
+    #     core_ngram_path = os.path.join(save_dir, cls.CORE_NGRAMS_FNAME)
+    #     data_config_path = os.path.join(save_dir, cls.CONFIG_FNAME)
+
+    #     # 加载N-gram编码器
+    #     logger.info(f"加载N-gram编码器: {ngram_encoder_path}")
+    #     ngram_encoder = NgramEncoder.from_file(ngram_encoder_path)
+    #     logger.info(f"N-gram词汇表大小: {ngram_encoder.get_vocab_size()}")
+    #     logger.info(f"N-gram长度范围: {ngram_encoder._min_ngram_len}-{ngram_encoder._max_ngram_len}")
+        
+    #     # 设置最大N-gram匹配数
+    #     logger.info(f"设置最大N-gram匹配数: {max_ngrams}")
+    #     ngram_encoder.set_max_ngram_match(max_ngrams)
+
+    #     # 加载分词器
+    #     if tokenizer is None:
+    #         logger.info(f"从{tokenizer_path}加载分词器...")
+    #         tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+    #         logger.info(f"分词器词汇表大小: {len(tokenizer)}")
+    #     else:
+    #         logger.info("使用提供的分词器")
+
+    #     # 加载数据
+    #     logger.info(f"从{data_path}加载数据...")
+    #     data = torch.load(data_path, weights_only=True)
+    #     logger.info(f"加载了{len(data['input_ids'])}个序列，形状为{data['input_ids'].shape}")
+
+    #     # 加载核心N-gram
+    #     logger.info(f"从{core_ngram_path}加载核心N-gram...")
+    #     core_ngrams = _load_core_ngrams(core_ngram_path)
+    #     logger.info(f"加载了{len(core_ngrams)}个核心N-gram")
+
+    #     # 加载配置
+    #     logger.info(f"从{data_config_path}加载配置...")
+    #     with open(data_config_path, "r") as f:
+    #         config = json.load(f)
+    #     logger.info(f"配置信息: {config}")
+        
+    #     # 检查哈希值
+    #     if config["mlm_data_symlink"] is not None and check_hash:
+    #         assert config["mlm_data_hash_val"] is not None
+    #         logger.info(f"检查数据文件{data_path}的MD5哈希值...")
+    #         hash_identical = check_hash_of_file_md5(data_path, config["mlm_data_hash_val"])
+    #         if not hash_identical:
+    #             logger.error(f"哈希值不匹配！原始数据可能已被修改")
+    #             raise ValueError(
+    #                 f"尝试打开文件 {data_path}, ",
+    #                 "但原始数据似乎已被修改。",
+    #             )
+    #         logger.info("哈希值匹配，数据完整性验证通过")
+    #     elif check_hash:
+    #         logger.warning("当不使用符号链接时，无法支持哈希检查")
+
+    #     # 创建数据集实例
+    #     logger.info("创建MLM数据集实例...")
+    #     dataset = cls(
+    #         tokens=data["input_ids"],
+    #         attn_mask=data["attention_mask"],
+    #         tokenizer=tokenizer,
+    #         ngram_encoder=ngram_encoder,
+    #         core_ngrams=core_ngrams,
+    #         whole_ngram_masking=config.get("whole_ngram_masking", False),
+    #         mlm_prob=config["mlm_prob"],
+    #         mlm_data_symlink=config["mlm_data_symlink"],
+    #     )
+    #     logger.info("MLM数据集加载完成!")
+
+    #     return dataset
+
+
     @classmethod
     def from_dir(
-        cls,
         save_dir,
+        ngram_encoder_path: str,
+        tokenizer_path: str,
+        data_path: str,
+        core_ngram_path: str,
+        data_config_path: str,
         tokenizer=None,
         max_ngrams=20,
         check_hash: bool = False,
@@ -537,11 +636,11 @@ class MlmDataset(Dataset):
         logger.info(f"正在从目录加载MLM数据集: {save_dir}")
         
         # 构建文件路径
-        ngram_encoder_path = os.path.join(save_dir, cls.NGRAM_ENCODER_FNAME)
-        tokenizer_path = os.path.join(save_dir, cls.TOKENIZER_DIR)
-        data_path = os.path.join(save_dir, cls.DATA_FNAME)
-        core_ngram_path = os.path.join(save_dir, cls.CORE_NGRAMS_FNAME)
-        data_config_path = os.path.join(save_dir, cls.CONFIG_FNAME)
+        # ngram_encoder_path = os.path.join(save_dir, cls.NGRAM_ENCODER_FNAME)
+        # tokenizer_path = os.path.join(save_dir, cls.TOKENIZER_DIR)
+        # data_path = os.path.join(save_dir, cls.DATA_FNAME)
+        # core_ngram_path = os.path.join(save_dir, cls.CORE_NGRAMS_FNAME)
+        # data_config_path = os.path.join(save_dir, cls.CONFIG_FNAME)
 
         # 加载N-gram编码器
         logger.info(f"加载N-gram编码器: {ngram_encoder_path}")
@@ -607,6 +706,7 @@ class MlmDataset(Dataset):
         logger.info("MLM数据集加载完成!")
 
         return dataset
+    
 
     def __len__(self):
         """返回数据集大小"""

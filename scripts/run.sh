@@ -23,8 +23,8 @@
 #./prepare_data_and_config.sh --tokenize-train   
 #./prepare_data_and_config.sh --tokenize-dev   
 
-./prepare_data_and_config.sh --prepare-dataset   --experiment 1
+#./prepare_data_and_config.sh --prepare-dataset   --experiment 1
 
 
 
-#./pretrain.sh --experiment 1
+./prepare_data_and_config.sh --pretrain  --experiment 1
