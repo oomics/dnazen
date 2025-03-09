@@ -106,7 +106,7 @@ GRAD_ACCU_STEPS=16
 # Ngram注意力层数
 NUM_NGRAM_HIDDEN_LAYER=6
 # 训练轮数
-N_EPOCH=2
+N_EPOCH=0.1
 # 随机种子，确保实验可重复性
 SEED=42
 # 学习率
