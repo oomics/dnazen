@@ -3,6 +3,7 @@ from typing import Any
 import argparse
 import os
 import json
+import logging
 
 import numpy as np
 
@@ -26,6 +27,7 @@ from transformers.models.bert.configuration_bert import BertConfig
 from dnazen.model.bert_models import BertForSequenceClassification
 from dnazen.data.labeled_dataset import LabeledDataset
 from dnazen.ngram import NgramEncoder
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s  - [%(filename)s:%(lineno)d] - %(message)s",
@@ -90,111 +92,195 @@ def parse_args():
 
 
 # --- main ---
-args = parse_args()
+def main():
+    # 步骤1: 解析命令行参数
+    logger.info("步骤1: 解析命令行参数...")
+    args = parse_args()
 
-DATA_PATH = args.data_path
-RESULTS_PATH = args.out
-# MODEL_MAX_LEN = args.model_max_len
-NGRAM_ENCODER_DIR = args.ngram_encoder_dir
-LEARNING_RATE = args.lr
-NUM_TRAIN_EPOCHS = args.num_train_epochs
-CHECKPOINT_DIR = args.checkpoint
+    DATA_PATH = args.data_path
+    RESULTS_PATH = args.out
+    # MODEL_MAX_LEN = args.model_max_len
+    NGRAM_ENCODER_DIR = args.ngram_encoder_dir
+    LEARNING_RATE = args.lr
+    NUM_TRAIN_EPOCHS = args.num_train_epochs
+    CHECKPOINT_DIR = args.checkpoint
+    
+    logger.info(f"数据路径: {DATA_PATH}")
+    logger.info(f"结果输出路径: {RESULTS_PATH}")
+    logger.info(f"N-gram编码器路径: {NGRAM_ENCODER_DIR}")
+    logger.info(f"学习率: {LEARNING_RATE}")
+    logger.info(f"训练轮数: {NUM_TRAIN_EPOCHS}")
+    logger.info(f"模型检查点路径: {CHECKPOINT_DIR}")
+    
+    # 步骤2: 准备输出目录
+    logger.info("步骤2: 准备输出目录...")
+    if not os.path.exists(RESULTS_PATH):
+        logger.info(f"创建输出目录: {RESULTS_PATH}")
+        os.makedirs(RESULTS_PATH)
+    else:
+        logger.info(f"输出目录已存在: {RESULTS_PATH}")
+    
+    # 步骤3: 加载分词器
+    logger.info("步骤3: 加载分词器...")
+    tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
+        "zhihan1996/DNABERT-2-117M",
+        # model_max_length=MODEL_MAX_LEN,
+        padding_side="right",
+        padding="longest",
+        use_fast=True,
+        trust_remote_code=True,
+    )  # type: ignore
+    logger.info("分词器加载完成")
+    
+    # 步骤4: 加载n-gram编码器
+    logger.info(f"步骤4: 加载n-gram编码器，路径: {NGRAM_ENCODER_DIR}")
+    ngram_encoder = NgramEncoder.from_file(NGRAM_ENCODER_DIR)
+    logger.info(f"n-gram词汇表大小: {ngram_encoder.get_vocab_size()}")
 
-tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
-    "zhihan1996/DNABERT-2-117M",
-    # model_max_length=MODEL_MAX_LEN,
-    padding_side="right",
-    padding="longest",
-    use_fast=True,
-    trust_remote_code=True,
-)  # type: ignore
-ngram_encoder = NgramEncoder.from_file(NGRAM_ENCODER_DIR)
-print("[debug] number of ngrams:", ngram_encoder.get_vocab_size())
 
-train_dataset = LabeledDataset(f"{DATA_PATH}/train.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
+    # 步骤5: 加载数据集
+    logger.info("步骤5: 加载训练、验证和测试数据集...")
+    
+    logger.info(f"加载训练集: {DATA_PATH}/train.csv")
+    train_dataset = LabeledDataset(f"{DATA_PATH}/train.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
+    logger.info(f"训练集大小: {len(train_dataset)}个样本")
 
-test_dataset = LabeledDataset(f"{DATA_PATH}/test.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
+    logger.info(f"加载测试集: {DATA_PATH}/test.csv")
+    test_dataset = LabeledDataset(f"{DATA_PATH}/test.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
+    logger.info(f"测试集大小: {len(test_dataset)}个样本")
 
-val_dataset = LabeledDataset(f"{DATA_PATH}/dev.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
+    logger.info(f"加载验证集: {DATA_PATH}/dev.csv")
+    val_dataset = LabeledDataset(f"{DATA_PATH}/dev.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
+    logger.info(f"验证集大小: {len(val_dataset)}个样本")
 
-config = BertConfig.from_pretrained(CHECKPOINT_DIR)
-setattr(config, "ngram_vocab_size", ngram_encoder.get_vocab_size())
-setattr(config, "num_word_hidden_layers", 6)
 
-model = BertForSequenceClassification.from_pretrained(CHECKPOINT_DIR, config=config)
 
-# Filter out all weights in model state dict that have name `ngram_layer`
-learning_rate = 1e-5
+    # 步骤6: 加载模型配置和模型
+    logger.info(f"步骤6: 从检查点加载模型，路径: {CHECKPOINT_DIR}")
+    logger.info("加载模型配置...")
+    config = BertConfig.from_pretrained(CHECKPOINT_DIR)
+    setattr(config, "ngram_vocab_size", ngram_encoder.get_vocab_size())
+    setattr(config, "num_word_hidden_layers", 6)
+    logger.info(f"模型配置: num_labels={config.num_labels}, hidden_size={config.hidden_size}")
 
-ngram_layer_params = [
-    param for name, param in model.named_parameters() if ("ngram_layer" in name and "Norm" not in name)
-]
-print("[debug] len of ngram layers=", len(ngram_layer_params))
-optimizer = torch.optim.AdamW(
-    model.parameters(),
-    learning_rate,
-    # momentum=args.momentum,
-    weight_decay=0.01,
-)
+    logger.info("加载预训练模型...")
+    model = BertForSequenceClassification.from_pretrained(CHECKPOINT_DIR, config=config)
+    logger.info("模型加载完成")
 
-train_args = transformers.training_args.TrainingArguments(
-    output_dir=RESULTS_PATH,
-    do_train=True,
-    do_eval=True,
-    eval_strategy="steps",
-    eval_steps=500,
-    max_grad_norm=1,
-    per_device_train_batch_size=args.per_device_train_batch_size,
-    per_device_eval_batch_size=args.per_device_train_batch_size,
-    learning_rate=LEARNING_RATE,
-    bf16=args.fp16,
-    num_train_epochs=NUM_TRAIN_EPOCHS,
-    dataloader_num_workers=8,
-    dataloader_prefetch_factor=8,
-    logging_steps=200,
-    seed=args.seed,
-    data_seed=args.seed,
-    save_total_limit=2,
-    load_best_model_at_end=True,
-    metric_for_best_model="eval_matthews_correlation",
-    greater_is_better=True,
-)
 
-trainer = transformers.Trainer(
-    model=model,
-    args=train_args,
-    optimizers=(optimizer, None),
-    train_dataset=train_dataset,
-    eval_dataset=val_dataset,
-    compute_metrics=compute_metrics,
-    preprocess_logits_for_metrics=preprocess_logits_for_metrics,
-)
 
-trainer.train()
+    # 步骤7: 设置优化器
+    logger.info("步骤7: 配置优化器...")
+    learning_rate = 1e-5
+    logger.info(f"使用AdamW优化器，学习率={learning_rate}，权重衰减=0.01")
 
-results = trainer.evaluate(test_dataset)
-with open(os.path.join(RESULTS_PATH, "eval_results.json"), "w") as f:
-    json.dump(results, f)
+    ngram_layer_params = [
+        param for name, param in model.named_parameters() if ("ngram_layer" in name and "Norm" not in name)
+    ]
+    logger.info(f"n-gram层参数数量: {len(ngram_layer_params)}")
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        learning_rate,
+        # momentum=args.momentum,
+        weight_decay=0.01,
+    )
 
-test_preds = trainer.predict(test_dataset).predictions
-print(test_preds)
+    # 步骤8: 设置训练参数
+    logger.info("步骤8: 配置训练参数...")
+    train_args = transformers.training_args.TrainingArguments(
+        output_dir=RESULTS_PATH,
+        do_train=True,
+        do_eval=True,
+        eval_strategy="steps",
+        eval_steps=500,
+        max_grad_norm=1,
+        per_device_train_batch_size=args.per_device_train_batch_size,
+        per_device_eval_batch_size=args.per_device_train_batch_size,
+        learning_rate=LEARNING_RATE,
+        bf16=args.fp16,
+        num_train_epochs=NUM_TRAIN_EPOCHS,
+        dataloader_num_workers=8,
+        dataloader_prefetch_factor=8,
+        logging_steps=200,
+        seed=args.seed,
+        data_seed=args.seed,
+        save_total_limit=2,
+        load_best_model_at_end=True,
+        metric_for_best_model="eval_matthews_correlation",
+        greater_is_better=True,
+    )
+    logger.info(f"训练批次大小: {args.per_device_train_batch_size}")
+    logger.info(f"评估批次大小: {args.per_device_train_batch_size}")
+    logger.info(f"训练轮数: {NUM_TRAIN_EPOCHS}")
+    logger.info(f"随机种子: {args.seed}")
 
-# extract the test data and prediction results
-results = {
-    "text": [],
-    "actual_label": [],
-    "prediction_label": [],
-}
-for i in range(len(test_dataset)):
-    data = test_dataset[i]
+    # 步骤9: 初始化Trainer
+    logger.info("步骤9: 初始化Trainer...")
+    trainer = transformers.Trainer(
+        model=model,
+        args=train_args,
+        optimizers=(optimizer, None),
+        train_dataset=train_dataset,
+        eval_dataset=val_dataset,
+        compute_metrics=compute_metrics,
+        preprocess_logits_for_metrics=preprocess_logits_for_metrics,
+    )
+    logger.info("Trainer初始化完成")
 
-    input_ids = data["input_ids"]
-    actual_label = data["labels"]
-    texts = tokenizer.decode(input_ids).replace("[CLS] ", "").replace(" [SEP]", "").replace(" [PAD]", "")
+    # 步骤10: 开始训练
+    logger.info("步骤10: 开始训练...")
+    logger.info(f"训练数据集大小: {len(train_dataset)}个样本")
+    logger.info(f"验证数据集大小: {len(val_dataset)}个样本")
+    trainer.train()
+    logger.info("训练完成")
 
-    results["text"].append(texts)
-    results["actual_label"].append(actual_label)
-    results["prediction_label"].append(test_preds[i])
+    # 步骤11: 评估模型
+    logger.info("步骤11: 在测试集上评估模型...")
+    results = trainer.evaluate(test_dataset)
+    logger.info(f"测试集评估结果:")
+    for metric_name, metric_value in results.items():
+        logger.info(f"  {metric_name}: {metric_value:.4f}")
+    
+    # 保存评估结果
+    results_path = os.path.join(RESULTS_PATH, "eval_results.json")
+    logger.info(f"保存评估结果到: {results_path}")
+    with open(results_path, "w") as f:
+        json.dump(results, f)
 
-df = pd.DataFrame(results)
-df.to_csv(os.path.join(RESULTS_PATH, "pred_results.csv"), mode="w")
+    # 步骤12: 在测试集上进行预测
+    logger.info("步骤12: 在测试集上进行预测...")
+    logger.info(f"测试数据集大小: {len(test_dataset)}个样本")
+    test_output = trainer.predict(test_dataset)
+    test_preds = test_output.predictions
+    logger.info(f"预测完成，获得{len(test_preds)}个预测结果")
+
+    # 步骤13: 整理预测结果
+    logger.info("步骤13: 整理预测结果...")
+    results = {
+        "text": [],
+        "actual_label": [],
+        "prediction_label": [],
+    }
+    for i in range(len(test_dataset)):
+        data = test_dataset[i]
+
+        input_ids = data["input_ids"]
+        actual_label = data["labels"]
+        texts = tokenizer.decode(input_ids).replace("[CLS] ", "").replace(" [SEP]", "").replace(" [PAD]", "")
+
+        results["text"].append(texts)
+        results["actual_label"].append(actual_label)
+        results["prediction_label"].append(test_preds[i])
+
+    # 步骤14: 保存预测结果
+    pred_results_path = os.path.join(RESULTS_PATH, "pred_results.csv")
+    logger.info(f"保存预测结果到: {pred_results_path}")
+    df = pd.DataFrame(results)
+    df.to_csv(pred_results_path, mode="w")
+    logger.info(f"已保存{len(df)}行预测结果")
+    
+    logger.info("所有步骤完成")
+
+
+if __name__ == "__main__":
+    main()

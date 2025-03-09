@@ -2,14 +2,19 @@
 ###################################################################################
 # 脚本名称: finetune.sh
 # 描述: DNA序列微调训练模型训练启动脚本
-# 用法: bash pretrain.sh [--experiment <id>] [--parent-experiment <name>]
+# 备注: bash finetune.sh --experiment 1 emp H3K4me3
+# 用法: bash finetune.sh [--experiment <id>] [--parent-experiment <name>] <任务类型> <子任务>
 # 作者: DnaZen Team
 ###################################################################################
 
 # 解析命令行参数
 EXPERIMENT_ID=""
 PARENT_EXPERIMENT=""
+TASK_TYPE=""
+SUB_TASK=""
+GUE_DIR="../data/GUE"
 
+# 首先处理选项参数
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --experiment)
@@ -20,10 +25,25 @@ while [[ $# -gt 0 ]]; do
       PARENT_EXPERIMENT="$2"
       shift 2
       ;;
-    *)
+    -*)
       echo "未知选项: $1"
-      echo "用法: bash pretrain.sh [--experiment <id>] [--parent-experiment <name>]"
+      echo "用法: bash finetune.sh [--experiment <id>] [--parent-experiment <name>] <任务类型> <子任务>"
+      echo "任务类型: emp, pd, tf, mouse"
+      echo "例如: bash finetune.sh --experiment 1 emp H3K4me3"
       exit 1
+      ;;
+    *)
+      # 如果不是选项参数，则认为是位置参数
+      if [ -z "$TASK_TYPE" ]; then
+        TASK_TYPE="$1"
+      elif [ -z "$SUB_TASK" ]; then
+        SUB_TASK="$1"
+      else
+        echo "错误: 提供了过多的参数"
+        echo "用法: bash finetune.sh [--experiment <id>] [--parent-experiment <name>] <任务类型> <子任务>"
+        exit 1
+      fi
+      shift
       ;;
   esac
 done
@@ -74,6 +94,15 @@ fi
 echo "使用实验: $EXPERIMENT_NAME (ID: $EXPERIMENT_ID)"
 echo "实验目录: $EXPERIMENT_DIR"
 
+# 检查是否提供了任务类型和子任务
+if [ -z "$TASK_TYPE" ] || [ -z "$SUB_TASK" ]; then
+  echo "错误: 缺少必要的参数"
+  echo "用法: bash finetune.sh [--experiment <id>] [--parent-experiment <name>] <任务类型> <子任务>"
+  echo "任务类型: emp, pd, tf, mouse"
+  echo "例如: bash finetune.sh --experiment 1 emp H3K4me3"
+  exit 1
+fi
+
 ###################################################################################
 # 1. 数据和输出路径配置
 ###################################################################################
@@ -85,7 +114,9 @@ TRAIN_DIR_FILE="$DATA_DIR/train/train.pt"
 # 验证数据目录文件
 DEV_DIR_FILE="$DATA_DIR/dev/dev.pt"
 # 模型保存输出目录
-OUTPUT_DIR="$EXPERIMENT_DIR/output"
+#OUTPUT_DIR="$EXPERIMENT_DIR/output"
+OUTPUT_DIR="../data/output"
+
 # 数据缓存目录
 CACHE_DIR="$EXPERIMENT_DIR/cache"
 # N-gram编码器路径
@@ -95,10 +126,14 @@ NGRAM_ENCODER_PATH="$EXPERIMENT_DIR/ngram_encoder.json"
 TRAIN_DIR=$(dirname "$TRAIN_DIR_FILE")
 DEV_DIR=$(dirname "$DEV_DIR_FILE")
 
+FINETUNE_DATA_DIR="$TRAIN_DIR/finetune"
+FINETUNE_OUT_DIR="$TRAIN_DIR/finetune/output"
+FINETUNE_CHECKPOINT_STEP=1000
+
 ###################################################################################
 # 2. 训练参数配置
 ###################################################################################
-# GPU每批次样本数
+
 PER_DEVICE_TRAIN_BATCH_SIZE=8
 PER_DEVICE_EVAL_BATCH_SIZE=32
 # 梯度累积步数
@@ -119,10 +154,11 @@ TASK_EPOCHS["mouse"]=6
 
 # 任务类型及其对应的数据路径
 declare -A TASK_PATHS
-TASK_PATHS["emp"]="GUE/EMP"
-TASK_PATHS["pd"]="GUE/prom"
-TASK_PATHS["tf"]="GUE/tf"
-TASK_PATHS["mouse"]="GUE/mouse"
+TASK_PATHS["emp"]="EMP"
+TASK_PATHS["pd"]="prom"
+TASK_PATHS["tf"]="tf"
+TASK_PATHS["mouse"]="mouse"
+
 
 ###################################################################################
 # 3. 目录准备
@@ -142,20 +178,19 @@ fi
 ###################################################################################
 # 4. 输出训练参数信息
 ###################################################################################
-echo "========================= DNA序列预训练开始 ========================="
-echo "实验ID: $EXPERIMENT_ID"
-echo "实验名称: $EXPERIMENT_NAME"
-if [[ -n "$PARENT_EXPERIMENT" ]]; then
-  echo "父实验: $PARENT_EXPERIMENT"
-fi
+echo "========================= DNA序列微调训练开始 ========================="
+echo "实验ID EXPERIMENT_ID: $EXPERIMENT_ID"
+echo "实验名称 EXPERIMENT_NAME: $EXPERIMENT_NAME"
+echo "任务类型 TASK_TYPE: $TASK_TYPE"
+echo "子任务 SUB_TASK: $SUB_TASK"
 echo "训练参数:"
 echo "----------------------------------------"
-echo "训练数据文件: $TRAIN_DIR_FILE"
-echo "验证数据文件: $DEV_DIR_FILE"
-echo "输出目录: $OUTPUT_DIR"
-echo "N-gram编码器路径: $NGRAM_ENCODER_PATH"
+echo "训练数据文件 TRAIN_DIR_FILE: $TRAIN_DIR_FILE"
+echo "验证数据文件 DEV_DIR_FILE: $DEV_DIR_FILE"
+echo "输出目录 OUTPUT_DIR: $OUTPUT_DIR"
+echo "N-gram编码器路径 NGRAM_ENCODER_PATH: $NGRAM_ENCODER_PATH"
 if [ "$USE_STREAMING" = false ]; then
-  echo "缓存目录: $CACHE_DIR"
+  echo "缓存目录 CACHE_DIR: $CACHE_DIR"
 fi
 
 echo "=================================================================="
@@ -183,30 +218,19 @@ if [ -z "$FINETUNE_CHECKPOINT_STEP" ]; then
   exit 1
 fi
 
-if [ -z "$DNAZEN_PRETRAIN_DATA_DIR" ]; then
-  echo "错误: 环境变量DNAZEN_PRETRAIN_DATA_DIR未设置"
+if [ -z "$EXPERIMENT_DIR" ]; then
+  echo "错误: 环境变量EXPERIMENT_DIR未设置"
   exit 1
 fi
 
-if [ -z "$MAIN_NGRAM_ENCODER_DIR" ]; then
-  echo "错误: 环境变量MAIN_NGRAM_ENCODER_DIR未设置"
+if [ -z "$NGRAM_ENCODER_PATH" ]; then
+  echo "错误: 环境变量NGRAM_ENCODER_PATH未设置"
   exit 1
 fi
 
 # 预训练检查点路径
-PRETRAIN_CHECKPOINT="${DNAZEN_PRETRAIN_DATA_DIR}/output/checkpoint-${FINETUNE_CHECKPOINT_STEP}"
-
-# 获取任务类型和子任务
-TASK_TYPE=$1
-SUB_TASK=$2
-
-if [ -z "$TASK_TYPE" ] || [ -z "$SUB_TASK" ]; then
-  echo "用法: bash finetune.sh <任务类型> <子任务>"
-  echo "任务类型: emp, pd, tf, mouse"
-  echo "例如: bash finetune.sh emp H3K4me3"
-  exit 1
-fi
-
+#PRETRAIN_CHECKPOINT="${EXPERIMENT_DIR}/output/checkpoint-${FINETUNE_CHECKPOINT_STEP}"
+PRETRAIN_CHECKPOINT="${OUTPUT_DIR}/checkpoint-${FINETUNE_CHECKPOINT_STEP}"
 # 检查任务类型是否有效
 if [[ ! "${!TASK_PATHS[@]}" =~ "$TASK_TYPE" ]]; then
   echo "错误: 无效的任务类型: $TASK_TYPE"
@@ -215,26 +239,27 @@ if [[ ! "${!TASK_PATHS[@]}" =~ "$TASK_TYPE" ]]; then
 fi
 
 # 设置数据路径和输出路径
-DATA_PATH="${FINETUNE_DATA_DIR}/${TASK_PATHS[$TASK_TYPE]}/${SUB_TASK}"
-OUTPUT_PATH="${FINETUNE_OUT_DIR}/${TASK_TYPE}/${SUB_TASK}"
+DATA_PATH="${GUE_DIR}/${TASK_PATHS[$TASK_TYPE]}/${SUB_TASK}"
+TASK_OUTPUT_PATH="${FINETUNE_OUT_DIR}/${TASK_TYPE}/${SUB_TASK}"
 
 # 设置训练轮数
 NUM_TRAIN_EPOCHS=${TASK_EPOCHS[$TASK_TYPE]}
 
-echo "任务类型: $TASK_TYPE"
-echo "子任务: $SUB_TASK"
-echo "数据路径: $DATA_PATH"
-echo "输出路径: $OUTPUT_PATH"
-echo "训练轮数: $NUM_TRAIN_EPOCHS"
+echo "任务类型 TASK_TYPE: $TASK_TYPE"
+echo "任务类型 TASK_PATHS: ${TASK_PATHS[$TASK_TYPE]}"
+echo "子任务 SUB_TASK: $SUB_TASK"
+echo "数据路径 DATA_PATH: $DATA_PATH"
+echo "训练任务输出路径 TASK_OUTPUT_PATH: $TASK_OUTPUT_PATH"
+echo "训练轮数 NUM_TRAIN_EPOCHS: $NUM_TRAIN_EPOCHS"
 
 # 创建输出目录
-mkdir -p "$OUTPUT_PATH"
+mkdir -p "$TASK_OUTPUT_PATH"
 
 # 构建训练命令
-CMD="python run_finetune.py \
+CMD="python ../src/train/run_finetune.py \
   --data_path $DATA_PATH \
   --checkpoint $PRETRAIN_CHECKPOINT \
-  --ngram_encoder_dir $MAIN_NGRAM_ENCODER_DIR \
+  --ngram_encoder_dir $NGRAM_ENCODER_PATH \
   --per_device_train_batch_size $PER_DEVICE_TRAIN_BATCH_SIZE \
   --per_device_eval_batch_size $PER_DEVICE_EVAL_BATCH_SIZE \
   --gradient_accumulation_steps $GRADIENT_ACCUMULATION_STEPS \
@@ -247,7 +272,7 @@ if [ "$USE_FP16" = true ]; then
 fi
 
 # 添加输出目录
-CMD="$CMD --out $OUTPUT_PATH"
+CMD="$CMD --out $TASK_OUTPUT_PATH"
 
 # 输出完整命令
 echo "执行命令: $CMD"
@@ -259,7 +284,7 @@ eval $CMD
 if [ $? -eq 0 ]; then
   echo "=================================================================="
   echo "微调训练成功完成！"
-  echo "模型输出目录: $OUTPUT_PATH"
+  echo "模型输出目录: $TASK_OUTPUT_PATH"
   echo "=================================================================="
 else
   echo "=================================================================="
