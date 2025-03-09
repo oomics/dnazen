@@ -7,7 +7,8 @@ RUN_TOKENIZE_DEV=false
 RUN_PREPARE_DATASET=false
 RUN_PLOTS_ONLY=false
 RUN_COVERAGE_ANALYSIS=false
-RUN_PRETRAIN=false  # 新增：是否运行预训练
+RUN_PRETRAIN=false  # 是否运行预训练
+RUN_FINE_TUNE=false  # 新增：是否运行微调
 EXPERIMENT_ID=1  # 默认实验ID
 
 # 显示帮助信息
@@ -21,6 +22,7 @@ function show_help {
   echo "  --prepare-dataset      准备预训练数据集"
   echo "  --coverage-analysis    分析N-gram在GUE和mspecies数据集上的覆盖率"
   echo "  --pretrain             执行预训练"
+  echo "  --fine-tune            执行微调训练"
   echo "  --experiment <id>      指定实验ID (1-6)"
   echo "                         1: GUE + mspecies/dev"
   echo "                         2: 仅 mspecies/dev"
@@ -34,6 +36,7 @@ function show_help {
   echo "  $0 --train-ngram --experiment 3  # 使用GUE数据集训练N-gram编码器"
   echo "  $0 --all --experiment 1          # 使用GUE+mspecies/dev执行所有步骤"
   echo "  $0 --pretrain --experiment 3     # 使用实验3的配置执行预训练"
+  echo "  $0 --fine-tune --experiment 3    # 使用实验3的配置执行微调训练"
 }
 
 # 解析命令行参数
@@ -45,6 +48,7 @@ while [[ $# -gt 0 ]]; do
       RUN_TOKENIZE_DEV=true
       RUN_PREPARE_DATASET=true
       RUN_PRETRAIN=true
+      RUN_FINE_TUNE=true
       shift
       ;;
     --train-ngram)
@@ -71,6 +75,10 @@ while [[ $# -gt 0 ]]; do
       RUN_PRETRAIN=true
       shift
       ;;
+    --fine-tune)
+      RUN_FINE_TUNE=true
+      shift
+      ;;
     --experiment)
       EXPERIMENT_ID="$2"
       shift 2
@@ -88,7 +96,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # 如果没有指定任何参数，显示帮助信息
-if [[ "$RUN_NGRAM_ENCODER" == "false" && "$RUN_TOKENIZE_TRAIN" == "false" && "$RUN_TOKENIZE_DEV" == "false" && "$RUN_PREPARE_DATASET" == "false" && "$RUN_PLOTS_ONLY" == "false" && "$RUN_COVERAGE_ANALYSIS" == "false" && "$RUN_PRETRAIN" == "false" ]]; then
+if [[ "$RUN_NGRAM_ENCODER" == "false" && "$RUN_TOKENIZE_TRAIN" == "false" && "$RUN_TOKENIZE_DEV" == "false" && "$RUN_PREPARE_DATASET" == "false" && "$RUN_PLOTS_ONLY" == "false" && "$RUN_COVERAGE_ANALYSIS" == "false" && "$RUN_PRETRAIN" == "false" && "$RUN_FINE_TUNE" == "false" ]]; then
   show_help
   exit 0
 fi
@@ -113,7 +121,7 @@ fi
 case "$EXPERIMENT_ID" in
   1)
     EXPERIMENT_NAME="exp1_gue_mspecies"
-    EXPERIMENT_DESC="GUE数据集+mspecies/dev数据集抽取ngram"
+    EXPERIMENT_DESC="GUE数据集+mspecies/dev数据集抽取ngram，使用mspecies/train数据进行pretrain"
     USE_GUE="--gue-dir ../data/GUE"
     USE_INPUT="--input ../data/pretrain/dev/dev.txt"
     MIN_FREQ_FILTER=5    
@@ -133,11 +141,10 @@ case "$EXPERIMENT_ID" in
     MIN_FREQ_FILTER=5
     ;;
   4)
-    EXPERIMENT_NAME="exp3_gue_ngram_ref_5"
-    EXPERIMENT_DESC="基于实验3数据进行分析，仅GUE数据集抽取ngram，分析时ngram最小频率为5"
+    EXPERIMENT_NAME="exp4_ms_dev_pretrain"
+    EXPERIMENT_DESC="GUE数据集+mspecies/dev数据集抽取ngram，仅mspecies/dev数据进行pretrain"
     USE_GUE="--gue-dir ../data/GUE"
-    USE_INPUT=""
-    MIN_FREQ_FILTER=5
+    USE_INPUT="--input ../data/pretrain/dev/dev.txt"
     PARENT_EXPERIMENT="exp3_gue"
     ;;
   5)
@@ -156,6 +163,14 @@ case "$EXPERIMENT_ID" in
     MIN_FREQ_FILTER=100
     PARENT_EXPERIMENT="exp3_gue"
     ;;
+
+  7)
+    EXPERIMENT_NAME="exp7_gue_ngram_ref_5"
+    EXPERIMENT_DESC="基于实验3数据进行分析，仅GUE数据集抽取ngram，分析时ngram最小频率为5"
+    USE_GUE="--gue-dir ../data/GUE"
+    USE_INPUT=""
+    MIN_FREQ_FILTER=5
+    PARENT_EXPERIMENT="exp3_gue"
 esac
 
 # 创建必要的目录
@@ -389,6 +404,28 @@ if [[ "$RUN_PRETRAIN" == "true" ]]; then
   
   echo "执行命令: ${PRETRAIN_CMD}"
   eval ${PRETRAIN_CMD}
+  
+  if [[ $? -ne 0 ]]; then
+    echo "预训练失败"
+    exit 1
+  fi
+  echo "===== 预训练完成 ====="
+fi
+
+###################################################################################
+# 6. 启动微调训练进程
+###################################################################################
+if [[ "$RUN_FINE_TUNE" == "true" ]]; then
+  echo "===== Step6 开始微调训练 使用实验${EXPERIMENT_ID}的配置 ====="
+  
+  # 构建预训练命令，传递实验ID和父实验名称
+  FINE_TUNE_CMD="bash ./finetune.sh --experiment ${EXPERIMENT_ID}"
+  if [[ -n "$PARENT_EXPERIMENT" ]]; then
+    FINE_TUNE_CMD="${FINE_TUNE_CMD} --parent-experiment ${PARENT_EXPERIMENT}"
+  fi
+  
+  echo "执行命令: ${FINE_TUNE_CMD}"
+  eval ${FINE_TUNE_CMD}
   
   if [[ $? -ne 0 ]]; then
     echo "预训练失败"
