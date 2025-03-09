@@ -5,68 +5,75 @@ define check_defined
 fi
 endef
 
-lr=3e-5
-PER_DEVICE_TRAIN_BATCH_SIZE=8
-PER_DEVICE_EVAL_BATCH_SIZE=32
+# lr=3e-5
+FINETUNE_LEARNING_RATE?=3e-5
+PER_DEVICE_TRAIN_BATCH_SIZE?=8
+PER_DEVICE_EVAL_BATCH_SIZE?=8
+DATA_DIR?=/home/zeq/dnazen/data
 
+MAIN_NGRAM_ENCODER_DIR?=$(DATA_DIR)/pretrain/exp1_gue_mspecies/ngram_encoder.json
+FINETUNE_OUT_DIR?=$(DATA_DIR)/pretrain/exp1_gue_mspecies/output-finetune
+FINETUNE_CHECKPOINT_STEP?=2000
 
-# FINETUNE_DATA_DIR = /data1/peter/GUE
-PRETRAIN_CHECKPOINT=$(DNAZEN_PRETRAIN_DATA_DIR)/output/checkpoint-$(FINETUNE_CHECKPOINT_STEP)
+FINETUNE_DATA_DIR?=$(DATA_DIR)
+PRETRAIN_CHECKPOINT=$(DATA_DIR)/pretrain/exp1_gue_mspecies/output/checkpoint-$(FINETUNE_CHECKPOINT_STEP)
 check_defined_all:
-	$(call check_defined,FINETUNE_DATA_DIR)
-	$(call check_defined,FINETUNE_OUT_DIR)
-	$(call check_defined,FINETUNE_CHECKPOINT_STEP)
-	$(call check_defined,MAIN_NGRAM_ENCODER_DIR)
+	@echo "Warning: this task is deprecated" 
+# $(call check_defined,FINETUNE_DATA_DIR)
+# $(call check_defined,FINETUNE_OUT_DIR)
+# $(call check_defined,FINETUNE_CHECKPOINT_STEP)
+# $(call check_defined,MAIN_NGRAM_ENCODER_DIR)
 
+DNAZEN_SCRIPT_DIR?=/home/zeq/dnazen/src/train
 
 $(FINETUNE_OUT_DIR)/emp/%:
-	python run_finetune.py \
+	python $(DNAZEN_SCRIPT_DIR)/run_finetune.py \
 		--data_path $(FINETUNE_DATA_DIR)/GUE/EMP/$* \
 		--checkpoint $(PRETRAIN_CHECKPOINT) \
 		--ngram_encoder_dir $(MAIN_NGRAM_ENCODER_DIR) \
 		--per_device_train_batch_size $(PER_DEVICE_TRAIN_BATCH_SIZE) \
 		--per_device_eval_batch_size $(PER_DEVICE_EVAL_BATCH_SIZE) \
 		--gradient_accumulation_steps 1 \
-		--lr $(lr) \
+		--lr $(FINETUNE_LEARNING_RATE) \
 		--num_train_epochs 5 \
 		--fp16 \
 		--out $@
 
 $(FINETUNE_OUT_DIR)/pd/%:
-		python run_finetune.py \
+		python $(DNAZEN_SCRIPT_DIR)/run_finetune.py \
 		--data_path $(FINETUNE_DATA_DIR)/GUE/prom/$* \
 		--checkpoint $(PRETRAIN_CHECKPOINT) \
 		--ngram_encoder_dir $(MAIN_NGRAM_ENCODER_DIR) \
 		--per_device_train_batch_size $(PER_DEVICE_TRAIN_BATCH_SIZE) \
 		--per_device_eval_batch_size $(PER_DEVICE_EVAL_BATCH_SIZE) \
 		--gradient_accumulation_steps 1 \
-		--lr $(lr) \
+		--lr $(FINETUNE_LEARNING_RATE) \
 		--num_train_epochs 10 \
 		--fp16 \
 		--out $@
 
 $(FINETUNE_OUT_DIR)/tf/%:
-		python run_finetune.py \
+		python $(DNAZEN_SCRIPT_DIR)/run_finetune.py \
 		--data_path $(FINETUNE_DATA_DIR)/GUE/tf/$* \
 		--checkpoint $(PRETRAIN_CHECKPOINT) \
 		--ngram_encoder_dir $(MAIN_NGRAM_ENCODER_DIR) \
 		--per_device_train_batch_size $(PER_DEVICE_TRAIN_BATCH_SIZE) \
 		--per_device_eval_batch_size $(PER_DEVICE_EVAL_BATCH_SIZE) \
 		--gradient_accumulation_steps 1 \
-		--lr $(lr) \
+		--lr $(FINETUNE_LEARNING_RATE) \
 		--num_train_epochs 6 \
 		--fp16 \
 		--out $@
 
 $(FINETUNE_OUT_DIR)/mouse/%:
-		python run_finetune.py \
+		python $(DNAZEN_SCRIPT_DIR)/run_finetune.py \
 		--data_path $(FINETUNE_DATA_DIR)/GUE/mouse/$* \
 		--checkpoint $(PRETRAIN_CHECKPOINT) \
 		--ngram_encoder_dir $(MAIN_NGRAM_ENCODER_DIR) \
 		--per_device_train_batch_size $(PER_DEVICE_TRAIN_BATCH_SIZE) \
 		--per_device_eval_batch_size $(PER_DEVICE_EVAL_BATCH_SIZE) \
 		--gradient_accumulation_steps 1 \
-		--lr $(lr) \
+		--lr $(FINETUNE_LEARNING_RATE) \
 		--num_train_epochs 6 \
 		--fp16 \
 		--out $@

@@ -102,13 +102,13 @@ DEV_DIR=$(dirname "$DEV_DIR_FILE")
 PER_DEVICE_TRAIN_BATCH_SIZE=8
 PER_DEVICE_EVAL_BATCH_SIZE=32
 # 梯度累积步数
-GRADIENT_ACCUMULATION_STEPS=1
+GRADIENT_ACCUMULATION_STEPS=1 # 目前未使用
 # 学习率
 LEARNING_RATE=3e-5
 # 默认训练轮数（根据任务类型可能会有不同设置）
 NUM_TRAIN_EPOCHS=5
 # 是否使用混合精度训练
-USE_FP16=true
+USE_FP16=true #目前未使用，一定是true
 
 # 任务类型及其对应的训练轮数
 declare -A TASK_EPOCHS
@@ -230,24 +230,37 @@ echo "训练轮数: $NUM_TRAIN_EPOCHS"
 # 创建输出目录
 mkdir -p "$OUTPUT_PATH"
 
-# 构建训练命令
-CMD="python run_finetune.py \
-  --data_path $DATA_PATH \
-  --checkpoint $PRETRAIN_CHECKPOINT \
-  --ngram_encoder_dir $MAIN_NGRAM_ENCODER_DIR \
-  --per_device_train_batch_size $PER_DEVICE_TRAIN_BATCH_SIZE \
-  --per_device_eval_batch_size $PER_DEVICE_EVAL_BATCH_SIZE \
-  --gradient_accumulation_steps $GRADIENT_ACCUMULATION_STEPS \
-  --lr $LEARNING_RATE \
-  --num_train_epochs $NUM_TRAIN_EPOCHS"
+# # 构建训练命令
+# CMD="python run_finetune.py \
+#   --data_path $DATA_PATH \
+#   --checkpoint $PRETRAIN_CHECKPOINT \
+#   --ngram_encoder_dir $MAIN_NGRAM_ENCODER_DIR \
+#   --per_device_train_batch_size $PER_DEVICE_TRAIN_BATCH_SIZE \
+#   --per_device_eval_batch_size $PER_DEVICE_EVAL_BATCH_SIZE \
+#   --gradient_accumulation_steps $GRADIENT_ACCUMULATION_STEPS \
+#   --lr $LEARNING_RATE \
+#   --num_train_epochs $NUM_TRAIN_EPOCHS"
 
-# 添加可选参数
-if [ "$USE_FP16" = true ]; then
-  CMD="$CMD --fp16"
-fi
+# # 添加可选参数
+# if [ "$USE_FP16" = true ]; then
+#   CMD="$CMD --fp16"
+# fi
 
-# 添加输出目录
-CMD="$CMD --out $OUTPUT_PATH"
+# # 添加输出目录
+# CMD="$CMD --out $OUTPUT_PATH"
+
+#构建训练命令
+CMD="make -f makefile_finetune.mak all"
+
+#添加微调数据目录
+# remark: FINETUNE_DATA_DIR本来就在环境变量中，这个操作是冗余的。
+# 但是这样做可以让目的更清晰
+CMD="FINETUNE_DATA_DIR=${FINETUNE_DATA_DIR} $CMD"
+
+#添加其他环境变量
+CMD="PER_DEVICE_TRAIN_BATCH_SIZE=${PER_DEVICE_TRAIN_BATCH_SIZE} $CMD"
+CMD="PER_DEVICE_EVAL_BATCH_SIZE=${PER_DEVICE_EVAL_BATCH_SIZE} $CMD"
+CMD="FINETUNE_LEARNING_RATE=${LEARNING_RATE} $CMD"
 
 # 输出完整命令
 echo "执行命令: $CMD"
