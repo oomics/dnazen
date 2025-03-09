@@ -166,7 +166,7 @@ def parse_args() -> argparse.Namespace:
     train_group.add_argument("--per-device-train-batch-size", type=int, default=32, help="每个设备的训练批量大小")
     train_group.add_argument("--grad-accumulation-steps", type=int, default=1, help="梯度累积步数")
     train_group.add_argument("--lr", type=float, default=5e-5, help="学习率")
-    train_group.add_argument("--n-epoch", type=int, default=3, help="训练轮数")
+    train_group.add_argument("--n-epoch", type=float, default=3, help="训练轮数")
     train_group.add_argument("--seed", type=int, default=42, help="随机种子")
     train_group.add_argument("--num-workers", type=int, default=4, help="数据加载器工作线程数")
     
