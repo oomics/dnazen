@@ -145,7 +145,6 @@ case "$EXPERIMENT_ID" in
     EXPERIMENT_DESC="GUE数据集+mspecies/dev数据集抽取ngram，仅mspecies/dev数据进行pretrain"
     USE_GUE="--gue-dir ../data/GUE"
     USE_INPUT="--input ../data/pretrain/dev/dev.txt"
-    PARENT_EXPERIMENT="exp3_gue"
     ;;
   5)
     EXPERIMENT_NAME="exp3_gue_ngram_ref_1"

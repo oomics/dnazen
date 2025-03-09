@@ -4,6 +4,7 @@
 # 描述: DNA序列微调训练模型训练启动脚本
 # 备注: bash finetune.sh --experiment 1 emp H3K4me3
 # 用法: bash finetune.sh [--experiment <id>] [--parent-experiment <name>] <任务类型> <子任务>
+#       bash finetune.sh --experiment 1 --parallel [--max-workers <num>] [--gpu-ids <ids>]
 # 作者: DnaZen Team
 ###################################################################################
 
@@ -13,6 +14,10 @@ PARENT_EXPERIMENT=""
 TASK_TYPE=""
 SUB_TASK=""
 GUE_DIR="../data/GUE"
+PARALLEL=false
+MAX_WORKERS=4
+GPU_IDS=""
+RETRY_COUNT=1
 
 # 首先处理选项参数
 while [[ $# -gt 0 ]]; do
@@ -25,11 +30,29 @@ while [[ $# -gt 0 ]]; do
       PARENT_EXPERIMENT="$2"
       shift 2
       ;;
+    --parallel)
+      PARALLEL=true
+      shift
+      ;;
+    --max-workers)
+      MAX_WORKERS="$2"
+      shift 2
+      ;;
+    --gpu-ids)
+      GPU_IDS="$2"
+      shift 2
+      ;;
+    --retry-count)
+      RETRY_COUNT="$2"
+      shift 2
+      ;;
     -*)
       echo "未知选项: $1"
       echo "用法: bash finetune.sh [--experiment <id>] [--parent-experiment <name>] <任务类型> <子任务>"
+      echo "      bash finetune.sh --experiment <id> --parallel [--max-workers <num>] [--gpu-ids <ids>]"
       echo "任务类型: emp, pd, tf, mouse"
       echo "例如: bash finetune.sh --experiment 1 emp H3K4me3"
+      echo "      bash finetune.sh --experiment 1 --parallel --max-workers 4 --gpu-ids 0,1,2,3"
       exit 1
       ;;
     *)
@@ -94,15 +117,6 @@ fi
 echo "使用实验: $EXPERIMENT_NAME (ID: $EXPERIMENT_ID)"
 echo "实验目录: $EXPERIMENT_DIR"
 
-# 检查是否提供了任务类型和子任务
-if [ -z "$TASK_TYPE" ] || [ -z "$SUB_TASK" ]; then
-  echo "错误: 缺少必要的参数"
-  echo "用法: bash finetune.sh [--experiment <id>] [--parent-experiment <name>] <任务类型> <子任务>"
-  echo "任务类型: emp, pd, tf, mouse"
-  echo "例如: bash finetune.sh --experiment 1 emp H3K4me3"
-  exit 1
-fi
-
 ###################################################################################
 # 1. 数据和输出路径配置
 ###################################################################################
@@ -114,7 +128,6 @@ TRAIN_DIR_FILE="$DATA_DIR/train/train.pt"
 # 验证数据目录文件
 DEV_DIR_FILE="$DATA_DIR/dev/dev.pt"
 # 模型保存输出目录
-#OUTPUT_DIR="$EXPERIMENT_DIR/output"
 OUTPUT_DIR="../data/output"
 
 # 数据缓存目录
@@ -159,7 +172,6 @@ TASK_PATHS["pd"]="prom"
 TASK_PATHS["tf"]="tf"
 TASK_PATHS["mouse"]="mouse"
 
-
 ###################################################################################
 # 3. 目录准备
 ###################################################################################
@@ -181,8 +193,19 @@ fi
 echo "========================= DNA序列微调训练开始 ========================="
 echo "实验ID EXPERIMENT_ID: $EXPERIMENT_ID"
 echo "实验名称 EXPERIMENT_NAME: $EXPERIMENT_NAME"
-echo "任务类型 TASK_TYPE: $TASK_TYPE"
-echo "子任务 SUB_TASK: $SUB_TASK"
+
+if [ "$PARALLEL" = true ]; then
+  echo "运行模式: 并行训练"
+  echo "最大并行任务数: $MAX_WORKERS"
+  if [ -n "$GPU_IDS" ]; then
+    echo "指定GPU IDs: $GPU_IDS"
+  fi
+else
+  echo "运行模式: 单任务训练"
+  echo "任务类型 TASK_TYPE: $TASK_TYPE"
+  echo "子任务 SUB_TASK: $SUB_TASK"
+fi
+
 echo "训练参数:"
 echo "----------------------------------------"
 echo "训练数据文件 TRAIN_DIR_FILE: $TRAIN_DIR_FILE"
@@ -231,64 +254,162 @@ fi
 # 预训练检查点路径
 #PRETRAIN_CHECKPOINT="${EXPERIMENT_DIR}/output/checkpoint-${FINETUNE_CHECKPOINT_STEP}"
 PRETRAIN_CHECKPOINT="${OUTPUT_DIR}/checkpoint-${FINETUNE_CHECKPOINT_STEP}"
-# 检查任务类型是否有效
-if [[ ! "${!TASK_PATHS[@]}" =~ "$TASK_TYPE" ]]; then
-  echo "错误: 无效的任务类型: $TASK_TYPE"
-  echo "有效的任务类型: ${!TASK_PATHS[@]}"
-  exit 1
-fi
 
-# 设置数据路径和输出路径
-DATA_PATH="${GUE_DIR}/${TASK_PATHS[$TASK_TYPE]}/${SUB_TASK}"
-TASK_OUTPUT_PATH="${FINETUNE_OUT_DIR}/${TASK_TYPE}/${SUB_TASK}"
-
-# 设置训练轮数
-NUM_TRAIN_EPOCHS=${TASK_EPOCHS[$TASK_TYPE]}
-
-echo "任务类型 TASK_TYPE: $TASK_TYPE"
-echo "任务类型 TASK_PATHS: ${TASK_PATHS[$TASK_TYPE]}"
-echo "子任务 SUB_TASK: $SUB_TASK"
-echo "数据路径 DATA_PATH: $DATA_PATH"
-echo "训练任务输出路径 TASK_OUTPUT_PATH: $TASK_OUTPUT_PATH"
-echo "训练轮数 NUM_TRAIN_EPOCHS: $NUM_TRAIN_EPOCHS"
-
-# 创建输出目录
-mkdir -p "$TASK_OUTPUT_PATH"
-
-# 构建训练命令
-CMD="python ../src/train/run_finetune.py \
-  --data_path $DATA_PATH \
-  --checkpoint $PRETRAIN_CHECKPOINT \
-  --ngram_encoder_dir $NGRAM_ENCODER_PATH \
-  --per_device_train_batch_size $PER_DEVICE_TRAIN_BATCH_SIZE \
-  --per_device_eval_batch_size $PER_DEVICE_EVAL_BATCH_SIZE \
-  --gradient_accumulation_steps $GRADIENT_ACCUMULATION_STEPS \
-  --lr $LEARNING_RATE \
-  --num_train_epochs $NUM_TRAIN_EPOCHS"
-
-# 添加可选参数
-if [ "$USE_FP16" = true ]; then
-  CMD="$CMD --fp16"
-fi
-
-# 添加输出目录
-CMD="$CMD --out $TASK_OUTPUT_PATH"
-
-# 输出完整命令
-echo "执行命令: $CMD"
-
-# 运行训练脚本
-eval $CMD
-
-# 检查训练是否成功完成
-if [ $? -eq 0 ]; then
-  echo "=================================================================="
-  echo "微调训练成功完成！"
-  echo "模型输出目录: $TASK_OUTPUT_PATH"
-  echo "=================================================================="
+if [ "$PARALLEL" = true ]; then
+  # 并行模式：创建任务配置文件
+  TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+  TASKS_CONFIG_PATH="${FINETUNE_OUT_DIR}/tasks_config_${TIMESTAMP}.json"
+  PARALLEL_OUTPUT_DIR="${FINETUNE_OUT_DIR}/parallel_${TIMESTAMP}"
+  
+  echo "使用并行模式运行所有任务"
+  echo "任务配置文件: $TASKS_CONFIG_PATH"
+  echo "并行输出目录: $PARALLEL_OUTPUT_DIR"
+  
+  # 创建输出目录
+  mkdir -p "$PARALLEL_OUTPUT_DIR"
+  
+  # 创建任务配置文件
+  cat > "$TASKS_CONFIG_PATH" << EOF
+{
+  "data_base_dir": "../data",
+  "tasks": [
+    {
+      "task_type": "tf",
+      "data_dir": "GUE/tf",
+      "sub_tasks": ["CTCF", "FOXA1", "HNF4A"],
+      "num_train_epochs": ${TASK_EPOCHS["tf"]},
+      "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
+      "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
+      "learning_rate": $LEARNING_RATE,
+      "fp16": $USE_FP16
+    },
+    {
+      "task_type": "mouse",
+      "data_dir": "GUE/mouse",
+      "sub_tasks": ["liver", "brain", "kidney", "heart"],
+      "num_train_epochs": ${TASK_EPOCHS["mouse"]},
+      "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
+      "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
+      "learning_rate": $LEARNING_RATE,
+      "fp16": $USE_FP16
+    },
+    {
+      "task_type": "pd",
+      "data_dir": "GUE/prom",
+      "sub_tasks": ["prom_300_all", "prom_core_all"],
+      "num_train_epochs": ${TASK_EPOCHS["pd"]},
+      "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
+      "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
+      "learning_rate": $LEARNING_RATE,
+      "fp16": $USE_FP16
+    },
+    {
+      "task_type": "emp",
+      "data_dir": "GUE/EMP",
+      "sub_tasks": ["H3K14me1", "H3K14me2", "H3K14me3"],
+      "num_train_epochs": ${TASK_EPOCHS["emp"]},
+      "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
+      "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
+      "learning_rate": $LEARNING_RATE,
+      "fp16": $USE_FP16
+    }
+  ]
+}
+EOF
+  
+  # 构建并行训练命令
+  PARALLEL_CMD="python ../src/train/run_parallel_finetune.py \
+    --config $TASKS_CONFIG_PATH \
+    --max_workers $MAX_WORKERS \
+    --checkpoint $PRETRAIN_CHECKPOINT \
+    --ngram_encoder_dir $NGRAM_ENCODER_PATH \
+    --output_dir $PARALLEL_OUTPUT_DIR \
+    --retry_count $RETRY_COUNT"
+  
+  # 添加GPU IDs参数（如果指定）
+  if [ -n "$GPU_IDS" ]; then
+    PARALLEL_CMD="$PARALLEL_CMD --gpu_ids $GPU_IDS"
+  fi
+  
+  # 输出完整命令
+  echo "执行命令: $PARALLEL_CMD"
+  
+  # 运行并行训练脚本
+  eval $PARALLEL_CMD
+  
+  # 检查训练是否成功完成
+  if [ $? -eq 0 ]; then
+    echo "=================================================================="
+    echo "并行微调训练成功完成！"
+    echo "汇总报告: $PARALLEL_OUTPUT_DIR/summary_report.html"
+    echo "=================================================================="
+  else
+    echo "=================================================================="
+    echo "并行训练过程中出现错误，请检查日志。"
+    echo "=================================================================="
+    exit 1
+  fi
 else
-  echo "=================================================================="
-  echo "训练过程中出现错误，请检查日志。"
-  echo "=================================================================="
-  exit 1
+  # 单任务模式：运行单个任务
+  # 检查任务类型是否有效
+  if [[ ! "${!TASK_PATHS[@]}" =~ "$TASK_TYPE" ]]; then
+    echo "错误: 无效的任务类型: $TASK_TYPE"
+    echo "有效的任务类型: ${!TASK_PATHS[@]}"
+    exit 1
+  fi
+  
+  # 设置数据路径和输出路径
+  DATA_PATH="${GUE_DIR}/${TASK_PATHS[$TASK_TYPE]}/${SUB_TASK}"
+  TASK_OUTPUT_PATH="${FINETUNE_OUT_DIR}/${TASK_TYPE}/${SUB_TASK}"
+  
+  # 设置训练轮数
+  NUM_TRAIN_EPOCHS=${TASK_EPOCHS[$TASK_TYPE]}
+  
+  echo "任务类型 TASK_TYPE: $TASK_TYPE"
+  echo "任务类型 TASK_PATHS: ${TASK_PATHS[$TASK_TYPE]}"
+  echo "子任务 SUB_TASK: $SUB_TASK"
+  echo "数据路径 DATA_PATH: $DATA_PATH"
+  echo "训练任务输出路径 TASK_OUTPUT_PATH: $TASK_OUTPUT_PATH"
+  echo "训练轮数 NUM_TRAIN_EPOCHS: $NUM_TRAIN_EPOCHS"
+  
+  # 创建输出目录
+  mkdir -p "$TASK_OUTPUT_PATH"
+  
+  # 构建训练命令
+  CMD="python ../src/train/run_finetune.py \
+    --data_path $DATA_PATH \
+    --checkpoint $PRETRAIN_CHECKPOINT \
+    --ngram_encoder_dir $NGRAM_ENCODER_PATH \
+    --per_device_train_batch_size $PER_DEVICE_TRAIN_BATCH_SIZE \
+    --per_device_eval_batch_size $PER_DEVICE_EVAL_BATCH_SIZE \
+    --gradient_accumulation_steps $GRADIENT_ACCUMULATION_STEPS \
+    --lr $LEARNING_RATE \
+    --num_train_epochs $NUM_TRAIN_EPOCHS"
+  
+  # 添加可选参数
+  if [ "$USE_FP16" = true ]; then
+    CMD="$CMD --fp16"
+  fi
+  
+  # 添加输出目录
+  CMD="$CMD --out $TASK_OUTPUT_PATH"
+  
+  # 输出完整命令
+  echo "执行命令: $CMD"
+  
+  # 运行训练脚本
+  eval $CMD
+  
+  # 检查训练是否成功完成
+  if [ $? -eq 0 ]; then
+    echo "=================================================================="
+    echo "微调训练成功完成！"
+    echo "模型输出目录: $TASK_OUTPUT_PATH"
+    echo "=================================================================="
+  else
+    echo "=================================================================="
+    echo "训练过程中出现错误，请检查日志。"
+    echo "=================================================================="
+    exit 1
+  fi
 fi 

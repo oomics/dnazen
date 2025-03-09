@@ -91,6 +91,278 @@ def parse_args():
     return parser.parse_args()
 
 
+def generate_prediction_html_report(results_df, metrics, output_path):
+    """
+    生成预测结果的HTML可视化报告
+    
+    参数:
+        results_df (pd.DataFrame): 包含预测结果的DataFrame，需要包含'text', 'actual_label', 'prediction_label'列
+        metrics (dict): 评估指标字典
+        output_path (str): HTML报告输出路径
+    
+    返回:
+        str: 生成的HTML报告路径
+    """
+    logger.info(f"生成HTML报告: {output_path}")
+    
+    # 计算准确率
+    correct_predictions = sum(results_df["actual_label"] == results_df["prediction_label"])
+    total_predictions = len(results_df)
+    accuracy = correct_predictions / total_predictions if total_predictions > 0 else 0
+    
+    # 生成HTML内容
+    html_content = f"""
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DNA序列分类预测结果</title>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }}
+        h1, h2, h3 {{
+            color: #2c3e50;
+        }}
+        .container {{
+            max-width: 1200px;
+            margin: 0 auto;
+        }}
+        .summary {{
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }}
+        .metrics {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 20px;
+        }}
+        .metric-card {{
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            flex: 1;
+            min-width: 200px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        .metric-value {{
+            font-size: 24px;
+            font-weight: bold;
+            color: #3498db;
+        }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }}
+        th, td {{
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }}
+        th {{
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }}
+        tr:nth-child(even) {{
+            background-color: #f9f9f9;
+        }}
+        tr:hover {{
+            background-color: #f1f1f1;
+        }}
+        .correct {{
+            background-color: #d4edda;
+        }}
+        .incorrect {{
+            background-color: #f8d7da;
+        }}
+        .pagination {{
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }}
+        .pagination button {{
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            margin: 0 4px;
+            cursor: pointer;
+            border-radius: 4px;
+        }}
+        .pagination button:hover {{
+            background-color: #45a049;
+        }}
+        .pagination button:disabled {{
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>DNA序列分类预测结果</h1>
+        
+        <div class="summary">
+            <h2>预测摘要</h2>
+            <p>总样本数: {total_predictions}</p>
+            <p>正确预测数: {correct_predictions}</p>
+            <p>准确率: {accuracy:.2%}</p>
+        </div>
+        
+        <div class="metrics">
+            <div class="metric-card">
+                <h3>准确率</h3>
+                <div class="metric-value">{accuracy:.2%}</div>
+            </div>
+            <div class="metric-card">
+                <h3>F1分数</h3>
+                <div class="metric-value">{metrics.get('eval_f1', 0):.4f}</div>
+            </div>
+            <div class="metric-card">
+                <h3>Matthews相关系数</h3>
+                <div class="metric-value">{metrics.get('eval_matthews_correlation', 0):.4f}</div>
+            </div>
+        </div>
+        
+        <h2>预测详情</h2>
+        <div>
+            <input type="text" id="searchInput" placeholder="搜索序列..." style="padding: 8px; width: 300px; margin-bottom: 10px;">
+            <button onclick="searchTable()" style="padding: 8px 16px;">搜索</button>
+        </div>
+        
+        <table id="resultsTable">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>DNA序列</th>
+                    <th>实际标签</th>
+                    <th>预测标签</th>
+                    <th>预测状态</th>
+                </tr>
+            </thead>
+            <tbody>
+"""
+
+    # 添加表格行
+    for i, (_, row) in enumerate(results_df.iterrows()):
+        correct = row["actual_label"] == row["prediction_label"]
+        row_class = "correct" if correct else "incorrect"
+        status = "正确" if correct else "错误"
+        
+        html_content += f"""
+                <tr class="{row_class}">
+                    <td>{i+1}</td>
+                    <td>{row["text"]}</td>
+                    <td>{row["actual_label"]}</td>
+                    <td>{row["prediction_label"]}</td>
+                    <td>{status}</td>
+                </tr>
+        """
+
+    # 完成HTML内容
+    html_content += """
+            </tbody>
+        </table>
+        
+        <div class="pagination">
+            <button id="prevBtn" onclick="previousPage()" disabled>上一页</button>
+            <span id="pageInfo">第 1 页，共 1 页</span>
+            <button id="nextBtn" onclick="nextPage()">下一页</button>
+        </div>
+    </div>
+
+    <script>
+        // 分页功能
+        let currentPage = 1;
+        const rowsPerPage = 20;
+        const table = document.getElementById('resultsTable');
+        const rows = table.getElementsByTagName('tbody')[0].rows;
+        const pageCount = Math.ceil(rows.length / rowsPerPage);
+        
+        document.getElementById('pageInfo').textContent = `第 ${currentPage} 页，共 ${pageCount} 页`;
+        
+        function showPage(page) {
+            // 隐藏所有行
+            for (let i = 0; i < rows.length; i++) {
+                rows[i].style.display = 'none';
+            }
+            
+            // 显示当前页的行
+            const start = (page - 1) * rowsPerPage;
+            const end = start + rowsPerPage;
+            
+            for (let i = start; i < end && i < rows.length; i++) {
+                rows[i].style.display = '';
+            }
+            
+            // 更新按钮状态
+            document.getElementById('prevBtn').disabled = page === 1;
+            document.getElementById('nextBtn').disabled = page === pageCount;
+            document.getElementById('pageInfo').textContent = `第 ${page} 页，共 ${pageCount} 页`;
+        }
+        
+        function nextPage() {
+            if (currentPage < pageCount) {
+                currentPage++;
+                showPage(currentPage);
+            }
+        }
+        
+        function previousPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                showPage(currentPage);
+            }
+        }
+        
+        // 搜索功能
+        function searchTable() {
+            const input = document.getElementById('searchInput').value.toLowerCase();
+            
+            for (let i = 0; i < rows.length; i++) {
+                const text = rows[i].cells[1].textContent.toLowerCase();
+                if (text.includes(input)) {
+                    rows[i].style.display = '';
+                } else {
+                    rows[i].style.display = 'none';
+                }
+            }
+            
+            // 禁用分页
+            if (input) {
+                document.getElementById('prevBtn').disabled = true;
+                document.getElementById('nextBtn').disabled = true;
+                document.getElementById('pageInfo').textContent = '搜索模式';
+            } else {
+                showPage(currentPage);
+            }
+        }
+        
+        // 初始化显示第一页
+        showPage(1);
+    </script>
+</body>
+</html>
+"""
+
+    # 保存HTML文件
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(html_content)
+
+    logger.info(f"HTML报告已生成: {output_path}")
+    return output_path
+
+
 # --- main ---
 def main():
     # 步骤1: 解析命令行参数
@@ -156,6 +428,7 @@ def main():
 
 
     # 步骤6: 加载模型配置和模型
+    logger.info("-------------------------------------------------------...")
     logger.info(f"步骤6: 从检查点加载模型，路径: {CHECKPOINT_DIR}")
     logger.info("加载模型配置...")
     config = BertConfig.from_pretrained(CHECKPOINT_DIR)
@@ -170,6 +443,7 @@ def main():
 
 
     # 步骤7: 设置优化器
+    logger.info("-------------------------------------------------------...")
     logger.info("步骤7: 配置优化器...")
     learning_rate = 1e-5
     logger.info(f"使用AdamW优化器，学习率={learning_rate}，权重衰减=0.01")
@@ -186,6 +460,7 @@ def main():
     )
 
     # 步骤8: 设置训练参数
+    logger.info("-------------------------------------------------------...")
     logger.info("步骤8: 配置训练参数...")
     train_args = transformers.training_args.TrainingArguments(
         output_dir=RESULTS_PATH,
@@ -215,6 +490,7 @@ def main():
     logger.info(f"随机种子: {args.seed}")
 
     # 步骤9: 初始化Trainer
+    logger.info("-------------------------------------------------------...")
     logger.info("步骤9: 初始化Trainer...")
     trainer = transformers.Trainer(
         model=model,
@@ -235,6 +511,7 @@ def main():
     logger.info("训练完成")
 
     # 步骤11: 评估模型
+    logger.info("-------------------------------------------------------...")
     logger.info("步骤11: 在测试集上评估模型...")
     results = trainer.evaluate(test_dataset)
     logger.info(f"测试集评估结果:")
@@ -248,6 +525,7 @@ def main():
         json.dump(results, f)
 
     # 步骤12: 在测试集上进行预测
+    logger.info("-------------------------------------------------------...")
     logger.info("步骤12: 在测试集上进行预测...")
     logger.info(f"测试数据集大小: {len(test_dataset)}个样本")
     test_output = trainer.predict(test_dataset)
@@ -272,12 +550,19 @@ def main():
         results["actual_label"].append(actual_label)
         results["prediction_label"].append(test_preds[i])
 
+    logger.info("-------------------------------------------------------...")
     # 步骤14: 保存预测结果
+    logger.info("步骤14: 保存预测结果...")
     pred_results_path = os.path.join(RESULTS_PATH, "pred_results.csv")
     logger.info(f"保存预测结果到: {pred_results_path}")
     df = pd.DataFrame(results)
     df.to_csv(pred_results_path, mode="w")
     logger.info(f"已保存{len(df)}行预测结果")
+
+    # 步骤15: 生成HTML可视化报告
+    logger.info("步骤15: 生成HTML可视化报告...")
+    html_path = os.path.join(RESULTS_PATH, "prediction_report.html")
+    generate_prediction_html_report(df, results, html_path)
     
     logger.info("所有步骤完成")
 
