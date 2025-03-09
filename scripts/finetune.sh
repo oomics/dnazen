@@ -128,7 +128,7 @@ DEV_DIR=$(dirname "$DEV_DIR_FILE")
 
 FINETUNE_DATA_DIR="$TRAIN_DIR/finetune"
 FINETUNE_OUT_DIR="$TRAIN_DIR/finetune/output"
-FINETUNE_CHECKPOINT_STEP=1000
+FINETUNE_CHECKPOINT_STEP=3000
 
 ###################################################################################
 # 2. 训练参数配置
