@@ -306,25 +306,29 @@ def run_finetune_task(task_config, gpu_manager, args):
         log_file.write(f"执行命令: {' '.join(cmd)}\n\n")
         log_file.flush()
         
+        # 创建任务特定的日志前缀
+        task_prefix = f"[{task_type}/{sub_task}] "
+        
         process = subprocess.Popen(
             cmd, 
             stdout=subprocess.PIPE, 
             stderr=subprocess.PIPE,
             universal_newlines=True,
-            env=env
+            env=env,
+            bufsize=1  # 行缓冲，确保实时输出日志
         )
         
         # 记录进程
         running_processes[task_id] = process
         
-        # 实时获取输出
+        # 实时获取输出并添加任务前缀
         stdout_thread = threading.Thread(
             target=log_output_stream, 
-            args=(process.stdout, log_file, f"[{task_id}] ")
+            args=(process.stdout, log_file, task_prefix)
         )
         stderr_thread = threading.Thread(
             target=log_output_stream, 
-            args=(process.stderr, log_file, f"[{task_id}] ERROR: ")
+            args=(process.stderr, log_file, f"{task_prefix}ERROR: ")
         )
         
         stdout_thread.daemon = True
@@ -434,7 +438,7 @@ def log_output_stream(stream, log_file, prefix=""):
     for line in iter(stream.readline, ""):
         if line:
             log_line = f"{prefix}{line.rstrip()}"
-            logger.debug(log_line)
+            logger.info(log_line)  # 将日志级别从debug改为info，确保显示在控制台
             log_file.write(f"{log_line}\n")
             log_file.flush()
 
