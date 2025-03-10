@@ -276,7 +276,7 @@ if [ "$PARALLEL" = true ]; then
     {
       "task_type": "tf",
       "data_dir": "GUE/tf",
-      "sub_tasks": ["CTCF", "FOXA1", "HNF4A"],
+      "sub_tasks": ["0", "1", "2", "3", "4"],
       "num_train_epochs": ${TASK_EPOCHS["tf"]},
       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
@@ -286,7 +286,7 @@ if [ "$PARALLEL" = true ]; then
     {
       "task_type": "mouse",
       "data_dir": "GUE/mouse",
-      "sub_tasks": ["liver", "brain", "kidney", "heart"],
+      "sub_tasks": ["0", "1", "2", "3", "4"],
       "num_train_epochs": ${TASK_EPOCHS["mouse"]},
       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
@@ -306,7 +306,7 @@ if [ "$PARALLEL" = true ]; then
     {
       "task_type": "emp",
       "data_dir": "GUE/EMP",
-      "sub_tasks": ["H3K14me1", "H3K14me2", "H3K14me3"],
+      "sub_tasks": ["H3","H3K14ac","H3K36me3","H3K14me1", "H3K14me2", "H3K14me3", "H3K9ac", "H4", "H4ac"],
       "num_train_epochs": ${TASK_EPOCHS["emp"]},
       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
