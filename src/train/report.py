@@ -198,6 +198,41 @@ def generate_parallel_finetune_progress_report(completed_tasks, pending_tasks, r
             overflow: hidden;
             transition: max-height 0.2s ease-out;
         }}
+        .details-btn {{
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 12px;
+            margin: 2px 2px;
+            cursor: pointer;
+            border-radius: 3px;
+        }}
+        .metric-details {{
+            display: none;
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }}
+        .metric-table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 14px;
+        }}
+        .metric-table th, .metric-table td {{
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }}
+        .metric-table th {{
+            background-color: #f2f2f2;
+        }}
     </style>
 </head>
 <body>
@@ -344,6 +379,7 @@ def generate_parallel_finetune_progress_report(completed_tasks, pending_tasks, r
                     <th>准确率</th>
                     <th>F1分数</th>
                     <th>Matthews相关系数</th>
+                    <th>详细指标</th>
                 </tr>
             </thead>
             <tbody>
@@ -352,7 +388,7 @@ def generate_parallel_finetune_progress_report(completed_tasks, pending_tasks, r
     # 添加已完成的任务，按完成时间倒序排列
     completed_tasks_sorted = sorted(completed_tasks, key=lambda x: x.get("end_time", 0), reverse=True)
     
-    for result in completed_tasks_sorted:
+    for i, result in enumerate(completed_tasks_sorted):
         task_type = result.get("task_type", "未知")
         sub_task = result.get("sub_task", "未知")
         status = result.get("status", "未知")
@@ -375,6 +411,44 @@ def generate_parallel_finetune_progress_report(completed_tasks, pending_tasks, r
         if matthews != "N/A":
             matthews = f"{matthews:.4f}"
         
+        # 创建详细指标表格
+        metrics_table = ""
+        if eval_results:
+            metrics_table = f"""
+            <div id="metrics-{i}" class="metric-details">
+                <table class="metric-table">
+                    <thead>
+                        <tr>
+                            <th>指标名称</th>
+                            <th>值</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            """
+            
+            for metric_name, metric_value in sorted(eval_results.items()):
+                if isinstance(metric_value, (int, float)):
+                    formatted_value = f"{metric_value:.6f}" if isinstance(metric_value, float) else str(metric_value)
+                    metrics_table += f"""
+                        <tr>
+                            <td>{metric_name}</td>
+                            <td>{formatted_value}</td>
+                        </tr>
+                    """
+                else:
+                    metrics_table += f"""
+                        <tr>
+                            <td>{metric_name}</td>
+                            <td>{str(metric_value)}</td>
+                        </tr>
+                    """
+            
+            metrics_table += """
+                    </tbody>
+                </table>
+            </div>
+            """
+        
         html_content += f"""
                 <tr class="{status_class}">
                     <td>{task_type}</td>
@@ -384,13 +458,17 @@ def generate_parallel_finetune_progress_report(completed_tasks, pending_tasks, r
                     <td>{accuracy}</td>
                     <td>{f1}</td>
                     <td>{matthews}</td>
+                    <td>
+                        <button class="details-btn" onclick="toggleMetrics('metrics-{i}')">查看详情</button>
+                        {metrics_table}
+                    </td>
                 </tr>
 """
     
     if not completed_tasks:
         html_content += """
                 <tr>
-                    <td colspan="7" style="text-align: center;">当前没有已完成的任务</td>
+                    <td colspan="8" style="text-align: center;">当前没有已完成的任务</td>
                 </tr>
 """
     
@@ -398,6 +476,17 @@ def generate_parallel_finetune_progress_report(completed_tasks, pending_tasks, r
             </tbody>
         </table>
     </div>
+    
+    <script>
+        function toggleMetrics(id) {
+            var metrics = document.getElementById(id);
+            if (metrics.style.display === "block") {
+                metrics.style.display = "none";
+            } else {
+                metrics.style.display = "block";
+            }
+        }
+    </script>
 </body>
 </html>
 """

@@ -159,6 +159,24 @@ def generate_prediction_html_report(results_df, metrics, output_path):
             font-weight: bold;
             color: #3498db;
         }}
+        .all-metrics {{
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }}
+        .metric-table {{
+            width: 100%;
+            border-collapse: collapse;
+        }}
+        .metric-table th, .metric-table td {{
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }}
+        .metric-table th {{
+            background-color: #f2f2f2;
+        }}
         table {{
             width: 100%;
             border-collapse: collapse;
@@ -232,6 +250,34 @@ def generate_prediction_html_report(results_df, metrics, output_path):
                 <h3>Matthews相关系数</h3>
                 <div class="metric-value">{metrics.get('eval_matthews_correlation', 0):.4f}</div>
             </div>
+        </div>
+        
+        <div class="all-metrics">
+            <h2>所有评估指标</h2>
+            <table class="metric-table">
+                <thead>
+                    <tr>
+                        <th>指标名称</th>
+                        <th>值</th>
+                    </tr>
+                </thead>
+                <tbody>
+"""
+
+    # 添加所有评估指标
+    for metric_name, metric_value in sorted(metrics.items()):
+        if isinstance(metric_value, (int, float)):
+            formatted_value = f"{metric_value:.6f}" if isinstance(metric_value, float) else str(metric_value)
+            html_content += f"""
+                    <tr>
+                        <td>{metric_name}</td>
+                        <td>{formatted_value}</td>
+                    </tr>
+"""
+
+    html_content += """
+                </tbody>
+            </table>
         </div>
         
         <h2>预测详情</h2>
