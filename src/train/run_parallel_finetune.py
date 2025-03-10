@@ -21,6 +21,7 @@ import shutil
 from datetime import datetime
 import numpy as np
 import pandas as pd
+from collections import defaultdict
 
 import report
 
@@ -37,6 +38,12 @@ running_tasks = {}      # 任务ID -> 任务信息
 stop_event = threading.Event()
 gpu_lock = threading.Lock()
 gpu_usage = {}  # GPU ID -> 使用状态
+
+# 全局变量，用于存储各任务的日志
+task_logs = defaultdict(list)
+task_logs_lock = threading.Lock()
+last_summary_time = time.time()
+summary_interval = 120  # 2分钟，单位为秒
 
 def parse_args():
     """解析命令行参数"""
@@ -158,6 +165,72 @@ class GPUManager:
                 del self.usage[gpu_id]
                 return True
             return False
+
+def log_output_stream(stream, log_file, prefix="", task_id="unknown"):
+    """实时记录输出流"""
+    for line in iter(stream.readline, ""):
+        if line:
+            # 检查是否是正常的日志输出（而非真正的错误）
+            is_normal_log = "INFO" in line or "步骤" in line or ":" in line and not any(err in line.lower() for err in ["error:", "exception:", "traceback:"])
+            
+            # 根据内容选择合适的日志级别和前缀
+            if "ERROR:" in prefix and is_normal_log:
+                # 对于正常日志输出，使用原始前缀但不添加ERROR标记
+                clean_prefix = prefix.replace("ERROR: ", "")
+                log_line = f"{clean_prefix}{line.rstrip()}"
+            else:
+                # 对于真正的错误或其他输出
+                log_line = f"{prefix}{line.rstrip()}"
+            
+            # 写入日志文件
+            log_file.write(f"{log_line}\n")
+            log_file.flush()
+            
+            # 将重要日志添加到任务日志缓存中
+            if "error" in line.lower() or "exception" in line.lower() or "traceback" in line.lower() or "步骤" in line:
+                with task_logs_lock:
+                    # 限制每个任务存储的日志数量，避免内存占用过大
+                    if len(task_logs[task_id]) >= 100:
+                        task_logs[task_id].pop(0)  # 移除最旧的日志
+                    task_logs[task_id].append((time.time(), log_line))
+                    
+                    # 对于错误信息，立即输出到控制台
+                    if "error" in line.lower() or "exception" in line.lower() or "traceback" in line.lower():
+                        logger.error(log_line)
+
+def summarize_logs():
+    """定期汇总并输出任务日志"""
+    global last_summary_time
+    
+    while not stop_event.is_set():
+        current_time = time.time()
+        
+        # 每隔指定时间输出一次汇总日志
+        if current_time - last_summary_time >= summary_interval:
+            with task_logs_lock:
+                if task_logs:
+                    logger.info("\n" + "="*80)
+                    logger.info(f"任务日志汇总 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                    logger.info("="*80)
+                    
+                    # 按任务ID排序输出
+                    for task_id in sorted(task_logs.keys()):
+                        # 获取该任务的最新日志（最多10条）
+                        recent_logs = task_logs[task_id][-10:]
+                        if recent_logs:
+                            logger.info(f"\n>> 任务 {task_id} 最新日志:")
+                            for _, log_line in recent_logs:
+                                logger.info(f"  {log_line}")
+                    
+                    logger.info("="*80 + "\n")
+                    
+                    # 清空已输出的日志
+                    task_logs.clear()
+            
+            last_summary_time = current_time
+        
+        # 睡眠一段时间，避免频繁检查
+        time.sleep(10)
 
 def run_finetune_task(task_config, gpu_manager, args):
     """
@@ -324,11 +397,11 @@ def run_finetune_task(task_config, gpu_manager, args):
         # 实时获取输出并添加任务前缀
         stdout_thread = threading.Thread(
             target=log_output_stream, 
-            args=(process.stdout, log_file, task_prefix)
+            args=(process.stdout, log_file, task_prefix, task_id)
         )
         stderr_thread = threading.Thread(
             target=log_output_stream, 
-            args=(process.stderr, log_file, f"{task_prefix}ERROR: ")
+            args=(process.stderr, log_file, f"{task_prefix}ERROR: ", task_id)
         )
         
         stdout_thread.daemon = True
@@ -432,15 +505,6 @@ def run_finetune_task(task_config, gpu_manager, args):
     
     logger.info(f"[任务 {task_id}] 步骤6: 任务结束，状态: {status}，耗时: {duration:.2f}秒")
     return result
-
-def log_output_stream(stream, log_file, prefix=""):
-    """实时记录输出流"""
-    for line in iter(stream.readline, ""):
-        if line:
-            log_line = f"{prefix}{line.rstrip()}"
-            logger.info(log_line)  # 将日志级别从debug改为info，确保显示在控制台
-            log_file.write(f"{log_line}\n")
-            log_file.flush()
 
 def monitor_tasks(tasks_queue, completed_tasks, args, gpu_manager):
     """监控任务执行情况"""
@@ -747,6 +811,12 @@ def main():
     monitor_thread.start()
     logger.info("步骤9: 启动监控线程")
     
+    # 启动日志汇总线程
+    summary_thread = threading.Thread(target=summarize_logs)
+    summary_thread.daemon = True
+    summary_thread.start()
+    logger.info("步骤9.1: 启动日志汇总线程，每2分钟输出一次任务日志汇总")
+    
     # 步骤10: 使用线程池执行任务
     logger.info(f"步骤10: 开始执行任务，最大并行数: {args.max_workers}")
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.max_workers) as executor:
@@ -789,8 +859,12 @@ def main():
     
     # 步骤12: 生成汇总报告
     summary_report_path = os.path.join(args.output_dir, args.summary_report)
-    report.generate_parallel_finetune_summary_report(completed_tasks, summary_report_path)
-    logger.info(f"步骤12: 生成汇总报告: {summary_report_path}")
+    try:
+        # 使用正确的函数名
+        report.generate_parallel_finetune_progress_report(completed_tasks, [], {}, summary_report_path)
+        logger.info(f"步骤12: 生成汇总报告: {summary_report_path}")
+    except Exception as e:
+        logger.error(f"步骤12: 生成汇总报告失败: {e}")
     
     # 步骤13: 完成
     logger.info("步骤13: 所有任务已完成")
