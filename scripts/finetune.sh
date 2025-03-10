@@ -282,6 +282,26 @@ if [ "$PARALLEL" = true ]; then
       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
       "learning_rate": $LEARNING_RATE,
       "fp16": $USE_FP16
+    },
+    {
+      "task_type": "pd",
+      "data_dir": "GUE/prom",
+      "sub_tasks": ["prom_300_all", "prom_core_all"],
+      "num_train_epochs": ${TASK_EPOCHS["pd"]},
+      "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
+      "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
+      "learning_rate": $LEARNING_RATE,
+      "fp16": $USE_FP16
+    },
+    {
+      "task_type": "emp",
+      "data_dir": "GUE/EMP",
+      "sub_tasks": ["H3"],
+      "num_train_epochs": ${TASK_EPOCHS["emp"]},
+      "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
+      "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
+      "learning_rate": $LEARNING_RATE,
+      "fp16": $USE_FP16
     }
   ]
 } 
@@ -382,16 +402,16 @@ EOF
 # } 
 # EOF
   
-  # 构建并行训练命令
-  PARALLEL_CMD="python ../src/train/run_parallel_finetune.py \
-    --config $TASKS_CONFIG_PATH \
-    --max_workers $MAX_WORKERS \
-    --checkpoint $PRETRAIN_CHECKPOINT \
-    --ngram_encoder_dir $NGRAM_ENCODER_PATH \
-    --output_dir $PARALLEL_OUTPUT_DIR \
-    --retry_count $RETRY_COUNT \
-    --monitor_interval 10000 \
-    --clean_output"
+  # # 构建并行训练命令
+  # PARALLEL_CMD="python ../src/train/run_parallel_finetune.py \
+  #   --config $TASKS_CONFIG_PATH \
+  #   --max_workers $MAX_WORKERS \
+  #   --checkpoint $PRETRAIN_CHECKPOINT \
+  #   --ngram_encoder_dir $NGRAM_ENCODER_PATH \
+  #   --output_dir $PARALLEL_OUTPUT_DIR \
+  #   --retry_count $RETRY_COUNT \
+  #   --monitor_interval 10000 \
+  #   --clean_output"
   
   # 添加GPU IDs参数（如果指定）
   if [ -n "$GPU_IDS" ]; then
