@@ -269,14 +269,14 @@ if [ "$PARALLEL" = true ]; then
   mkdir -p "$PARALLEL_OUTPUT_DIR"
   
   # 创建任务配置文件
-  cat > "$TASKS_CONFIG_PATH" << EOF
+ cat > "$TASKS_CONFIG_PATH" << EOF
 {
   "data_base_dir": "../data",
   "tasks": [
     {
       "task_type": "tf",
       "data_dir": "GUE/tf",
-      "sub_tasks": ["0", "1", "2", "3", "4"],
+      "sub_tasks": [ "3"],
       "num_train_epochs": ${TASK_EPOCHS["tf"]},
       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
@@ -286,7 +286,7 @@ if [ "$PARALLEL" = true ]; then
     {
       "task_type": "mouse",
       "data_dir": "GUE/mouse",
-      "sub_tasks": ["0", "1", "2", "3", "4"],
+      "sub_tasks": [ "4"],
       "num_train_epochs": ${TASK_EPOCHS["mouse"]},
       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
@@ -306,7 +306,7 @@ if [ "$PARALLEL" = true ]; then
     {
       "task_type": "emp",
       "data_dir": "GUE/EMP",
-      "sub_tasks": ["H3","H3K14ac","H3K36me3","H3K14me1", "H3K14me2", "H3K14me3", "H3K9ac", "H4", "H4ac"],
+      "sub_tasks": ["H3K14me1", "H3K14me2", "H3K14me3"],
       "num_train_epochs": ${TASK_EPOCHS["emp"]},
       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
@@ -316,6 +316,53 @@ if [ "$PARALLEL" = true ]; then
   ]
 } 
 EOF
+#   cat > "$TASKS_CONFIG_PATH" << EOF
+# {
+#   "data_base_dir": "../data",
+#   "tasks": [
+#     {
+#       "task_type": "tf",
+#       "data_dir": "GUE/tf",
+#       "sub_tasks": ["0", "1", "2", "3", "4"],
+#       "num_train_epochs": ${TASK_EPOCHS["tf"]},
+#       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
+#       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
+#       "learning_rate": $LEARNING_RATE,
+#       "fp16": $USE_FP16
+#     },
+#     {
+#       "task_type": "mouse",
+#       "data_dir": "GUE/mouse",
+#       "sub_tasks": ["0", "1", "2", "3", "4"],
+#       "num_train_epochs": ${TASK_EPOCHS["mouse"]},
+#       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
+#       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
+#       "learning_rate": $LEARNING_RATE,
+#       "fp16": $USE_FP16
+#     },
+#     {
+#       "task_type": "pd",
+#       "data_dir": "GUE/prom",
+#       "sub_tasks": ["prom_300_all", "prom_core_all"],
+#       "num_train_epochs": ${TASK_EPOCHS["pd"]},
+#       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
+#       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
+#       "learning_rate": $LEARNING_RATE,
+#       "fp16": $USE_FP16
+#     },
+#     {
+#       "task_type": "emp",
+#       "data_dir": "GUE/EMP",
+#       "sub_tasks": ["H3","H3K14ac","H3K36me3","H3K14me1", "H3K14me2", "H3K14me3", "H3K9ac", "H4", "H4ac"],
+#       "num_train_epochs": ${TASK_EPOCHS["emp"]},
+#       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
+#       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
+#       "learning_rate": $LEARNING_RATE,
+#       "fp16": $USE_FP16
+#     }
+#   ]
+# } 
+# EOF
   
   # 构建并行训练命令
   PARALLEL_CMD="python ../src/train/run_parallel_finetune.py \
