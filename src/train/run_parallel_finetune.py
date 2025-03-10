@@ -441,17 +441,20 @@ def monitor_tasks(tasks_queue, completed_tasks, args, gpu_manager):
             # 收集当前结果
             pending_tasks = list(tasks_queue.queue)
             
-            # 生成临时报告
-            temp_report_path = os.path.join(args.output_dir, "progress_report.html")
-            report.generate_parallel_finetune_progress_report(completed_tasks, pending_tasks, running_tasks, temp_report_path)
-            
-            # 输出当前状态
-            logger.info(f"步骤4.1: 当前状态 - 已完成: {len(completed_tasks)}, 运行中: {len(running_tasks)}, 等待中: {len(pending_tasks)}")
-            
-            # 检查GPU使用情况
-            available_gpus = gpu_manager.get_available_gpus()
-            gpu_info = ", ".join([f"GPU {gpu['index']}: {gpu['free_memory']}MB可用" for gpu in available_gpus])
-            logger.info(f"步骤4.2: GPU使用情况 - {gpu_info}")
+            try:
+                # 生成临时报告
+                temp_report_path = os.path.join(args.output_dir, "progress_report.html")
+                report.generate_parallel_finetune_progress_report(completed_tasks, pending_tasks, running_tasks, temp_report_path)
+                
+                # 输出当前状态
+                logger.info(f"步骤4.1: 当前状态 - 已完成: {len(completed_tasks)}, 运行中: {len(running_tasks)}, 等待中: {len(pending_tasks)}")
+                
+                # 检查GPU使用情况
+                available_gpus = gpu_manager.get_available_gpus()
+                gpu_info = ", ".join([f"GPU {gpu['index']}: {gpu['free_memory']}MB可用" for gpu in available_gpus])
+                logger.info(f"步骤4.2: GPU使用情况 - {gpu_info}")
+            except Exception as e:
+                logger.error(f"步骤4.3: 生成进度报告失败: {e}")
             
             last_report_time = current_time
         
