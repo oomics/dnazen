@@ -18,7 +18,9 @@ PARALLEL=false
 MAX_WORKERS=4
 GPU_IDS=""
 RETRY_COUNT=1
-
+EXPERIMENT_DIR="../data/pretrain/exp1_gue_mspecies"
+RESUME=false  # 添加断点继续训练的标志
+RESUME_FILE=""  # 添加断点记录文件路径
 # 首先处理选项参数
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -46,13 +48,23 @@ while [[ $# -gt 0 ]]; do
       RETRY_COUNT="$2"
       shift 2
       ;;
+    --resume)
+      RESUME=true
+      shift
+      ;;
+    --resume-file)
+      RESUME_FILE="$2"
+      shift 2
+      ;;
     -*)
       echo "未知选项: $1"
       echo "用法: bash finetune.sh [--experiment <id>] [--parent-experiment <name>] <任务类型> <子任务>"
       echo "      bash finetune.sh --experiment <id> --parallel [--max-workers <num>] [--gpu-ids <ids>]"
+      echo "      bash finetune.sh --experiment <id> --parallel --resume [--resume-file <file>]"
       echo "任务类型: emp, pd, tf, mouse"
       echo "例如: bash finetune.sh --experiment 1 emp H3K4me3"
       echo "      bash finetune.sh --experiment 1 --parallel --max-workers 4 --gpu-ids 0,1,2,3"
+      echo "      bash finetune.sh --experiment 1 --parallel --resume"
       exit 1
       ;;
     *)
@@ -71,48 +83,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# 如果没有指定实验ID，使用默认值
-if [[ -z "$EXPERIMENT_ID" ]]; then
-  echo "警告: 未指定实验ID，使用默认值1"
-  EXPERIMENT_ID="1"
-fi
 
-# 根据实验ID设置实验名称
-case "$EXPERIMENT_ID" in
-  1)
-    EXPERIMENT_NAME="exp1_gue_mspecies"
-    ;;
-  2)
-    EXPERIMENT_NAME="exp2_mspecies"
-    ;;
-  3)
-    EXPERIMENT_NAME="exp3_gue"
-    ;;
-  4)
-    EXPERIMENT_NAME="exp3_gue_ngram_ref_5"
-    PARENT_EXPERIMENT="exp3_gue"
-    ;;
-  5)
-    EXPERIMENT_NAME="exp3_gue_ngram_ref_1"
-    PARENT_EXPERIMENT="exp3_gue"
-    ;;
-  6)
-    EXPERIMENT_NAME="exp3_gue_ngram_ref_100"
-    PARENT_EXPERIMENT="exp3_gue"
-    ;;
-  *)
-    echo "错误: 无效的实验ID: $EXPERIMENT_ID"
-    echo "有效的实验ID: 1-6"
-    exit 1
-    ;;
-esac
-
-# 如果指定了父实验，使用父实验目录
-if [[ -n "$PARENT_EXPERIMENT" ]]; then
-  EXPERIMENT_DIR="../data/pretrain/${PARENT_EXPERIMENT}"
-else
-  EXPERIMENT_DIR="../data/pretrain/${EXPERIMENT_NAME}"
-fi
 
 echo "使用实验: $EXPERIMENT_NAME (ID: $EXPERIMENT_ID)"
 echo "实验目录: $EXPERIMENT_DIR"
@@ -229,6 +200,14 @@ process_task() {
   local sub_task=$2
   local num_epochs=$3
   
+  # 检查是否需要跳过此任务（断点继续功能）
+  if [ "$RESUME" = true ] && [ -f "$RESUME_FILE" ]; then
+    if grep -q "${task_type}/${sub_task}" "$RESUME_FILE"; then
+      echo "跳过已完成的任务: ${task_type}/${sub_task}"
+      return 0
+    fi
+  fi
+  
   echo "================================================"
   echo "任务: $task_type/$sub_task"
   echo "================================================"
@@ -265,10 +244,20 @@ process_task() {
   
   # 运行训练脚本
   eval $cmd
+  local result=$?
   
-  # 复制输出文件到报告保存文件夹，但排除checkpoint-*目录
-  echo "复制输出文件到 $REPORT_OUT_DIR，排除checkpoint目录..."
-  find "$task_output_path" -type f -not -path "*/checkpoint-*/*" -exec cp --parents {} "$REPORT_OUT_DIR" \;
+  if [ $result -eq 0 ]; then
+    # 任务成功，记录到断点文件
+    echo "${task_type}/${sub_task}" >> "${RESUME_FILE:-${FINETUNE_OUT_DIR}/completed_tasks.txt}"
+    
+    # 复制输出文件到报告保存文件夹，但排除checkpoint-*目录
+    echo "复制输出文件到 $REPORT_OUT_DIR，排除checkpoint目录..."
+    find "$task_output_path" -type f -not -path "*/checkpoint-*/*" -exec cp --parents {} "$REPORT_OUT_DIR" \;
+    return 0
+  else
+    echo "任务 ${task_type}/${sub_task} 执行失败，退出代码: $result"
+    return 1
+  fi
 }
 
 ###################################################################################
@@ -308,6 +297,25 @@ fi
 #PRETRAIN_CHECKPOINT="${EXPERIMENT_DIR}/output/checkpoint-${FINETUNE_CHECKPOINT_STEP}"
 PRETRAIN_CHECKPOINT="${OUTPUT_DIR}/checkpoint-${FINETUNE_CHECKPOINT_STEP}"
 
+# 设置断点记录文件
+if [ "$RESUME" = true ] && [ -z "$RESUME_FILE" ]; then
+  RESUME_FILE="${FINETUNE_OUT_DIR}/completed_tasks.txt"
+  echo "使用默认断点记录文件: $RESUME_FILE"
+fi
+
+# 确保断点记录文件存在
+if [ "$RESUME" = true ]; then
+  if [ ! -f "$RESUME_FILE" ]; then
+    echo "断点记录文件不存在，将创建新文件: $RESUME_FILE"
+    mkdir -p "$(dirname "$RESUME_FILE")"
+    touch "$RESUME_FILE"
+  else
+    echo "从断点记录文件继续: $RESUME_FILE"
+    echo "已完成的任务:"
+    cat "$RESUME_FILE"
+  fi
+fi
+
 if [ "$PARALLEL" = true ]; then
   # 并行模式：使用数组管理任务
   TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -338,22 +346,40 @@ if [ "$PARALLEL" = true ]; then
   # 处理TF任务
   for subtask in "${TF_SUBTASKS[@]}"; do
     process_task "tf" "$subtask" "${TASK_EPOCHS[tf]}"
+    if [ $? -ne 0 ] && [ "$RESUME" = false ]; then
+      echo "任务失败，退出执行"
+      exit 1
+    fi
   done
   
   # 处理Mouse任务
   for subtask in "${MOUSE_SUBTASKS[@]}"; do
     process_task "mouse" "$subtask" "${TASK_EPOCHS[mouse]}"
+    if [ $? -ne 0 ] && [ "$RESUME" = false ]; then
+      echo "任务失败，退出执行"
+      exit 1
+    fi
   done
   
   # 处理PD任务
   for subtask in "${PD_SUBTASKS[@]}"; do
     process_task "pd" "$subtask" "${TASK_EPOCHS[pd]}"
+    if [ $? -ne 0 ] && [ "$RESUME" = false ]; then
+      echo "任务失败，退出执行"
+      exit 1
+    fi
   done
   
   # 处理EMP任务
   for subtask in "${EMP_SUBTASKS[@]}"; do
     process_task "emp" "$subtask" "${TASK_EPOCHS[emp]}"
+    if [ $? -ne 0 ] && [ "$RESUME" = false ]; then
+      echo "任务失败，退出执行"
+      exit 1
+    fi
   done
+
+  echo "所有任务处理完成！"
 
 else
   # 单任务模式：运行单个任务
@@ -409,6 +435,8 @@ else
   
   # 检查训练是否成功完成
   if [ $? -eq 0 ]; then
+    # 记录完成的任务
+    echo "${TASK_TYPE}/${SUB_TASK}" >> "${RESUME_FILE:-${FINETUNE_OUT_DIR}/completed_tasks.txt}"
 
     # 复制输出文件到报告保存文件夹，但排除checkpoint-*目录
     echo "复制输出文件到 $OUTPUT_DIR/finetune/output，排除checkpoint目录..."
