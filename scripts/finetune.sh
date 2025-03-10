@@ -312,19 +312,9 @@ if [ "$PARALLEL" = true ]; then
   "data_base_dir": "../data",
   "tasks": [
     {
-      "task_type": "mouse",
-      "data_dir": "GUE/mouse",
-      "sub_tasks": [ "4"],
-      "num_train_epochs": ${TASK_EPOCHS["mouse"]},
-      "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
-      "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
-      "learning_rate": $LEARNING_RATE,
-      "fp16": $USE_FP16
-    },
-    {
       "task_type": "emp",
       "data_dir": "GUE/EMP",
-      "sub_tasks": ["H3K14me1", "H3K14me2", "H3K14me3"],
+      "sub_tasks": ["H3K14ac","H3K36me3","H3K14me1", "H3K14me2", "H3K14me3", "H3K9ac", "H4", "H4ac"],
       "num_train_epochs": ${TASK_EPOCHS["emp"]},
       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
