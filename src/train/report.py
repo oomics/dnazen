@@ -7,6 +7,7 @@ import logging
 from datetime import datetime
 import numpy as np
 import time
+import re
 
 # import sklearn
 from sklearn.metrics import (
@@ -40,10 +41,142 @@ logger = logging.getLogger(__name__)
 
 
 
-def generate_parallel_finetune_progress_report(completed_tasks, pending_tasks, running_tasks, output_path):
+def generate_parallel_finetune_progress_report(tasks_dir, output_path):
+    """
+    生成微调任务进度报告
     
-    """生成进度报告"""
-    logger.info(f"生成进度报告: {output_path}")
+    参数:
+        tasks_dir (str): 任务输出目录，包含所有子任务的结果
+        output_path (str): 报告输出路径
+    """
+    logger.info(f"从目录 {tasks_dir} 扫描任务结果并生成报告: {output_path}")
+    
+    # 扫描任务目录，收集所有任务结果
+    completed_tasks = []
+    running_tasks = {}
+    pending_tasks = []
+    
+    # 遍历任务类型目录
+    for task_type in os.listdir(tasks_dir):
+        task_type_dir = os.path.join(tasks_dir, task_type)
+        if not os.path.isdir(task_type_dir):
+            continue
+        
+        # 遍历子任务目录
+        for sub_task in os.listdir(task_type_dir):
+            sub_task_dir = os.path.join(task_type_dir, sub_task)
+            if not os.path.isdir(sub_task_dir):
+                continue
+            
+            # 检查任务状态
+            eval_results_path = os.path.join(sub_task_dir, "eval_results.json")
+            task_info_path = os.path.join(sub_task_dir, "task_info.json")
+            log_path = os.path.join(sub_task_dir, "train.log")
+            
+            task_id = f"{task_type}/{sub_task}"
+            
+            # 如果存在评估结果，说明任务已完成
+            if os.path.exists(eval_results_path):
+                try:
+                    # 读取评估结果
+                    with open(eval_results_path, "r", encoding="utf-8") as f:
+                        eval_results = json.load(f)
+                    
+                    # 读取任务信息（如果存在）
+                    task_info = {}
+                    if os.path.exists(task_info_path):
+                        try:
+                            with open(task_info_path, "r", encoding="utf-8") as f:
+                                task_info = json.load(f)
+                        except:
+                            pass
+                    
+                    # 从日志中提取开始和结束时间
+                    start_time = None
+                    end_time = None
+                    duration = 0
+                    
+                    if os.path.exists(log_path):
+                        try:
+                            with open(log_path, "r", encoding="utf-8") as f:
+                                log_content = f.read()
+                                
+                                # 提取开始时间
+                                start_match = re.search(r"开始时间: (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", log_content)
+                                if start_match:
+                                    start_time_str = start_match.group(1)
+                                    start_time = datetime.strptime(start_time_str, "%Y-%m-%d %H:%M:%S").timestamp()
+                                
+                                # 提取结束时间
+                                end_match = re.search(r"结束时间: (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", log_content)
+                                if end_match:
+                                    end_time_str = end_match.group(1)
+                                    end_time = datetime.strptime(end_time_str, "%Y-%m-%d %H:%M:%S").timestamp()
+                                
+                                # 计算持续时间
+                                if start_time and end_time:
+                                    duration = end_time - start_time
+                        except:
+                            pass
+                    
+                    # 如果没有从日志中提取到时间信息，使用文件修改时间
+                    if not start_time or not end_time:
+                        try:
+                            # 使用目录创建时间作为开始时间
+                            start_time = os.path.getctime(sub_task_dir)
+                            # 使用评估结果文件修改时间作为结束时间
+                            end_time = os.path.getmtime(eval_results_path)
+                            duration = end_time - start_time
+                        except:
+                            pass
+                    
+                    # 构建任务结果
+                    task_result = {
+                        "task_type": task_type,
+                        "sub_task": sub_task,
+                        "status": "成功",
+                        "output_path": sub_task_dir,
+                        "eval_results": eval_results,
+                        "start_time": start_time,
+                        "end_time": end_time,
+                        "duration": duration,
+                        **task_info  # 合并任务信息
+                    }
+                    
+                    completed_tasks.append(task_result)
+                    
+                except Exception as e:
+                    logger.error(f"处理任务 {task_id} 结果时出错: {e}")
+            
+            # 如果存在checkpoint但没有评估结果，可能是运行中或失败的任务
+            elif os.path.exists(os.path.join(sub_task_dir, "checkpoint-*")):
+                # 检查是否有正在运行的进程
+                is_running = False
+                
+                # 在Linux上可以通过检查进程来确定任务是否在运行
+                try:
+                    import subprocess
+                    result = subprocess.run(f"ps aux | grep '{task_id}' | grep -v grep", shell=True, capture_output=True, text=True)
+                    if result.stdout.strip():
+                        is_running = True
+                except:
+                    pass
+                
+                if is_running:
+                    running_tasks[task_id] = {
+                        "task_type": task_type,
+                        "sub_task": sub_task,
+                        "output_path": sub_task_dir
+                    }
+                else:
+                    # 可能是失败的任务
+                    completed_tasks.append({
+                        "task_type": task_type,
+                        "sub_task": sub_task,
+                        "status": "失败",
+                        "output_path": sub_task_dir,
+                        "eval_results": {}
+                    })
     
     # 计算总体进度
     total_tasks = len(completed_tasks) + len(pending_tasks) + len(running_tasks)

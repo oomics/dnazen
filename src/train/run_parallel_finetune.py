@@ -591,7 +591,7 @@ def run_finetune_task(task_config, gpu_manager, args):
     logger.info(f"[任务 {task_id}] 步骤6: 任务结束，状态: {status}，耗时: {duration:.2f}秒")
     return result
 
-def monitor_tasks(tasks_queue, completed_tasks, args, gpu_manager):
+def monitor_tasks(tasks_queue, args, gpu_manager):
     """监控任务执行情况"""
     logger.info("步骤4: 启动任务监控线程")
     last_report_time = time.time()
@@ -607,10 +607,14 @@ def monitor_tasks(tasks_queue, completed_tasks, args, gpu_manager):
             try:
                 # 生成临时报告
                 temp_report_path = os.path.join(args.output_dir, "progress_report.html")
-                report.generate_parallel_finetune_progress_report(completed_tasks, pending_tasks, running_tasks, temp_report_path)
+                
+                # 直接从输出目录生成报告
+                report.generate_parallel_finetune_progress_report(
+                    args.output_dir, temp_report_path
+                )
                 
                 # 输出当前状态
-                logger.info(f"步骤4.1: 当前状态 - 已完成: {len(completed_tasks)}, 运行中: {len(running_tasks)}, 等待中: {len(pending_tasks)}")
+                logger.info(f"步骤4.1: 已生成进度报告: {temp_report_path}")
                 
                 # 检查GPU使用情况
                 available_gpus = gpu_manager.get_available_gpus()
@@ -894,7 +898,7 @@ def main():
     # 步骤9: 启动监控线程
     monitor_thread = threading.Thread(
         target=monitor_tasks,
-        args=(tasks_queue, completed_tasks, args, gpu_manager)
+        args=(tasks_queue, args, gpu_manager)
     )
     monitor_thread.daemon = True
     monitor_thread.start()
@@ -934,10 +938,11 @@ def main():
                 result = future.result()
                 if result:  # 如果任务成功完成
                     completed_tasks.append(result)
+                    logger.info(result)
                     logger.info(f"步骤10.2: 任务完成: {result['task_type']}/{result['sub_task']}, 状态: {result['status']}")
             except Exception as e:
                 logger.error(f"步骤10.3: 任务执行出错: {e}")
-    
+    logger.info(f"步骤10.3: 所有任务已完成，共 {len(completed_tasks)} 个结果")
     # 如果收到停止信号，提前退出
     if stop_event.is_set():
         logger.info("步骤11: 收到停止信号，提前退出")
@@ -949,8 +954,10 @@ def main():
     # 步骤12: 生成汇总报告
     summary_report_path = os.path.join(args.output_dir, args.summary_report)
     try:
-        # 使用正确的函数名
-        report.generate_parallel_finetune_progress_report(completed_tasks, [], {}, summary_report_path)
+        # 直接传递输出目录，让报告函数自己扫描任务结果
+        report.generate_parallel_finetune_progress_report(
+            args.output_dir, summary_report_path
+        )
         logger.info(f"步骤12: 生成汇总报告: {summary_report_path}")
     except Exception as e:
         logger.error(f"步骤12: 生成汇总报告失败: {e}")

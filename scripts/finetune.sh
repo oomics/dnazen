@@ -371,6 +371,8 @@ EOF
 #   ]
 # } 
 # EOF
+echo "TASKS_CONFIG_PATH: $TASKS_CONFIG_PATH"
+cat $TASKS_CONFIG_PATH"
   
   # 构建并行训练命令
   PARALLEL_CMD="python ../src/train/run_parallel_finetune.py \
