@@ -282,40 +282,58 @@ if [ "$PARALLEL" = true ]; then
       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
       "learning_rate": $LEARNING_RATE,
       "fp16": $USE_FP16
-    },
-    {
-      "task_type": "mouse",
-      "data_dir": "GUE/mouse",
-      "sub_tasks": [ "4"],
-      "num_train_epochs": ${TASK_EPOCHS["mouse"]},
-      "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
-      "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
-      "learning_rate": $LEARNING_RATE,
-      "fp16": $USE_FP16
-    },
-    {
-      "task_type": "pd",
-      "data_dir": "GUE/prom",
-      "sub_tasks": ["prom_300_all", "prom_core_all"],
-      "num_train_epochs": ${TASK_EPOCHS["pd"]},
-      "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
-      "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
-      "learning_rate": $LEARNING_RATE,
-      "fp16": $USE_FP16
-    },
-    {
-      "task_type": "emp",
-      "data_dir": "GUE/EMP",
-      "sub_tasks": ["H3K14me1", "H3K14me2", "H3K14me3"],
-      "num_train_epochs": ${TASK_EPOCHS["emp"]},
-      "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
-      "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
-      "learning_rate": $LEARNING_RATE,
-      "fp16": $USE_FP16
     }
   ]
 } 
 EOF
+
+#  cat > "$TASKS_CONFIG_PATH" << EOF
+# {
+#   "data_base_dir": "../data",
+#   "tasks": [
+#     {
+#       "task_type": "tf",
+#       "data_dir": "GUE/tf",
+#       "sub_tasks": [ "3"],
+#       "num_train_epochs": ${TASK_EPOCHS["tf"]},
+#       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
+#       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
+#       "learning_rate": $LEARNING_RATE,
+#       "fp16": $USE_FP16
+#     },
+#     {
+#       "task_type": "mouse",
+#       "data_dir": "GUE/mouse",
+#       "sub_tasks": [ "4"],
+#       "num_train_epochs": ${TASK_EPOCHS["mouse"]},
+#       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
+#       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
+#       "learning_rate": $LEARNING_RATE,
+#       "fp16": $USE_FP16
+#     },
+#     {
+#       "task_type": "pd",
+#       "data_dir": "GUE/prom",
+#       "sub_tasks": ["prom_300_all", "prom_core_all"],
+#       "num_train_epochs": ${TASK_EPOCHS["pd"]},
+#       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
+#       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
+#       "learning_rate": $LEARNING_RATE,
+#       "fp16": $USE_FP16
+#     },
+#     {
+#       "task_type": "emp",
+#       "data_dir": "GUE/EMP",
+#       "sub_tasks": ["H3K14me1", "H3K14me2", "H3K14me3"],
+#       "num_train_epochs": ${TASK_EPOCHS["emp"]},
+#       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
+#       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
+#       "learning_rate": $LEARNING_RATE,
+#       "fp16": $USE_FP16
+#     }
+#   ]
+# } 
+# EOF
 #   cat > "$TASKS_CONFIG_PATH" << EOF
 # {
 #   "data_base_dir": "../data",
