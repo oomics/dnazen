@@ -30,9 +30,10 @@ from dnazen.ngram import NgramEncoder
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s  - [%(filename)s:%(lineno)d] - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
+    format="%(asctime)s[%(levelname)s][%(filename)s:%(lineno)d] %(message)s",
+    datefmt="%H:%M:%S",
 )
+
 logger = logging.getLogger(__name__)
 
 def compute_metrics(eval_pred):
@@ -560,15 +561,27 @@ def main():
     logger.info("-------------------------------------------------------...")
     logger.info("步骤11: 在测试集上评估模型...")
     results = trainer.evaluate(test_dataset)
-    logger.info(f"测试集评估结果:")
-    for metric_name, metric_value in results.items():
-        logger.info(f"  {metric_name}: {metric_value:.4f}")
+    
+    # 打印评估结果
+    logger.info("测试集评估结果:")
+    logger.info("-" * 50)
+    logger.info(f"{'指标名称':<30}{'值':>15}")
+    logger.info("-" * 50)
+    
+    # 按字母顺序排序指标并打印
+    for metric_name in sorted(results.keys()):
+        metric_value = results[metric_name]
+        if isinstance(metric_value, float):
+            logger.info(f"{metric_name:<30}{metric_value:>15.6f}")
+        else:
+            logger.info(f"{metric_name:<30}{metric_value:>15}")
+    logger.info("-" * 50)
     
     # 保存评估结果
     results_path = os.path.join(RESULTS_PATH, "eval_results.json")
     logger.info(f"保存评估结果到: {results_path}")
     with open(results_path, "w") as f:
-        json.dump(results, f)
+        json.dump(results, f, indent=2)  # 添加缩进使JSON文件更易读
 
     # 步骤12: 在测试集上进行预测
     logger.info("-------------------------------------------------------...")

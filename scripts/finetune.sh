@@ -269,44 +269,6 @@ if [ "$PARALLEL" = true ]; then
   mkdir -p "$PARALLEL_OUTPUT_DIR"
   
   # 创建任务配置文件
- cat > "$TASKS_CONFIG_PATH" << EOF
-{
-  "data_base_dir": "../data",
-  "tasks": [
-    {
-      "task_type": "tf",
-      "data_dir": "GUE/tf",
-      "sub_tasks": [ "3"],
-      "num_train_epochs": ${TASK_EPOCHS["tf"]},
-      "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
-      "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
-      "learning_rate": $LEARNING_RATE,
-      "fp16": $USE_FP16
-    },
-    {
-      "task_type": "pd",
-      "data_dir": "GUE/prom",
-      "sub_tasks": ["prom_300_all", "prom_core_all"],
-      "num_train_epochs": ${TASK_EPOCHS["pd"]},
-      "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
-      "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
-      "learning_rate": $LEARNING_RATE,
-      "fp16": $USE_FP16
-    },
-    {
-      "task_type": "emp",
-      "data_dir": "GUE/EMP",
-      "sub_tasks": ["H3"],
-      "num_train_epochs": ${TASK_EPOCHS["emp"]},
-      "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
-      "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
-      "learning_rate": $LEARNING_RATE,
-      "fp16": $USE_FP16
-    }
-  ]
-} 
-EOF
-
 #  cat > "$TASKS_CONFIG_PATH" << EOF
 # {
 #   "data_base_dir": "../data",
@@ -316,16 +278,6 @@ EOF
 #       "data_dir": "GUE/tf",
 #       "sub_tasks": [ "3"],
 #       "num_train_epochs": ${TASK_EPOCHS["tf"]},
-#       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
-#       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
-#       "learning_rate": $LEARNING_RATE,
-#       "fp16": $USE_FP16
-#     },
-#     {
-#       "task_type": "mouse",
-#       "data_dir": "GUE/mouse",
-#       "sub_tasks": [ "4"],
-#       "num_train_epochs": ${TASK_EPOCHS["mouse"]},
 #       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
 #       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
 #       "learning_rate": $LEARNING_RATE,
@@ -344,7 +296,7 @@ EOF
 #     {
 #       "task_type": "emp",
 #       "data_dir": "GUE/EMP",
-#       "sub_tasks": ["H3K14me1", "H3K14me2", "H3K14me3"],
+#       "sub_tasks": ["H3"],
 #       "num_train_epochs": ${TASK_EPOCHS["emp"]},
 #       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
 #       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
@@ -354,6 +306,34 @@ EOF
 #   ]
 # } 
 # EOF
+
+ cat > "$TASKS_CONFIG_PATH" << EOF
+{
+  "data_base_dir": "../data",
+  "tasks": [
+    {
+      "task_type": "mouse",
+      "data_dir": "GUE/mouse",
+      "sub_tasks": [ "4"],
+      "num_train_epochs": ${TASK_EPOCHS["mouse"]},
+      "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
+      "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
+      "learning_rate": $LEARNING_RATE,
+      "fp16": $USE_FP16
+    },
+    {
+      "task_type": "emp",
+      "data_dir": "GUE/EMP",
+      "sub_tasks": ["H3K14me1", "H3K14me2", "H3K14me3"],
+      "num_train_epochs": ${TASK_EPOCHS["emp"]},
+      "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
+      "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
+      "learning_rate": $LEARNING_RATE,
+      "fp16": $USE_FP16
+    }
+  ]
+} 
+EOF
 #   cat > "$TASKS_CONFIG_PATH" << EOF
 # {
 #   "data_base_dir": "../data",
@@ -402,7 +382,7 @@ EOF
 # } 
 # EOF
   
-  # # 构建并行训练命令
+  # 构建并行训练命令
   PARALLEL_CMD="python ../src/train/run_parallel_finetune.py \
     --config $TASKS_CONFIG_PATH \
     --max_workers $MAX_WORKERS \
@@ -410,12 +390,17 @@ EOF
     --ngram_encoder_dir $NGRAM_ENCODER_PATH \
     --output_dir $PARALLEL_OUTPUT_DIR \
     --retry_count $RETRY_COUNT \
-    --monitor_interval 10000 \
+    --monitor_interval 120 \
+    --summary_interval 120 \
+    --gpu_strategy balanced \
     --clean_output"
   
   # 添加GPU IDs参数（如果指定）
   if [ -n "$GPU_IDS" ]; then
     PARALLEL_CMD="$PARALLEL_CMD --gpu_ids $GPU_IDS"
+  else
+    # 默认使用所有8个GPU
+    PARALLEL_CMD="$PARALLEL_CMD --gpu_ids 0,1,2,3,4,5,6,7"
   fi
   
   # 输出完整命令

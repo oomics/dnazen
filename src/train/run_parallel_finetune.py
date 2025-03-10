@@ -27,8 +27,8 @@ import report
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%H:%M:%S",
 )
 logger = logging.getLogger(__name__)
 
@@ -61,6 +61,11 @@ def parse_args():
     parser.add_argument("--memory_threshold", type=int, default=1000, help="GPU内存阈值（MB），低于此值的GPU不会被分配")
     parser.add_argument("--resume", action="store_true", help="从中断处恢复任务")
     parser.add_argument("--clean_output", action="store_true", help="执行任务前清空输出目录")
+    parser.add_argument("--gpu_strategy", type=str, default="balanced", 
+                      choices=["round_robin", "balanced", "memory"],
+                      help="GPU分配策略: round_robin(轮询), balanced(负载均衡), memory(基于显存)")
+    parser.add_argument("--summary_interval", type=int, default=120,
+                      help="日志汇总间隔(秒)")
     return parser.parse_args()
 
 def signal_handler(sig, frame):
@@ -87,84 +92,117 @@ def signal_handler(sig, frame):
 
 class GPUManager:
     """GPU资源管理器"""
-    def __init__(self, gpu_ids=None, memory_threshold=1000):
+    
+    def __init__(self, gpu_ids, strategy="round_robin"):
         """
         初始化GPU管理器
         
         参数:
-            gpu_ids (list): 要使用的GPU ID列表，如果为None则使用所有可用GPU
-            memory_threshold (int): GPU内存阈值（MB），低于此值的GPU不会被分配
+            gpu_ids (list): 可用的GPU ID列表
+            strategy (str): GPU分配策略，可选值：
+                - round_robin: 轮询分配
+                - balanced: 负载均衡分配
+                - memory: 基于显存使用率分配
         """
         self.gpu_ids = gpu_ids
-        self.memory_threshold = memory_threshold
+        self.strategy = strategy
+        self.assigned_gpus = {}  # 任务ID -> GPU ID
+        self.gpu_tasks = {gpu_id: [] for gpu_id in gpu_ids}  # GPU ID -> 任务列表
+        self.gpu_memory_usage = {gpu_id: 0 for gpu_id in gpu_ids}  # GPU ID -> 显存使用率
         self.lock = threading.Lock()
-        self.usage = {}  # GPU ID -> 使用状态
         
-        logger.info(f"步骤2: 初始化GPU管理器，指定GPU: {gpu_ids if gpu_ids else '所有可用'}, 内存阈值: {memory_threshold}MB")
+        logger.info(f"初始化GPU管理器，可用GPU: {gpu_ids}，策略: {strategy}")
+        
+        # 启动GPU监控线程
+        if strategy == "memory":
+            self.monitor_thread = threading.Thread(target=self._monitor_gpu_memory)
+            self.monitor_thread.daemon = True
+            self.monitor_thread.start()
     
-    def get_available_gpus(self):
-        """获取可用的GPU列表及其内存使用情况"""
+    def _monitor_gpu_memory(self):
+        """监控GPU显存使用情况"""
         try:
-            # 使用nvidia-smi获取GPU信息
-            logger.debug("步骤2.1: 获取可用GPU信息...")
-            output = subprocess.check_output(
-                ['nvidia-smi', '--query-gpu=index,memory.used,memory.total', '--format=csv,noheader,nounits'],
-                universal_newlines=True
-            )
+            import pynvml
+            pynvml.nvmlInit()
             
-            gpus = []
-            for line in output.strip().split('\n'):
-                values = line.split(', ')
-                if len(values) == 3:
-                    index = int(values[0])
-                    used_memory = int(values[1])
-                    total_memory = int(values[2])
-                    free_memory = total_memory - used_memory
-                    gpus.append({
-                        'index': index,
-                        'used_memory': used_memory,
-                        'total_memory': total_memory,
-                        'free_memory': free_memory
-                    })
-            
-            logger.debug(f"步骤2.2: 找到 {len(gpus)} 个GPU设备")
-            return gpus
-        except Exception as e:
-            logger.warning(f"步骤2.3: 获取GPU信息失败: {e}")
-            return []
+            while True:
+                with self.lock:
+                    for gpu_id in self.gpu_ids:
+                        try:
+                            handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_id)
+                            info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                            self.gpu_memory_usage[gpu_id] = info.used / info.total
+                        except Exception as e:
+                            logger.warning(f"获取GPU {gpu_id}显存信息失败: {e}")
+                
+                time.sleep(5)  # 每5秒更新一次
+        except ImportError:
+            logger.warning("未安装pynvml，无法监控GPU显存使用情况")
+            self.strategy = "balanced"  # 降级为balanced策略
     
-    def allocate(self):
-        """分配一个可用的GPU"""
+    def get_gpu(self, task_id, task_type=None, sub_task=None):
+        """
+        获取可用的GPU
+        
+        参数:
+            task_id (str): 任务ID
+            task_type (str, optional): 任务类型，用于任务特性分析
+            sub_task (str, optional): 子任务名称，用于任务特性分析
+            
+        返回:
+            int: 分配的GPU ID
+        """
         with self.lock:
-            logger.debug("步骤2.4: 分配GPU资源...")
-            available_gpus = self.get_available_gpus()
+            # 如果任务已分配GPU，直接返回
+            if task_id in self.assigned_gpus:
+                return self.assigned_gpus[task_id]
             
-            # 过滤指定的GPU
-            if self.gpu_ids is not None:
-                logger.debug(f"步骤2.5: 从指定的GPU IDs中选择: {self.gpu_ids}")
-                available_gpus = [gpu for gpu in available_gpus if gpu['index'] in self.gpu_ids]
+            # 根据策略分配GPU
+            if self.strategy == "round_robin":
+                # 轮询策略：简单地轮流分配
+                gpu_id = self.gpu_ids[len(self.assigned_gpus) % len(self.gpu_ids)]
             
-            # 按可用内存排序
-            available_gpus.sort(key=lambda x: x['free_memory'], reverse=True)
+            elif self.strategy == "memory":
+                # 显存策略：分配显存使用率最低的GPU
+                gpu_id = min(self.gpu_memory_usage, key=self.gpu_memory_usage.get)
             
-            for gpu in available_gpus:
-                gpu_id = gpu['index']
-                if gpu['free_memory'] > self.memory_threshold and gpu_id not in self.usage:
-                    self.usage[gpu_id] = True
-                    logger.info(f"步骤2.6: 分配GPU {gpu_id}，可用内存: {gpu['free_memory']}MB")
-                    return gpu_id
+            else:  # balanced策略
+                # 负载均衡策略：分配任务数最少的GPU
+                gpu_counts = {gpu_id: len(tasks) for gpu_id, tasks in self.gpu_tasks.items()}
+                
+                # 考虑任务类型的特性进行更智能的分配
+                if task_type:
+                    # 尝试将相同类型的任务分配到不同GPU，避免资源竞争
+                    for gpu_id in self.gpu_ids:
+                        # 检查该GPU上是否已有相同类型的任务
+                        has_same_type = any(t.split('/')[0] == task_type for t in self.gpu_tasks[gpu_id])
+                        if not has_same_type:
+                            # 如果没有相同类型的任务，优先分配到这个GPU
+                            gpu_counts[gpu_id] -= 0.5  # 降低权重，增加选择概率
+                
+                # 选择任务数最少的GPU
+                gpu_id = min(gpu_counts, key=gpu_counts.get)
             
-            logger.warning("步骤2.7: 没有找到可用的GPU")
-            return None
+            # 记录分配结果
+            self.assigned_gpus[task_id] = gpu_id
+            self.gpu_tasks[gpu_id].append(task_id)
+            
+            logger.info(f"任务 {task_id} 分配到GPU {gpu_id}")
+            return gpu_id
     
-    def release(self, gpu_id):
-        """释放GPU资源"""
+    def release_gpu(self, task_id):
+        """
+        释放任务占用的GPU
+        
+        参数:
+            task_id (str): 任务ID
+        """
         with self.lock:
-            if gpu_id in self.usage:
-                logger.info(f"步骤2.8: 释放GPU {gpu_id}")
-                del self.usage[gpu_id]
-                return True
-            return False
+            if task_id in self.assigned_gpus:
+                gpu_id = self.assigned_gpus[task_id]
+                self.gpu_tasks[gpu_id].remove(task_id)
+                del self.assigned_gpus[task_id]
+                logger.info(f"任务 {task_id} 释放GPU {gpu_id}")
 
 def log_output_stream(stream, log_file, prefix="", task_id="unknown"):
     """实时记录输出流"""
@@ -185,6 +223,20 @@ def log_output_stream(stream, log_file, prefix="", task_id="unknown"):
             # 写入日志文件
             log_file.write(f"{log_line}\n")
             log_file.flush()
+            
+            # 检查是否包含进度信息
+            progress_match = re.search(r'Epoch\s+(\d+)/(\d+)', line)
+            if progress_match:
+                current_epoch = int(progress_match.group(1))
+                total_epochs = int(progress_match.group(2))
+                progress_percentage = (current_epoch / total_epochs) * 100
+                
+                # 更新任务进度信息
+                with task_logs_lock:
+                    if task_id in running_tasks:
+                        running_tasks[task_id]["progress"] = progress_percentage
+                        running_tasks[task_id]["current_epoch"] = current_epoch
+                        running_tasks[task_id]["total_epochs"] = total_epochs
             
             # 将重要日志添加到任务日志缓存中
             if "error" in line.lower() or "exception" in line.lower() or "traceback" in line.lower() or "步骤" in line:
@@ -208,11 +260,41 @@ def summarize_logs():
         # 每隔指定时间输出一次汇总日志
         if current_time - last_summary_time >= summary_interval:
             with task_logs_lock:
-                if task_logs:
-                    logger.info("\n" + "="*80)
-                    logger.info(f"任务日志汇总 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-                    logger.info("="*80)
+                logger.info("\n" + "="*80)
+                logger.info(f"任务日志汇总 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                logger.info("="*80)
+                
+                # 输出运行中任务的状态
+                if running_tasks:
+                    logger.info("\n>> 运行中的任务状态:")
+                    logger.info(f"{'任务ID':<20}{'已运行时间':<15}{'进度':<15}{'GPU':<10}")
+                    logger.info("-"*60)
                     
+                    for task_id, task_info in sorted(running_tasks.items()):
+                        # 计算已运行时间
+                        start_time = task_info.get("start_time", current_time)
+                        runtime = current_time - start_time
+                        hours, remainder = divmod(runtime, 3600)
+                        minutes, seconds = divmod(remainder, 60)
+                        runtime_str = f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
+                        
+                        # 获取进度信息
+                        progress = task_info.get("progress", 0)
+                        progress_str = f"{progress:.1f}%"
+                        
+                        # 获取当前轮次信息
+                        current_epoch = task_info.get("current_epoch", 0)
+                        total_epochs = task_info.get("total_epochs", 0)
+                        if total_epochs > 0:
+                            progress_str = f"{progress:.1f}% ({current_epoch}/{total_epochs}轮)"
+                        
+                        # 获取GPU信息
+                        gpu_id = task_info.get("gpu_id", "未知")
+                        
+                        logger.info(f"{task_id:<20}{runtime_str:<15}{progress_str:<15}{gpu_id:<10}")
+                
+                # 输出任务日志
+                if task_logs:
                     # 按任务ID排序输出
                     for task_id in sorted(task_logs.keys()):
                         # 获取该任务的最新日志（最多10条）
@@ -222,10 +304,10 @@ def summarize_logs():
                             for _, log_line in recent_logs:
                                 logger.info(f"  {log_line}")
                     
-                    logger.info("="*80 + "\n")
-                    
                     # 清空已输出的日志
                     task_logs.clear()
+                
+                logger.info("="*80 + "\n")
             
             last_summary_time = current_time
         
@@ -319,7 +401,7 @@ def run_finetune_task(task_config, gpu_manager, args):
     log_file.write(f"开始时间: {datetime.fromtimestamp(start_time).strftime('%Y-%m-%d %H:%M:%S')}\n\n")
     
     # 分配GPU
-    gpu_id = gpu_manager.allocate()
+    gpu_id = gpu_manager.get_gpu(task_id, task_type, sub_task)
     if gpu_id is None:
         logger.error(f"[任务 {task_id}] 步骤2: 无法分配GPU，任务将等待")
         log_file.write("无法分配GPU，任务将等待\n")
@@ -338,7 +420,10 @@ def run_finetune_task(task_config, gpu_manager, args):
         "sub_task": sub_task,
         "start_time": start_time,
         "priority": priority,
-        "gpu_id": gpu_id
+        "gpu_id": gpu_id,
+        "progress": 0,
+        "current_epoch": 0,
+        "total_epochs": num_train_epochs
     }
     running_tasks[task_id] = task_info
     
@@ -464,7 +549,7 @@ def run_finetune_task(task_config, gpu_manager, args):
     
     # 释放GPU
     if gpu_id is not None:
-        gpu_manager.release(gpu_id)
+        gpu_manager.release_gpu(task_id)
         logger.info(f"[任务 {task_id}] 步骤4: 释放GPU {gpu_id}")
     
     # 记录结束时间
@@ -800,7 +885,11 @@ def main():
     logger.info(f"步骤8: 创建任务队列，包含 {tasks_queue.qsize()} 个任务")
     
     # 创建GPU管理器
-    gpu_manager = GPUManager(gpu_ids)
+    gpu_manager = GPUManager(gpu_ids, strategy=args.gpu_strategy)
+    
+    # 设置日志汇总间隔
+    global summary_interval
+    summary_interval = args.summary_interval
     
     # 步骤9: 启动监控线程
     monitor_thread = threading.Thread(
