@@ -222,6 +222,56 @@ fi
 echo "=================================================================="
 
 ###################################################################################
+# 任务处理函数
+###################################################################################
+process_task() {
+  local task_type=$1
+  local sub_task=$2
+  local num_epochs=$3
+  
+  echo "================================================"
+  echo "任务: $task_type/$sub_task"
+  echo "================================================"
+
+  local data_path="${GUE_DIR}/${TASK_PATHS[$task_type]}/${sub_task}"
+  local task_output_path="${FINETUNE_OUT_DIR}/${task_type}/${sub_task}"   
+  
+  echo "数据路径 DATA_PATH: $data_path"
+  echo "训练任务输出路径 TASK_OUTPUT_PATH: $task_output_path"
+  echo "训练轮数 NUM_TRAIN_EPOCHS: $num_epochs"
+  
+  # 创建输出目录
+  mkdir -p "$task_output_path"
+
+  # 构建训练命令
+  local cmd="python ../src/train/run_finetune.py \
+    --data_path $data_path \
+    --checkpoint $PRETRAIN_CHECKPOINT \
+    --ngram_encoder_dir $NGRAM_ENCODER_PATH \
+    --per_device_train_batch_size $PER_DEVICE_TRAIN_BATCH_SIZE \
+    --per_device_eval_batch_size $PER_DEVICE_EVAL_BATCH_SIZE \
+    --gradient_accumulation_steps $GRADIENT_ACCUMULATION_STEPS \
+    --lr $LEARNING_RATE \
+    --num_train_epochs $num_epochs \
+    --out $task_output_path"
+  
+  # 添加可选参数
+  if [ "$USE_FP16" = true ]; then
+    cmd="$cmd --fp16"
+  fi
+  
+  # 输出完整命令
+  echo "执行命令: $cmd"
+  
+  # 运行训练脚本
+  eval $cmd
+  
+  # 复制输出文件到报告保存文件夹，但排除checkpoint-*目录
+  echo "复制输出文件到 $REPORT_OUT_DIR，排除checkpoint目录..."
+  find "$task_output_path" -type f -not -path "*/checkpoint-*/*" -exec cp --parents {} "$REPORT_OUT_DIR" \;
+}
+
+###################################################################################
 # 5. 启动训练进程
 ###################################################################################
 # 获取脚本所在目录，确保可以正确找到训练脚本
@@ -259,165 +309,52 @@ fi
 PRETRAIN_CHECKPOINT="${OUTPUT_DIR}/checkpoint-${FINETUNE_CHECKPOINT_STEP}"
 
 if [ "$PARALLEL" = true ]; then
-  # 并行模式：创建任务配置文件
+  # 并行模式：使用数组管理任务
   TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-  TASKS_CONFIG_PATH="${FINETUNE_OUT_DIR}/tasks_config_${TIMESTAMP}.json"
   PARALLEL_OUTPUT_DIR="${FINETUNE_OUT_DIR}/parallel_${TIMESTAMP}"
   
   echo "使用并行模式运行所有任务"
-  echo "任务配置文件: $TASKS_CONFIG_PATH"
   echo "并行输出目录: $PARALLEL_OUTPUT_DIR"
+  echo "最大并行任务数: $MAX_WORKERS"
   
   # 创建输出目录
   mkdir -p "$PARALLEL_OUTPUT_DIR"
   
-  # 创建任务配置文件
-#  cat > "$TASKS_CONFIG_PATH" << EOF
-# {
-#   "data_base_dir": "../data",
-#   "tasks": [
-#     {
-#       "task_type": "tf",
-#       "data_dir": "GUE/tf",
-#       "sub_tasks": [ "3"],
-#       "num_train_epochs": ${TASK_EPOCHS["tf"]},
-#       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
-#       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
-#       "learning_rate": $LEARNING_RATE,
-#       "fp16": $USE_FP16
-#     },
-#     {
-#       "task_type": "pd",
-#       "data_dir": "GUE/prom",
-#       "sub_tasks": ["prom_300_all", "prom_core_all"],
-#       "num_train_epochs": ${TASK_EPOCHS["pd"]},
-#       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
-#       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
-#       "learning_rate": $LEARNING_RATE,
-#       "fp16": $USE_FP16
-#     },
-#     {
-#       "task_type": "emp",
-#       "data_dir": "GUE/EMP",
-#       "sub_tasks": ["H3"],
-#       "num_train_epochs": ${TASK_EPOCHS["emp"]},
-#       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
-#       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
-#       "learning_rate": $LEARNING_RATE,
-#       "fp16": $USE_FP16
-#     }
-#   ]
-# } 
-# EOF
-
-#  cat > "$TASKS_CONFIG_PATH" << EOF
-# {
-#   "data_base_dir": "../data",
-#   "tasks": [
-#     {
-#       "task_type": "emp",
-#       "data_dir": "GUE/EMP",
-#       "sub_tasks": ["H3K14ac","H3K36me3","H3K4me1", "H3K4me2", "H3K4me3", "H3K9ac", "H4", "H4ac"],
-#       "num_train_epochs": ${TASK_EPOCHS["emp"]},
-#       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
-#       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
-#       "learning_rate": $LEARNING_RATE,
-#       "fp16": $USE_FP16
-#     }
-#   ]
-# } 
-# EOF
-  cat > "$TASKS_CONFIG_PATH" << EOF
-{
-  "data_base_dir": "../data",
-  "tasks": [
-    {
-      "task_type": "tf",
-      "data_dir": "GUE/tf",
-      "sub_tasks": ["0", "1", "2", "3", "4"],
-      "num_train_epochs": ${TASK_EPOCHS["tf"]},
-      "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
-      "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
-      "learning_rate": $LEARNING_RATE,
-      "fp16": $USE_FP16
-    },
-    {
-      "task_type": "mouse",
-      "data_dir": "GUE/mouse",
-      "sub_tasks": ["0", "1", "2", "3", "4"],
-      "num_train_epochs": ${TASK_EPOCHS["mouse"]},
-      "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
-      "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
-      "learning_rate": $LEARNING_RATE,
-      "fp16": $USE_FP16
-    },
-    {
-      "task_type": "pd",
-      "data_dir": "GUE/prom",
-      "sub_tasks": ["prom_300_all", "prom_core_all"],
-      "num_train_epochs": ${TASK_EPOCHS["pd"]},
-      "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
-      "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
-      "learning_rate": $LEARNING_RATE,
-      "fp16": $USE_FP16
-    },
-    {
-      "task_type": "emp",
-      "data_dir": "GUE/EMP",
-      "sub_tasks": ["H3","H3K14ac","H3K36me3","H3K14me1", "H3K14me2", "H3K14me3", "H3K9ac", "H4", "H4ac"],
-      "num_train_epochs": ${TASK_EPOCHS["emp"]},
-      "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
-      "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
-      "learning_rate": $LEARNING_RATE,
-      "fp16": $USE_FP16
-    }
-  ]
-} 
-EOF
-echo "TASKS_CONFIG_PATH: $TASKS_CONFIG_PATH"
-cat "$TASKS_CONFIG_PATH"
-
-for task in $(jq -r '.tasks[] | .task_type + "/" + .sub_tasks[]' "$TASKS_CONFIG_PATH"); do
-  echo "================================================"
-  echo "任务: $task"
-  echo "================================================"
-
-  DATA_PATH="${GUE_DIR}/${TASK_PATHS[$TASK_TYPE]}/${SUB_TASK}"
-  TASK_OUTPUT_PATH="${FINETUNE_OUT_DIR}/${TASK_TYPE}/${SUB_TASK}"   
-  echo "数据路径 DATA_PATH: $DATA_PATH"
-  echo "训练任务输出路径 TASK_OUTPUT_PATH: $TASK_OUTPUT_PATH"
-  echo "训练轮数 NUM_TRAIN_EPOCHS: $NUM_TRAIN_EPOCHS"
-  echo "微调评估结果保存目录 REPORT_OUT_DIR: $REPORT_OUT_DIR"
+  # 定义任务数组
+  declare -A TASK_CONFIGS
   
-  # 创建输出目录
-  mkdir -p "$TASK_OUTPUT_PATH"
+  # TF任务
+  TF_SUBTASKS=("0" "1" "2" "3" "4")
+  # Mouse任务
+  MOUSE_SUBTASKS=("0" "1" "2" "3" "4")
+  # PD任务
+  PD_SUBTASKS=("prom_300_all" "prom_core_all")
+  # EMP任务
+  EMP_SUBTASKS=("H3" "H3K14ac" "H3K36me3" "H3K14me1" "H3K14me2" "H3K14me3" "H3K9ac" "H4" "H4ac")
+  
+  # 处理所有任务
+  echo "开始处理所有任务..."
+  
+  # 处理TF任务
+  for subtask in "${TF_SUBTASKS[@]}"; do
+    process_task "tf" "$subtask" "${TASK_EPOCHS[tf]}"
+  done
+  
+  # 处理Mouse任务
+  for subtask in "${MOUSE_SUBTASKS[@]}"; do
+    process_task "mouse" "$subtask" "${TASK_EPOCHS[mouse]}"
+  done
+  
+  # 处理PD任务
+  for subtask in "${PD_SUBTASKS[@]}"; do
+    process_task "pd" "$subtask" "${TASK_EPOCHS[pd]}"
+  done
+  
+  # 处理EMP任务
+  for subtask in "${EMP_SUBTASKS[@]}"; do
+    process_task "emp" "$subtask" "${TASK_EPOCHS[emp]}"
+  done
 
-  # 构建训练命令
-  CMD="python ../src/train/run_finetune.py \
-    --data_path $DATA_PATH \
-    --checkpoint $PRETRAIN_CHECKPOINT \
-    --ngram_encoder_dir $NGRAM_ENCODER_PATH \
-    --per_device_train_batch_size $PER_DEVICE_TRAIN_BATCH_SIZE \
-    --per_device_eval_batch_size $PER_DEVICE_EVAL_BATCH_SIZE \
-    --gradient_accumulation_steps $GRADIENT_ACCUMULATION_STEPS \
-    --lr $LEARNING_RATE \
-    --num_train_epochs $NUM_TRAIN_EPOCHS
-    --out $TASK_OUTPUT_PATH"
-  
-  # 输出完整命令
-  echo "执行命令: $CMD"
-  
-  # 运行训练脚本
-  eval $CMD
-
-  # 创建目标目录（如果不存在）
-  mkdir -p "$OUTPUT_DIR/finetune/output"
-  
-  # 复制输出文件到报告保存文件夹，但排除checkpoint-*目录
-  echo "复制输出文件到 $REPORT_OUT_DIR，排除checkpoint目录..."
-  find "$TASK_OUTPUT_PATH" -type f -not -path "*/checkpoint-*/*" -exec cp --parents {} "$REPORT_OUT_DIR" \;
-done
-  
 else
   # 单任务模式：运行单个任务
   # 检查任务类型是否有效
@@ -474,7 +411,7 @@ else
   if [ $? -eq 0 ]; then
 
     # 复制输出文件到报告保存文件夹，但排除checkpoint-*目录
-    echo "复制输出文件到 $REPORT_OUT_DIR，排除checkpoint目录..."
+    echo "复制输出文件到 $OUTPUT_DIR/finetune/output，排除checkpoint目录..."
     find "$TASK_OUTPUT_PATH" -type f -not -path "*/checkpoint-*/*" -exec cp --parents {} "$REPORT_OUT_DIR" \;
 
     echo "=================================================================="
