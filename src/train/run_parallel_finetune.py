@@ -185,13 +185,13 @@ def run_finetune_task(task_config, gpu_manager, args):
     priority = task_config.get("priority", 0)  # 优先级，数字越大优先级越高
     
     task_id = f"{task_type}/{sub_task}"
-    logger.info(f"步骤3: 准备执行任务: {task_id}, 优先级: {priority}")
+    logger.info(f"[任务 {task_id}] 步骤1: 准备执行任务，优先级: {priority}")
     
     # 检查是否已经完成
     if args.resume and os.path.exists(output_path):
         eval_results_path = os.path.join(output_path, "eval_results.json")
         if os.path.exists(eval_results_path):
-            logger.info(f"步骤3.1: 任务 {task_id} 已完成，跳过")
+            logger.info(f"[任务 {task_id}] 步骤1.1: 任务已完成，跳过")
             try:
                 with open(eval_results_path, "r") as f:
                     eval_results = json.load(f)
@@ -207,7 +207,7 @@ def run_finetune_task(task_config, gpu_manager, args):
                     "end_time": time.time()
                 }
             except Exception as e:
-                logger.warning(f"步骤3.2: 读取评估结果失败: {e}，将重新运行任务")
+                logger.warning(f"[任务 {task_id}] 步骤1.2: 读取评估结果失败: {e}，将重新运行任务")
     
     # 创建输出目录
     os.makedirs(output_path, exist_ok=True)
@@ -218,7 +218,7 @@ def run_finetune_task(task_config, gpu_manager, args):
     
     # 日志文件路径
     log_file_path = os.path.join(log_dir, f"{task_type}_{sub_task}.log")
-    logger.info(f"步骤3.3: 任务日志将保存到: {log_file_path}")
+    logger.info(f"[任务 {task_id}] 步骤1.3: 任务日志将保存到: {log_file_path}")
     
     # 打开日志文件
     log_file = open(log_file_path, "w", encoding="utf-8")
@@ -238,7 +238,7 @@ def run_finetune_task(task_config, gpu_manager, args):
     # 分配GPU
     gpu_id = gpu_manager.allocate()
     if gpu_id is None:
-        logger.error(f"步骤3.4: 无法为任务 {task_id} 分配GPU，任务将等待")
+        logger.error(f"[任务 {task_id}] 步骤2: 无法分配GPU，任务将等待")
         log_file.write("无法分配GPU，任务将等待\n")
         log_file.close()
         
@@ -246,7 +246,7 @@ def run_finetune_task(task_config, gpu_manager, args):
         time.sleep(30)
         return None
     
-    logger.info(f"步骤3.5: 为任务 {task_id} 分配GPU {gpu_id}")
+    logger.info(f"[任务 {task_id}] 步骤2: 分配GPU {gpu_id}")
     log_file.write(f"分配GPU: {gpu_id}\n\n")
     
     # 更新运行中的任务信息
@@ -265,14 +265,15 @@ def run_finetune_task(task_config, gpu_manager, args):
     
     # 状态
     status = "失败"
+    failure_reason = "未知错误"
     
     # 尝试运行任务
     for attempt in range(1, retry_count + 1):
         if stop_event.is_set():
-            logger.info(f"步骤3.6: 收到停止信号，取消任务 {task_id}")
+            logger.info(f"[任务 {task_id}] 步骤3: 收到停止信号，取消任务")
             break
         
-        logger.info(f"步骤3.7: 开始执行任务 {task_id}，尝试 {attempt}/{retry_count}")
+        logger.info(f"[任务 {task_id}] 步骤3: 开始执行，尝试 {attempt}/{retry_count}")
         log_file.write(f"尝试 {attempt}/{retry_count}\n")
         
         # 构建命令
@@ -285,13 +286,13 @@ def run_finetune_task(task_config, gpu_manager, args):
             "--per_device_eval_batch_size", str(per_device_eval_batch_size),
             "--lr", str(learning_rate),
             "--num_train_epochs", str(num_train_epochs),
-            "--out", output_path
+            "--out", output_path  # 确保提供输出目录参数
         ]
         
         if fp16:
             cmd.append("--fp16")
         
-        logger.info(f"步骤3.8: 执行命令: {' '.join(cmd)}")
+        logger.info(f"[任务 {task_id}] 步骤3.1: 执行命令: {' '.join(cmd)}")
         log_file.write(f"执行命令: {' '.join(cmd)}\n\n")
         log_file.flush()
         
@@ -339,19 +340,45 @@ def run_finetune_task(task_config, gpu_manager, args):
         # 检查是否成功
         if return_code == 0:
             status = "成功"
-            logger.info(f"步骤3.9: 任务完成: {task_id}")
+            logger.info(f"[任务 {task_id}] 步骤3.2: 任务完成")
             break
         else:
-            logger.error(f"步骤3.10: 任务失败: {task_id}，返回码: {return_code}")
+            # 收集失败原因
+            error_logs = []
+            try:
+                # 读取日志文件中的最后20行错误信息
+                with open(log_file_path, "r", encoding="utf-8") as f:
+                    log_lines = f.readlines()
+                    # 查找包含Error或Exception的行
+                    for line in reversed(log_lines):
+                        if "error" in line.lower() or "exception" in line.lower() or "traceback" in line.lower():
+                            error_logs.append(line.strip())
+                        if len(error_logs) >= 5:  # 最多收集5条错误信息
+                            break
+            except Exception as e:
+                error_logs.append(f"无法读取错误日志: {e}")
+            
+            # 构建详细的错误信息
+            error_detail = "\n".join(reversed(error_logs)) if error_logs else "未知错误"
+            failure_reason = error_detail
+            
+            logger.error(f"[任务 {task_id}] 步骤3.3: 任务失败，返回码: {return_code}")
+            logger.error(f"[任务 {task_id}] 步骤3.4: 失败原因:\n{error_detail}")
+            
+            # 记录到日志文件
+            log_file.write(f"\n失败原因:\n{error_detail}\n\n")
+            log_file.flush()
+            
             if attempt < retry_count and not stop_event.is_set():
-                logger.info(f"步骤3.11: 将在5秒后重试...")
+                logger.info(f"[任务 {task_id}] 步骤3.5: 将在5秒后重试...")
                 time.sleep(5)
             else:
-                logger.error(f"步骤3.12: 任务 {task_id} 达到最大重试次数，放弃")
+                logger.error(f"[任务 {task_id}] 步骤3.6: 达到最大重试次数，放弃")
     
     # 释放GPU
     if gpu_id is not None:
         gpu_manager.release(gpu_id)
+        logger.info(f"[任务 {task_id}] 步骤4: 释放GPU {gpu_id}")
     
     # 记录结束时间
     end_time = time.time()
@@ -370,12 +397,12 @@ def run_finetune_task(task_config, gpu_manager, args):
         try:
             with open(eval_results_path, "r") as f:
                 eval_results = json.load(f)
-            logger.info(f"步骤3.13: 读取评估结果: {eval_results}")
+            logger.info(f"[任务 {task_id}] 步骤5: 读取评估结果: {eval_results}")
         except Exception as e:
-            logger.error(f"步骤3.14: 读取评估结果失败: {e}")
+            logger.error(f"[任务 {task_id}] 步骤5: 读取评估结果失败: {e}")
     
     # 返回任务结果
-    return {
+    result = {
         "task_type": task_type,
         "sub_task": sub_task,
         "status": status,
@@ -385,6 +412,12 @@ def run_finetune_task(task_config, gpu_manager, args):
         "priority": priority,
         "end_time": end_time
     }
+    
+    if status != "成功":
+        result["failure_reason"] = failure_reason
+    
+    logger.info(f"[任务 {task_id}] 步骤6: 任务结束，状态: {status}，耗时: {duration:.2f}秒")
+    return result
 
 def log_output_stream(stream, log_file, prefix=""):
     """实时记录输出流"""
