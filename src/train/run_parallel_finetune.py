@@ -332,11 +332,12 @@ def run_finetune_task(task_config, gpu_manager, args):
     output_path = task_config["output_path"]
     checkpoint = task_config["checkpoint"]
     ngram_encoder_dir = task_config["ngram_encoder_dir"]
-    num_train_epochs = task_config.get("num_train_epochs", 5)
-    per_device_train_batch_size = task_config.get("per_device_train_batch_size", 8)
-    per_device_eval_batch_size = task_config.get("per_device_eval_batch_size", 32)
-    learning_rate = task_config.get("learning_rate", 3e-5)
-    fp16 = task_config.get("fp16", True)
+    num_train_epochs = task_config["num_train_epochs"]
+    per_device_train_batch_size = task_config["per_device_train_batch_size"]
+    per_device_eval_batch_size = task_config["per_device_eval_batch_size"]
+    gradient_accumulation_steps = task_config.get("gradient_accumulation_steps", 1)
+    learning_rate = task_config["learning_rate"]
+    fp16 = task_config.get("fp16", False)
     retry_count = task_config.get("retry_count", args.retry_count)
     priority = task_config.get("priority", 0)  # 优先级，数字越大优先级越高
     
@@ -452,6 +453,7 @@ def run_finetune_task(task_config, gpu_manager, args):
             "--ngram_encoder_dir", ngram_encoder_dir,
             "--per_device_train_batch_size", str(per_device_train_batch_size),
             "--per_device_eval_batch_size", str(per_device_eval_batch_size),
+            "--gradient_accumulation_steps", str(gradient_accumulation_steps),
             "--lr", str(learning_rate),
             "--num_train_epochs", str(num_train_epochs),
             "--out", output_path  # 确保提供输出目录参数
@@ -627,11 +629,106 @@ def monitor_tasks(tasks_queue, args, gpu_manager):
         
         time.sleep(5)
 
+def parse_task_config(config, args):
+    """
+    解析任务配置，只支持标准格式
+    
+    参数:
+        config (dict): 任务配置
+        args (Namespace): 命令行参数
+        
+    返回:
+        list: 任务列表
+    """
+    tasks = []
+    
+    # 获取基础数据目录
+    data_base_dir = config.get("data_base_dir", "")
+    logger.info(f"基础数据目录: {data_base_dir}")
+    
+    # 只支持标准格式: {"data_base_dir": "...", "tasks": [{...}, {...}]}
+    if not isinstance(config, dict) or "tasks" not in config or not isinstance(config["tasks"], list):
+        logger.error(f"无效的配置格式，必须包含'tasks'列表")
+        return []
+    
+    # 处理任务列表
+    task_list = config["tasks"]
+    logger.info(f"找到 {len(task_list)} 个任务类型配置")
+    
+    for task_config in task_list:
+        if not isinstance(task_config, dict):
+            logger.warning(f"跳过无效的任务配置: {task_config}")
+            continue
+        
+        task_type = task_config.get("task_type")
+        if not task_type:
+            logger.warning(f"跳过缺少任务类型的配置")
+            continue
+        
+        # 获取子任务列表
+        sub_tasks = task_config.get("sub_tasks", [])
+        if not sub_tasks:
+            logger.warning(f"任务类型 {task_type} 没有子任务")
+            continue
+        
+        # 获取任务参数
+        data_dir = os.path.join(data_base_dir, task_config.get("data_dir", ""))
+        priority = task_config.get("priority", 0)
+        num_train_epochs = task_config.get("num_train_epochs", 5)
+        per_device_train_batch_size = task_config.get("per_device_train_batch_size", 8)
+        per_device_eval_batch_size = task_config.get("per_device_eval_batch_size", 8)
+        gradient_accumulation_steps = task_config.get("gradient_accumulation_steps", 1)
+        learning_rate = task_config.get("learning_rate", 5e-5)
+        fp16 = task_config.get("fp16", False)
+        
+        logger.info(f"处理任务类型: {task_type}, 子任务数: {len(sub_tasks)}")
+        logger.info(f"  - 数据目录: {data_dir}")
+        logger.info(f"  - 训练轮数: {num_train_epochs}")
+        logger.info(f"  - 学习率: {learning_rate}")
+        logger.info(f"  - FP16: {fp16}")
+        
+        # 处理每个子任务
+        for sub_task in sub_tasks:
+            # 构建数据路径
+            data_path = os.path.join(data_dir, sub_task)
+            
+            # 构建输出路径
+            output_path = os.path.join(args.output_dir, task_type, sub_task)
+            
+            # 添加任务
+            task = {
+                "task_type": task_type,
+                "sub_task": sub_task,
+                "data_path": data_path,
+                "output_path": output_path,
+                "checkpoint": args.checkpoint,
+                "ngram_encoder_dir": args.ngram_encoder_dir,
+                "num_train_epochs": num_train_epochs,
+                "per_device_train_batch_size": per_device_train_batch_size,
+                "per_device_eval_batch_size": per_device_eval_batch_size,
+                "gradient_accumulation_steps": gradient_accumulation_steps,
+                "learning_rate": learning_rate,
+                "fp16": fp16,
+                "priority": priority,
+                "retry_count": args.retry_count
+            }
+            
+            tasks.append(task)
+            logger.info(f"  - 添加子任务: {task_type}/{sub_task}")
+    
+    logger.info(f"共解析 {len(tasks)} 个任务")
+    return tasks
+
 def main():
     """主函数"""
     # 步骤1: 解析命令行参数
     args = parse_args()
     logger.info("步骤1: 解析命令行参数完成")
+    
+    # 打印所有参数
+    logger.info("命令行参数:")
+    for arg, value in vars(args).items():
+        logger.info(f"  - {arg}: {value}")
     
     # 步骤2: 注册信号处理器，用于优雅地处理中断
     signal.signal(signal.SIGINT, signal_handler)
@@ -683,204 +780,29 @@ def main():
         logger.error(f"步骤5: 加载任务配置失败: {e}")
         sys.exit(1)
     
-    # 步骤6: 准备任务列表
-    tasks = []
+    # 打印配置内容
+    logger.info("任务配置内容:")
+    logger.info(json.dumps(config, indent=2, ensure_ascii=False))
     
-    # 检查配置文件格式
-    if isinstance(config, dict):
-        # 检查是否有特殊的数据目录配置
-        data_base_dir = ""
-        if "data_base_dir" in config:
-            data_base_dir = config.get("data_base_dir", "")
-            logger.info(f"步骤6.0: 找到基础数据目录: {data_base_dir}")
-        
-        # 检查是否有任务列表
-        if "tasks" in config and isinstance(config["tasks"], list):
-            logger.info("步骤6.0: 找到任务列表配置")
-            task_list = config["tasks"]
-            
-            for task_config in task_list:
-                if not isinstance(task_config, dict):
-                    logger.warning(f"步骤6.1: 跳过无效的任务配置: {task_config}")
-                    continue
-                
-                task_type = task_config.get("task_type")
-                if not task_type:
-                    logger.warning(f"步骤6.1: 跳过缺少任务类型的配置: {task_config}")
-                    continue
-                
-                logger.info(f"步骤6.2: 处理任务类型: {task_type}")
-                
-                # 获取子任务列表
-                sub_tasks = task_config.get("sub_tasks", [])
-                if not sub_tasks:
-                    logger.warning(f"步骤6.3: 任务类型 {task_type} 没有子任务")
-                    continue
-                
-                # 获取任务参数
-                data_dir = os.path.join(data_base_dir, task_config.get("data_dir", ""))
-                priority = task_config.get("priority", 0)
-                num_train_epochs = task_config.get("num_train_epochs", 5)
-                per_device_train_batch_size = task_config.get("per_device_train_batch_size", 8)
-                per_device_eval_batch_size = task_config.get("per_device_eval_batch_size", 8)
-                gradient_accumulation_steps = task_config.get("gradient_accumulation_steps", 1)
-                learning_rate = task_config.get("learning_rate", 5e-5)
-                fp16 = task_config.get("fp16", False)
-                
-                # 处理每个子任务
-                for sub_task in sub_tasks:
-                    logger.info(f"步骤6.4: 添加子任务: {task_type}/{sub_task}")
-                    
-                    # 构建数据路径
-                    data_path = os.path.join(data_dir, sub_task)
-                    
-                    # 构建输出路径
-                    output_path = os.path.join(args.output_dir, task_type, sub_task)
-                    
-                    # 添加任务
-                    tasks.append({
-                        "task_type": task_type,
-                        "sub_task": sub_task,
-                        "data_path": data_path,
-                        "output_path": output_path,
-                        "checkpoint": args.checkpoint,
-                        "ngram_encoder_dir": args.ngram_encoder_dir,
-                        "num_train_epochs": num_train_epochs,
-                        "per_device_train_batch_size": per_device_train_batch_size,
-                        "per_device_eval_batch_size": per_device_eval_batch_size,
-                        "gradient_accumulation_steps": gradient_accumulation_steps,
-                        "learning_rate": learning_rate,
-                        "fp16": fp16,
-                        "priority": priority
-                    })
-        else:
-            # 原始格式: {"task_type": {"sub_tasks": [...], ...}, ...}
-            for task_type, task_config in config.items():
-                # 跳过特殊键
-                if task_type in ["data_base_dir", "tasks"]:
-                    continue
-                
-                logger.info(f"步骤6: 处理任务类型: {task_type}")
-                
-                # 获取子任务列表
-                if isinstance(task_config, dict):
-                    sub_tasks = task_config.get("sub_tasks", [])
-                    priority = task_config.get("priority", 0)
-                    data_dir = os.path.join(data_base_dir, task_config.get("data_dir", ""))
-                    num_train_epochs = task_config.get("num_train_epochs", 5)
-                    per_device_train_batch_size = task_config.get("per_device_train_batch_size", 8)
-                    per_device_eval_batch_size = task_config.get("per_device_eval_batch_size", 8)
-                    gradient_accumulation_steps = task_config.get("gradient_accumulation_steps", 1)
-                    learning_rate = task_config.get("learning_rate", 5e-5)
-                    fp16 = task_config.get("fp16", False)
-                else:
-                    # 如果task_config是字符串或其他类型，假设它是子任务列表
-                    logger.warning(f"步骤6.1: 任务类型 {task_type} 的配置不是字典，尝试作为子任务列表处理")
-                    if isinstance(task_config, list):
-                        sub_tasks = task_config
-                    elif isinstance(task_config, str):
-                        sub_tasks = [task_config]
-                    else:
-                        logger.warning(f"步骤6.1: 无法解析任务类型 {task_type} 的配置，跳过")
-                        continue
-                    
-                    # 使用默认值
-                    priority = 0
-                    data_dir = data_base_dir
-                    num_train_epochs = 5
-                    per_device_train_batch_size = 8
-                    per_device_eval_batch_size = 8
-                    gradient_accumulation_steps = 1
-                    learning_rate = 5e-5
-                    fp16 = False
-                
-                if not sub_tasks:
-                    logger.warning(f"步骤6.2: 任务类型 {task_type} 没有子任务")
-                    continue
-                
-                # 处理每个子任务
-                for sub_task in sub_tasks:
-                    logger.info(f"步骤6.3: 添加子任务: {task_type}/{sub_task}")
-                    
-                    # 构建数据路径
-                    data_path = os.path.join(data_dir, sub_task)
-                    
-                    # 构建输出路径
-                    output_path = os.path.join(args.output_dir, task_type, sub_task)
-                    
-                    # 添加任务
-                    tasks.append({
-                        "task_type": task_type,
-                        "sub_task": sub_task,
-                        "data_path": data_path,
-                        "output_path": output_path,
-                        "checkpoint": args.checkpoint,
-                        "ngram_encoder_dir": args.ngram_encoder_dir,
-                        "num_train_epochs": num_train_epochs,
-                        "per_device_train_batch_size": per_device_train_batch_size,
-                        "per_device_eval_batch_size": per_device_eval_batch_size,
-                        "gradient_accumulation_steps": gradient_accumulation_steps,
-                        "learning_rate": learning_rate,
-                        "fp16": fp16,
-                        "priority": priority
-                    })
-    elif isinstance(config, list):
-        # 替代格式: [{"task_type": "...", "sub_task": "...", ...}, ...]
-        logger.info("步骤6: 配置文件为任务列表格式")
-        for task_item in config:
-            if not isinstance(task_item, dict):
-                logger.warning(f"步骤6.1: 跳过无效的任务项: {task_item}")
-                continue
-            
-            task_type = task_item.get("task_type")
-            sub_task = task_item.get("sub_task")
-            
-            if not task_type or not sub_task:
-                logger.warning(f"步骤6.2: 跳过缺少必要字段的任务项: {task_item}")
-                continue
-            
-            logger.info(f"步骤6.3: 添加任务: {task_type}/{sub_task}")
-            
-            # 构建数据路径
-            data_path = task_item.get("data_path", os.path.join(task_item.get("data_dir", ""), sub_task))
-            
-            # 构建输出路径
-            output_path = task_item.get("output_path", os.path.join(args.output_dir, task_type, sub_task))
-            
-            # 添加任务
-            tasks.append({
-                "task_type": task_type,
-                "sub_task": sub_task,
-                "data_path": data_path,
-                "output_path": output_path,
-                "checkpoint": args.checkpoint,
-                "ngram_encoder_dir": args.ngram_encoder_dir,
-                "num_train_epochs": task_item.get("num_train_epochs", 5),
-                "per_device_train_batch_size": task_item.get("per_device_train_batch_size", 8),
-                "per_device_eval_batch_size": task_item.get("per_device_eval_batch_size", 8),
-                "gradient_accumulation_steps": task_item.get("gradient_accumulation_steps", 1),
-                "learning_rate": task_item.get("learning_rate", 5e-5),
-                "fp16": task_item.get("fp16", False),
-                "priority": task_item.get("priority", 0)
-            })
-    else:
-        logger.error(f"步骤6: 无法识别的配置文件格式: {type(config)}")
-        sys.exit(1)
+    # 步骤6: 解析任务配置
+    tasks = parse_task_config(config, args)
     
     # 如果没有任务，退出
     if not tasks:
-        logger.error("步骤6.4: 没有找到任务，退出")
+        logger.error("步骤6.3: 没有找到任务，退出")
         sys.exit(1)
-    
-    logger.info(f"步骤6.5: 共找到 {len(tasks)} 个任务")
     
     # 步骤7: 按优先级排序任务
     tasks.sort(key=lambda x: x["priority"], reverse=True)
     logger.info("步骤7: 任务已按优先级排序")
     
-    # 步骤8: 创建任务队列和结果队列
+    # 打印所有任务
+    logger.info("任务列表:")
+    for i, task in enumerate(tasks):
+        logger.info(f"  {i+1}. {task['task_type']}/{task['sub_task']} (优先级: {task['priority']})")
+    
+    # 步骤8: 创建任务队列
     tasks_queue = queue.Queue()
-    completed_tasks = []
     
     # 将任务添加到队列
     for task in tasks:
@@ -912,6 +834,8 @@ def main():
     
     # 步骤10: 使用线程池执行任务
     logger.info(f"步骤10: 开始执行任务，最大并行数: {args.max_workers}")
+    completed_tasks = []
+    
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.max_workers) as executor:
         # 提交任务
         futures = []
@@ -919,6 +843,14 @@ def main():
             try:
                 # 获取任务
                 task = tasks_queue.get()
+                
+                # 打印任务信息
+                task_id = f"{task['task_type']}/{task['sub_task']}"
+                logger.info(f"步骤10.1: 提交任务: {task_id}")
+                logger.info(f"  - 数据路径: {task['data_path']}")
+                logger.info(f"  - 输出路径: {task['output_path']}")
+                logger.info(f"  - 训练轮数: {task['num_train_epochs']}")
+                logger.info(f"  - 学习率: {task['learning_rate']}")
                 
                 # 提交任务
                 future = executor.submit(run_finetune_task, task, gpu_manager, args)
@@ -938,11 +870,11 @@ def main():
                 result = future.result()
                 if result:  # 如果任务成功完成
                     completed_tasks.append(result)
-                    logger.info(result)
-                    logger.info(f"步骤10.2: 任务完成: {result['task_type']}/{result['sub_task']}, 状态: {result['status']}")
+                    task_id = f"{result['task_type']}/{result['sub_task']}"
+                    logger.info(f"步骤10.2: 任务完成: {task_id}, 状态: {result['status']}")
             except Exception as e:
                 logger.error(f"步骤10.3: 任务执行出错: {e}")
-    logger.info(f"步骤10.3: 所有任务已完成，共 {len(completed_tasks)} 个结果")
+    
     # 如果收到停止信号，提前退出
     if stop_event.is_set():
         logger.info("步骤11: 收到停止信号，提前退出")
