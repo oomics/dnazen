@@ -403,15 +403,15 @@ EOF
 # EOF
   
   # # 构建并行训练命令
-  # PARALLEL_CMD="python ../src/train/run_parallel_finetune.py \
-  #   --config $TASKS_CONFIG_PATH \
-  #   --max_workers $MAX_WORKERS \
-  #   --checkpoint $PRETRAIN_CHECKPOINT \
-  #   --ngram_encoder_dir $NGRAM_ENCODER_PATH \
-  #   --output_dir $PARALLEL_OUTPUT_DIR \
-  #   --retry_count $RETRY_COUNT \
-  #   --monitor_interval 10000 \
-  #   --clean_output"
+  PARALLEL_CMD="python ../src/train/run_parallel_finetune.py \
+    --config $TASKS_CONFIG_PATH \
+    --max_workers $MAX_WORKERS \
+    --checkpoint $PRETRAIN_CHECKPOINT \
+    --ngram_encoder_dir $NGRAM_ENCODER_PATH \
+    --output_dir $PARALLEL_OUTPUT_DIR \
+    --retry_count $RETRY_COUNT \
+    --monitor_interval 10000 \
+    --clean_output"
   
   # 添加GPU IDs参数（如果指定）
   if [ -n "$GPU_IDS" ]; then
