@@ -53,6 +53,7 @@ def parse_args():
     parser.add_argument("--monitor_interval", type=int, default=60, help="监控间隔（秒）")
     parser.add_argument("--memory_threshold", type=int, default=1000, help="GPU内存阈值（MB），低于此值的GPU不会被分配")
     parser.add_argument("--resume", action="store_true", help="从中断处恢复任务")
+    parser.add_argument("--clean_output", action="store_true", help="执行任务前清空输出目录")
     return parser.parse_args()
 
 def signal_handler(sig, frame):
@@ -208,6 +209,15 @@ def run_finetune_task(task_config, gpu_manager, args):
                 }
             except Exception as e:
                 logger.warning(f"[任务 {task_id}] 步骤1.2: 读取评估结果失败: {e}，将重新运行任务")
+    
+    # 如果设置了清空输出目录选项，则删除已存在的输出目录
+    if args.clean_output and os.path.exists(output_path):
+        logger.info(f"[任务 {task_id}] 步骤1.2: 清空输出目录: {output_path}")
+        try:
+            shutil.rmtree(output_path)
+            logger.info(f"[任务 {task_id}] 步骤1.2: 成功删除输出目录")
+        except Exception as e:
+            logger.warning(f"[任务 {task_id}] 步骤1.2: 删除输出目录失败: {e}")
     
     # 创建输出目录
     os.makedirs(output_path, exist_ok=True)
@@ -473,6 +483,22 @@ def main():
     
     # 步骤3: 创建输出目录
     os.makedirs(args.output_dir, exist_ok=True)
+    
+    # 如果设置了清空输出目录选项，则清空整个输出目录
+    if args.clean_output and not args.resume:
+        logger.info(f"步骤3.0: 清空输出目录: {args.output_dir}")
+        try:
+            # 保留日志目录，删除其他内容
+            for item in os.listdir(args.output_dir):
+                item_path = os.path.join(args.output_dir, item)
+                if item != "logs" and os.path.exists(item_path):
+                    if os.path.isdir(item_path):
+                        shutil.rmtree(item_path)
+                    else:
+                        os.remove(item_path)
+            logger.info("步骤3.0: 成功清空输出目录")
+        except Exception as e:
+            logger.warning(f"步骤3.0: 清空输出目录失败: {e}")
     
     # 设置日志目录
     if args.log_dir is None:

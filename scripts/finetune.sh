@@ -314,7 +314,7 @@ if [ "$PARALLEL" = true ]; then
       "fp16": $USE_FP16
     }
   ]
-}
+} 
 EOF
   
   # 构建并行训练命令
@@ -324,7 +324,9 @@ EOF
     --checkpoint $PRETRAIN_CHECKPOINT \
     --ngram_encoder_dir $NGRAM_ENCODER_PATH \
     --output_dir $PARALLEL_OUTPUT_DIR \
-    --retry_count $RETRY_COUNT"
+    --retry_count $RETRY_COUNT \
+    --monitor_interval 10000 \
+    --clean_output"
   
   # 添加GPU IDs参数（如果指定）
   if [ -n "$GPU_IDS" ]; then
