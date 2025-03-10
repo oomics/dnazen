@@ -563,7 +563,7 @@ def main():
     results = trainer.evaluate(test_dataset)
     
     # 打印评估结果
-    logger.info("测试集评估结果:")
+    logger.info(f"{DATA_PATH}测试集评估结果:")
     logger.info("-" * 50)
     logger.info(f"{'指标名称':<30}{'值':>15}")
     logger.info("-" * 50)
