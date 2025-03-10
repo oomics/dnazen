@@ -18,17 +18,17 @@ from sklearn.metrics import (
     recall_score,
 )
 import pandas as pd
-import transformers
-import torch
-from transformers import (
-    AutoTokenizer,
-    PreTrainedTokenizer,
-)
-from transformers.models.bert.configuration_bert import BertConfig
+#import transformers
+#import torch
+#from transformers import (
+#    AutoTokenizer,
+#    PreTrainedTokenizer,
+#)
+#from transformers.models.bert.configuration_bert import BertConfig
 
-from dnazen.model.bert_models import BertForSequenceClassification
-from dnazen.data.labeled_dataset import LabeledDataset
-from dnazen.ngram import NgramEncoder
+#from dnazen.model.bert_models import BertForSequenceClassification
+#from dnazen.data.labeled_dataset import LabeledDataset
+#from dnazen.ngram import NgramEncoder
 
 
 
@@ -65,29 +65,53 @@ def generate_parallel_finetune_progress_report(tasks_dir, output_path):
         # 遍历子任务目录
         for sub_task in os.listdir(task_type_dir):
             sub_task_dir = os.path.join(task_type_dir, sub_task)
+            logger.info(f"处理任务: {task_type}/{sub_task}")
             if not os.path.isdir(sub_task_dir):
                 continue
             
+            logger.info(f"任务文件包括: ")
+
             # 检查任务状态
             eval_results_path = os.path.join(sub_task_dir, "eval_results.json")
             task_info_path = os.path.join(sub_task_dir, "task_info.json")
             log_path = os.path.join(sub_task_dir, "train.log")
             
             task_id = f"{task_type}/{sub_task}"
+           
+           
+            # 打印子任务目录下的文件列表    
+            for file in os.listdir(sub_task_dir):
+                file_path = os.path.join(sub_task_dir, file)
+                file_type = "目录" if os.path.isdir(file_path) else "文件"
+                logger.info(f"  - {file} ({file_type})")
+                if file == "eval_results.json":
+                    logger.info(f"任务可解析文件包括============: {file}")
+                    eval_results_path = os.path.join(sub_task_dir, file)
+                if file == "task_info.json":
+                    logger.info(f"任务可解析文件包括============: {file}")
+                    task_info_path = os.path.join(sub_task_dir, file)
+                if file == "train.log":
+                    logger.info(f"任务可解析文件包括============: {file}")
+                    log_path = os.path.join(sub_task_dir, file)
+
             
             # 如果存在评估结果，说明任务已完成
             if os.path.exists(eval_results_path):
                 try:
                     # 读取评估结果
                     with open(eval_results_path, "r", encoding="utf-8") as f:
+                        logger.info(f"读取任务 {task_id} 评估结果: {eval_results_path}")
                         eval_results = json.load(f)
+                        logger.info(f"评估结果: {eval_results}")
                     
                     # 读取任务信息（如果存在）
                     task_info = {}
                     if os.path.exists(task_info_path):
                         try:
                             with open(task_info_path, "r", encoding="utf-8") as f:
+                                logger.info(f"读取任务 {task_id} 任务信息: {task_info_path}")
                                 task_info = json.load(f)
+                                logger.info(f"任务信息: {task_info}")
                         except:
                             pass
                     
@@ -632,3 +656,22 @@ def generate_parallel_finetune_progress_report(tasks_dir, output_path):
     
     
     
+def main():
+    """
+    命令行入口点，用于生成微调任务进度报告
+    """
+    parser = argparse.ArgumentParser(description="生成微调任务进度报告")
+    parser.add_argument("--tasks_dir", type=str, required=True, help="任务输出目录，包含所有子任务的结果")
+    parser.add_argument("--output", type=str, required=True, help="报告输出路径")
+    
+    args = parser.parse_args()
+    
+    # 调用报告生成函数
+    generate_parallel_finetune_progress_report(args.tasks_dir, args.output)
+    
+    logger.info(f"报告已生成: {args.output}")
+
+
+#python ../src/train/report.py --tasks_dir ../data/output/finetune/output/ --output ./report.html
+if __name__ == "__main__":
+    main()
