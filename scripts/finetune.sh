@@ -140,7 +140,7 @@ TRAIN_DIR=$(dirname "$TRAIN_DIR_FILE")
 DEV_DIR=$(dirname "$DEV_DIR_FILE")
 
 FINETUNE_DATA_DIR="$TRAIN_DIR/finetune"
-FINETUNE_OUT_DIR="$TRAIN_DIR/finetune/output"
+FINETUNE_OUT_DIR="$OUTPUT_DIR/finetune/output"
 FINETUNE_CHECKPOINT_STEP=3000
 
 ###################################################################################
