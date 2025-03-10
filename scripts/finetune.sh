@@ -130,6 +130,9 @@ DEV_DIR_FILE="$DATA_DIR/dev/dev.pt"
 # 模型保存输出目录
 OUTPUT_DIR="../data/output"
 
+# 微调评估结果保存目录
+REPORT_OUT_DIR="~/jenkins/workspace/output/"
+
 # 数据缓存目录
 CACHE_DIR="$EXPERIMENT_DIR/cache"
 # N-gram编码器路径
@@ -307,61 +310,14 @@ if [ "$PARALLEL" = true ]; then
 # } 
 # EOF
 
- cat > "$TASKS_CONFIG_PATH" << EOF
-{
-  "data_base_dir": "../data",
-  "tasks": [
-    {
-      "task_type": "emp",
-      "data_dir": "GUE/EMP",
-      "sub_tasks": ["H3K14ac","H3K36me3","H3K4me1", "H3K4me2", "H3K4me3", "H3K9ac", "H4", "H4ac"],
-      "num_train_epochs": ${TASK_EPOCHS["emp"]},
-      "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
-      "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
-      "learning_rate": $LEARNING_RATE,
-      "fp16": $USE_FP16
-    }
-  ]
-} 
-EOF
-#   cat > "$TASKS_CONFIG_PATH" << EOF
+#  cat > "$TASKS_CONFIG_PATH" << EOF
 # {
 #   "data_base_dir": "../data",
 #   "tasks": [
 #     {
-#       "task_type": "tf",
-#       "data_dir": "GUE/tf",
-#       "sub_tasks": ["0", "1", "2", "3", "4"],
-#       "num_train_epochs": ${TASK_EPOCHS["tf"]},
-#       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
-#       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
-#       "learning_rate": $LEARNING_RATE,
-#       "fp16": $USE_FP16
-#     },
-#     {
-#       "task_type": "mouse",
-#       "data_dir": "GUE/mouse",
-#       "sub_tasks": ["0", "1", "2", "3", "4"],
-#       "num_train_epochs": ${TASK_EPOCHS["mouse"]},
-#       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
-#       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
-#       "learning_rate": $LEARNING_RATE,
-#       "fp16": $USE_FP16
-#     },
-#     {
-#       "task_type": "pd",
-#       "data_dir": "GUE/prom",
-#       "sub_tasks": ["prom_300_all", "prom_core_all"],
-#       "num_train_epochs": ${TASK_EPOCHS["pd"]},
-#       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
-#       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
-#       "learning_rate": $LEARNING_RATE,
-#       "fp16": $USE_FP16
-#     },
-#     {
 #       "task_type": "emp",
 #       "data_dir": "GUE/EMP",
-#       "sub_tasks": ["H3","H3K14ac","H3K36me3","H3K14me1", "H3K14me2", "H3K14me3", "H3K9ac", "H4", "H4ac"],
+#       "sub_tasks": ["H3K14ac","H3K36me3","H3K4me1", "H3K4me2", "H3K4me3", "H3K9ac", "H4", "H4ac"],
 #       "num_train_epochs": ${TASK_EPOCHS["emp"]},
 #       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
 #       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
@@ -371,6 +327,53 @@ EOF
 #   ]
 # } 
 # EOF
+  cat > "$TASKS_CONFIG_PATH" << EOF
+{
+  "data_base_dir": "../data",
+  "tasks": [
+    {
+      "task_type": "tf",
+      "data_dir": "GUE/tf",
+      "sub_tasks": ["0", "1", "2", "3", "4"],
+      "num_train_epochs": ${TASK_EPOCHS["tf"]},
+      "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
+      "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
+      "learning_rate": $LEARNING_RATE,
+      "fp16": $USE_FP16
+    },
+    {
+      "task_type": "mouse",
+      "data_dir": "GUE/mouse",
+      "sub_tasks": ["0", "1", "2", "3", "4"],
+      "num_train_epochs": ${TASK_EPOCHS["mouse"]},
+      "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
+      "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
+      "learning_rate": $LEARNING_RATE,
+      "fp16": $USE_FP16
+    },
+    {
+      "task_type": "pd",
+      "data_dir": "GUE/prom",
+      "sub_tasks": ["prom_300_all", "prom_core_all"],
+      "num_train_epochs": ${TASK_EPOCHS["pd"]},
+      "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
+      "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
+      "learning_rate": $LEARNING_RATE,
+      "fp16": $USE_FP16
+    },
+    {
+      "task_type": "emp",
+      "data_dir": "GUE/EMP",
+      "sub_tasks": ["H3","H3K14ac","H3K36me3","H3K14me1", "H3K14me2", "H3K14me3", "H3K9ac", "H4", "H4ac"],
+      "num_train_epochs": ${TASK_EPOCHS["emp"]},
+      "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
+      "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
+      "learning_rate": $LEARNING_RATE,
+      "fp16": $USE_FP16
+    }
+  ]
+} 
+EOF
 echo "TASKS_CONFIG_PATH: $TASKS_CONFIG_PATH"
 cat "$TASKS_CONFIG_PATH"
 
@@ -384,6 +387,7 @@ for task in $(jq -r '.tasks[] | .task_type + "/" + .sub_tasks[]' "$TASKS_CONFIG_
   echo "数据路径 DATA_PATH: $DATA_PATH"
   echo "训练任务输出路径 TASK_OUTPUT_PATH: $TASK_OUTPUT_PATH"
   echo "训练轮数 NUM_TRAIN_EPOCHS: $NUM_TRAIN_EPOCHS"
+  echo "微调评估结果保存目录 REPORT_OUT_DIR: $REPORT_OUT_DIR"
   
   # 创建输出目录
   mkdir -p "$TASK_OUTPUT_PATH"
@@ -409,9 +413,9 @@ for task in $(jq -r '.tasks[] | .task_type + "/" + .sub_tasks[]' "$TASKS_CONFIG_
   # 创建目标目录（如果不存在）
   mkdir -p "$OUTPUT_DIR/finetune/output"
   
-  # 复制输出文件，但排除checkpoint-*目录
-  echo "复制输出文件到 $OUTPUT_DIR/finetune/output，排除checkpoint目录..."
-  find "$TASK_OUTPUT_PATH" -type f -not -path "*/checkpoint-*/*" -exec cp --parents {} "$OUTPUT_DIR/finetune/output" \;
+  # 复制输出文件到报告保存文件夹，但排除checkpoint-*目录
+  echo "复制输出文件到 $REPORT_OUT_DIR，排除checkpoint目录..."
+  find "$TASK_OUTPUT_PATH" -type f -not -path "*/checkpoint-*/*" -exec cp --parents {} "$REPORT_OUT_DIR" \;
 done
   
 else
@@ -465,11 +469,17 @@ else
   # 运行训练脚本
   eval $CMD
   
+  
   # 检查训练是否成功完成
   if [ $? -eq 0 ]; then
+
+    # 复制输出文件到报告保存文件夹，但排除checkpoint-*目录
+    echo "复制输出文件到 $REPORT_OUT_DIR，排除checkpoint目录..."
+    find "$TASK_OUTPUT_PATH" -type f -not -path "*/checkpoint-*/*" -exec cp --parents {} "$REPORT_OUT_DIR" \;
+
     echo "=================================================================="
     echo "微调训练成功完成！"
-    echo "模型输出目录: $TASK_OUTPUT_PATH"
+    echo "模型输出目录: $REPORT_OUT_DIR"
     echo "=================================================================="
   else
     echo "=================================================================="
