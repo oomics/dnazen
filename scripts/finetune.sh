@@ -140,7 +140,7 @@ TRAIN_DIR=$(dirname "$TRAIN_DIR_FILE")
 DEV_DIR=$(dirname "$DEV_DIR_FILE")
 
 FINETUNE_DATA_DIR="$TRAIN_DIR/finetune"
-FINETUNE_OUT_DIR="$OUTPUT_DIR/finetune/output"
+FINETUNE_OUT_DIR="../data/output/finetune/output"
 FINETUNE_CHECKPOINT_STEP=3000
 
 ###################################################################################
@@ -373,46 +373,47 @@ EOF
 # EOF
 echo "TASKS_CONFIG_PATH: $TASKS_CONFIG_PATH"
 cat "$TASKS_CONFIG_PATH"
+
+for task in $(jq -r '.tasks[] | .task_type + "/" + .sub_tasks[]' "$TASKS_CONFIG_PATH"); do
+  echo "================================================"
+  echo "任务: $task"
+  echo "================================================"
+
+  DATA_PATH="${GUE_DIR}/${TASK_PATHS[$TASK_TYPE]}/${SUB_TASK}"
+  TASK_OUTPUT_PATH="${FINETUNE_OUT_DIR}/${TASK_TYPE}/${SUB_TASK}"   
+  echo "数据路径 DATA_PATH: $DATA_PATH"
+  echo "训练任务输出路径 TASK_OUTPUT_PATH: $TASK_OUTPUT_PATH"
+  echo "训练轮数 NUM_TRAIN_EPOCHS: $NUM_TRAIN_EPOCHS"
   
-  # 构建并行训练命令
-  PARALLEL_CMD="python ../src/train/run_parallel_finetune.py \
-    --config $TASKS_CONFIG_PATH \
-    --max_workers $MAX_WORKERS \
+  # 创建输出目录
+  mkdir -p "$TASK_OUTPUT_PATH"
+
+  # 构建训练命令
+  CMD="python ../src/train/run_finetune.py \
+    --data_path $DATA_PATH \
     --checkpoint $PRETRAIN_CHECKPOINT \
     --ngram_encoder_dir $NGRAM_ENCODER_PATH \
-    --output_dir $PARALLEL_OUTPUT_DIR \
-    --retry_count $RETRY_COUNT \
-    --monitor_interval 120 \
-    --summary_interval 120 \
-    --gpu_strategy balanced \
-    --clean_output"
-  
-  # 添加GPU IDs参数（如果指定）
-  if [ -n "$GPU_IDS" ]; then
-    PARALLEL_CMD="$PARALLEL_CMD --gpu_ids $GPU_IDS"
-  else
-    # 默认使用所有8个GPU
-    PARALLEL_CMD="$PARALLEL_CMD --gpu_ids 0,1,2,3,4,5,6,7"
-  fi
+    --per_device_train_batch_size $PER_DEVICE_TRAIN_BATCH_SIZE \
+    --per_device_eval_batch_size $PER_DEVICE_EVAL_BATCH_SIZE \
+    --gradient_accumulation_steps $GRADIENT_ACCUMULATION_STEPS \
+    --lr $LEARNING_RATE \
+    --num_train_epochs $NUM_TRAIN_EPOCHS
+    --out $TASK_OUTPUT_PATH"
   
   # 输出完整命令
-  echo "执行命令: $PARALLEL_CMD"
+  echo "执行命令: $CMD"
   
-  # 运行并行训练脚本
-  eval $PARALLEL_CMD
+  # 运行训练脚本
+  eval $CMD
+
+  # 创建目标目录（如果不存在）
+  mkdir -p "$OUTPUT_DIR/finetune/output"
   
-  # 检查训练是否成功完成
-  if [ $? -eq 0 ]; then
-    echo "=================================================================="
-    echo "并行微调训练成功完成！"
-    echo "汇总报告: $PARALLEL_OUTPUT_DIR/summary_report.html"
-    echo "=================================================================="
-  else
-    echo "=================================================================="
-    echo "并行训练过程中出现错误，请检查日志。"
-    echo "=================================================================="
-    exit 1
-  fi
+  # 复制输出文件，但排除checkpoint-*目录
+  echo "复制输出文件到 $OUTPUT_DIR/finetune/output，排除checkpoint目录..."
+  find "$TASK_OUTPUT_PATH" -type f -not -path "*/checkpoint-*/*" -exec cp --parents {} "$OUTPUT_DIR/finetune/output" \;
+done
+  
 else
   # 单任务模式：运行单个任务
   # 检查任务类型是否有效
