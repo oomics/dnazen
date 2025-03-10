@@ -314,7 +314,7 @@ if [ "$PARALLEL" = true ]; then
     {
       "task_type": "emp",
       "data_dir": "GUE/EMP",
-      "sub_tasks": ["H3K14ac","H3K36me3","H3K14me1", "H3K14me2", "H3K14me3", "H3K9ac", "H4", "H4ac"],
+      "sub_tasks": ["H3K14ac","H3K36me3","H3K4me1", "H3K4me2", "H3K4me3", "H3K9ac", "H4", "H4ac"],
       "num_train_epochs": ${TASK_EPOCHS["emp"]},
       "per_device_train_batch_size": $PER_DEVICE_TRAIN_BATCH_SIZE,
       "per_device_eval_batch_size": $PER_DEVICE_EVAL_BATCH_SIZE,
