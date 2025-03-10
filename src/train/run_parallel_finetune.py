@@ -22,6 +22,8 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
+import report
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s",
@@ -30,13 +32,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 全局变量
-running_processes = {}  # 进程ID -> 进程对象
+running_processes = {}  # 任务ID -> 进程对象
+running_tasks = {}      # 任务ID -> 任务信息
 stop_event = threading.Event()
 gpu_lock = threading.Lock()
 gpu_usage = {}  # GPU ID -> 使用状态
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="并行执行多个微调任务")
+    """解析命令行参数"""
+    parser = argparse.ArgumentParser(description="并行执行多个DNA序列微调任务")
     parser.add_argument("--config", type=str, required=True, help="任务配置文件路径")
     parser.add_argument("--max_workers", type=int, default=4, help="最大并行任务数")
     parser.add_argument("--checkpoint", type=str, required=True, help="预训练模型检查点路径")
@@ -47,92 +51,121 @@ def parse_args():
     parser.add_argument("--retry_count", type=int, default=1, help="任务失败时的重试次数")
     parser.add_argument("--log_dir", type=str, default=None, help="日志目录，默认为output_dir/logs")
     parser.add_argument("--monitor_interval", type=int, default=60, help="监控间隔（秒）")
+    parser.add_argument("--memory_threshold", type=int, default=1000, help="GPU内存阈值（MB），低于此值的GPU不会被分配")
     parser.add_argument("--resume", action="store_true", help="从中断处恢复任务")
     return parser.parse_args()
 
 def signal_handler(sig, frame):
     """处理中断信号，优雅地停止所有任务"""
-    logger.info("接收到中断信号，正在停止所有任务...")
+    logger.info("步骤1: 接收到中断信号，正在优雅地停止所有任务...")
     stop_event.set()
     
     # 等待所有进程完成
     for task_id, process in list(running_processes.items()):
         if process.poll() is None:  # 如果进程仍在运行
-            logger.info(f"正在终止任务 {task_id}...")
+            logger.info(f"步骤1.1: 正在终止任务 {task_id}...")
             try:
                 process.terminate()
                 # 给进程一些时间来清理
                 time.sleep(2)
                 if process.poll() is None:
                     process.kill()  # 如果进程仍在运行，强制终止
-                logger.info(f"任务 {task_id} 已终止")
+                logger.info(f"步骤1.2: 任务 {task_id} 已终止")
             except Exception as e:
-                logger.error(f"终止任务 {task_id} 时出错: {e}")
+                logger.error(f"步骤1.3: 终止任务 {task_id} 时出错: {e}")
     
-    logger.info("所有任务已停止，正在退出...")
+    logger.info("步骤1.4: 所有任务已停止，正在退出...")
     sys.exit(0)
 
-def get_available_gpus():
-    """获取可用的GPU列表及其内存使用情况"""
-    try:
-        # 使用nvidia-smi获取GPU信息
-        output = subprocess.check_output(
-            ['nvidia-smi', '--query-gpu=index,memory.used,memory.total', '--format=csv,noheader,nounits'],
-            universal_newlines=True
-        )
+class GPUManager:
+    """GPU资源管理器"""
+    def __init__(self, gpu_ids=None, memory_threshold=1000):
+        """
+        初始化GPU管理器
         
-        gpus = []
-        for line in output.strip().split('\n'):
-            values = line.split(', ')
-            if len(values) == 3:
-                index = int(values[0])
-                used_memory = int(values[1])
-                total_memory = int(values[2])
-                free_memory = total_memory - used_memory
-                gpus.append({
-                    'index': index,
-                    'used_memory': used_memory,
-                    'total_memory': total_memory,
-                    'free_memory': free_memory
-                })
+        参数:
+            gpu_ids (list): 要使用的GPU ID列表，如果为None则使用所有可用GPU
+            memory_threshold (int): GPU内存阈值（MB），低于此值的GPU不会被分配
+        """
+        self.gpu_ids = gpu_ids
+        self.memory_threshold = memory_threshold
+        self.lock = threading.Lock()
+        self.usage = {}  # GPU ID -> 使用状态
         
-        return gpus
-    except Exception as e:
-        logger.warning(f"获取GPU信息失败: {e}")
-        return []
+        logger.info(f"步骤2: 初始化GPU管理器，指定GPU: {gpu_ids if gpu_ids else '所有可用'}, 内存阈值: {memory_threshold}MB")
+    
+    def get_available_gpus(self):
+        """获取可用的GPU列表及其内存使用情况"""
+        try:
+            # 使用nvidia-smi获取GPU信息
+            logger.debug("步骤2.1: 获取可用GPU信息...")
+            output = subprocess.check_output(
+                ['nvidia-smi', '--query-gpu=index,memory.used,memory.total', '--format=csv,noheader,nounits'],
+                universal_newlines=True
+            )
+            
+            gpus = []
+            for line in output.strip().split('\n'):
+                values = line.split(', ')
+                if len(values) == 3:
+                    index = int(values[0])
+                    used_memory = int(values[1])
+                    total_memory = int(values[2])
+                    free_memory = total_memory - used_memory
+                    gpus.append({
+                        'index': index,
+                        'used_memory': used_memory,
+                        'total_memory': total_memory,
+                        'free_memory': free_memory
+                    })
+            
+            logger.debug(f"步骤2.2: 找到 {len(gpus)} 个GPU设备")
+            return gpus
+        except Exception as e:
+            logger.warning(f"步骤2.3: 获取GPU信息失败: {e}")
+            return []
+    
+    def allocate(self):
+        """分配一个可用的GPU"""
+        with self.lock:
+            logger.debug("步骤2.4: 分配GPU资源...")
+            available_gpus = self.get_available_gpus()
+            
+            # 过滤指定的GPU
+            if self.gpu_ids is not None:
+                logger.debug(f"步骤2.5: 从指定的GPU IDs中选择: {self.gpu_ids}")
+                available_gpus = [gpu for gpu in available_gpus if gpu['index'] in self.gpu_ids]
+            
+            # 按可用内存排序
+            available_gpus.sort(key=lambda x: x['free_memory'], reverse=True)
+            
+            for gpu in available_gpus:
+                gpu_id = gpu['index']
+                if gpu['free_memory'] > self.memory_threshold and gpu_id not in self.usage:
+                    self.usage[gpu_id] = True
+                    logger.info(f"步骤2.6: 分配GPU {gpu_id}，可用内存: {gpu['free_memory']}MB")
+                    return gpu_id
+            
+            logger.warning("步骤2.7: 没有找到可用的GPU")
+            return None
+    
+    def release(self, gpu_id):
+        """释放GPU资源"""
+        with self.lock:
+            if gpu_id in self.usage:
+                logger.info(f"步骤2.8: 释放GPU {gpu_id}")
+                del self.usage[gpu_id]
+                return True
+            return False
 
-def allocate_gpu(gpu_ids=None, memory_threshold=1000):
-    """分配一个可用的GPU"""
-    with gpu_lock:
-        available_gpus = get_available_gpus()
-        
-        # 过滤指定的GPU
-        if gpu_ids is not None:
-            available_gpus = [gpu for gpu in available_gpus if gpu['index'] in gpu_ids]
-        
-        # 按可用内存排序
-        available_gpus.sort(key=lambda x: x['free_memory'], reverse=True)
-        
-        for gpu in available_gpus:
-            gpu_id = gpu['index']
-            if gpu['free_memory'] > memory_threshold and gpu_id not in gpu_usage:
-                gpu_usage[gpu_id] = True
-                return gpu_id
-        
-        return None
-
-def release_gpu(gpu_id):
-    """释放GPU资源"""
-    with gpu_lock:
-        if gpu_id in gpu_usage:
-            del gpu_usage[gpu_id]
-
-def run_finetune_task(task_config):
+def run_finetune_task(task_config, gpu_manager, args):
     """
     运行单个微调任务
     
     参数:
         task_config (dict): 任务配置
+        gpu_manager (GPUManager): GPU管理器
+        args (Namespace): 命令行参数
     
     返回:
         dict: 任务结果
@@ -148,18 +181,17 @@ def run_finetune_task(task_config):
     per_device_eval_batch_size = task_config.get("per_device_eval_batch_size", 32)
     learning_rate = task_config.get("learning_rate", 3e-5)
     fp16 = task_config.get("fp16", True)
-    retry_count = task_config.get("retry_count", 1)
-    gpu_ids = task_config.get("gpu_ids", None)
+    retry_count = task_config.get("retry_count", args.retry_count)
     priority = task_config.get("priority", 0)  # 优先级，数字越大优先级越高
     
     task_id = f"{task_type}/{sub_task}"
-    logger.info(f"准备执行任务: {task_id}, 优先级: {priority}")
+    logger.info(f"步骤3: 准备执行任务: {task_id}, 优先级: {priority}")
     
     # 检查是否已经完成
-    if task_config.get("resume", False) and os.path.exists(output_path):
+    if args.resume and os.path.exists(output_path):
         eval_results_path = os.path.join(output_path, "eval_results.json")
         if os.path.exists(eval_results_path):
-            logger.info(f"任务 {task_id} 已完成，跳过")
+            logger.info(f"步骤3.1: 任务 {task_id} 已完成，跳过")
             try:
                 with open(eval_results_path, "r") as f:
                     eval_results = json.load(f)
@@ -168,73 +200,100 @@ def run_finetune_task(task_config):
                     "task_type": task_type,
                     "sub_task": sub_task,
                     "status": "成功",
-                    "duration": 0,  # 不知道实际耗时
+                    "duration": 0,
                     "output_path": output_path,
                     "eval_results": eval_results,
-                    "skipped": True
+                    "priority": priority,
+                    "end_time": time.time()
                 }
             except Exception as e:
-                logger.warning(f"读取已完成任务结果失败: {e}，将重新执行任务")
+                logger.warning(f"步骤3.2: 读取评估结果失败: {e}，将重新运行任务")
     
     # 创建输出目录
     os.makedirs(output_path, exist_ok=True)
     
-    # 分配GPU
-    gpu_id = allocate_gpu(gpu_ids)
-    if gpu_id is None:
-        logger.warning(f"无可用GPU，任务 {task_id} 将等待...")
-        # 等待一段时间后重试
-        time.sleep(30)
-        gpu_id = allocate_gpu(gpu_ids)
-        if gpu_id is None:
-            logger.error(f"仍无可用GPU，任务 {task_id} 将使用默认GPU")
+    # 创建日志目录
+    log_dir = args.log_dir if args.log_dir else os.path.join(args.output_dir, "logs")
+    os.makedirs(log_dir, exist_ok=True)
     
-    # 设置环境变量
-    env = os.environ.copy()
-    if gpu_id is not None:
-        env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-        logger.info(f"任务 {task_id} 分配到GPU {gpu_id}")
+    # 日志文件路径
+    log_file_path = os.path.join(log_dir, f"{task_type}_{sub_task}.log")
+    logger.info(f"步骤3.3: 任务日志将保存到: {log_file_path}")
     
-    # 构建命令
-    cmd = [
-        "python", "../src/train/run_finetune.py",
-        "--data_path", data_path,
-        "--checkpoint", checkpoint,
-        "--ngram_encoder_dir", ngram_encoder_dir,
-        "--per_device_train_batch_size", str(per_device_train_batch_size),
-        "--per_device_eval_batch_size", str(per_device_eval_batch_size),
-        "--lr", str(learning_rate),
-        "--num_train_epochs", str(num_train_epochs),
-        "--out", output_path
-    ]
-    
-    if fp16:
-        cmd.append("--fp16")
+    # 打开日志文件
+    log_file = open(log_file_path, "w", encoding="utf-8")
+    log_file.write(f"任务: {task_id}\n")
+    log_file.write(f"数据路径: {data_path}\n")
+    log_file.write(f"输出路径: {output_path}\n")
+    log_file.write(f"优先级: {priority}\n")
+    log_file.write(f"训练轮数: {num_train_epochs}\n")
+    log_file.write(f"批处理大小: {per_device_train_batch_size}\n")
+    log_file.write(f"学习率: {learning_rate}\n")
+    log_file.write(f"FP16: {fp16}\n\n")
     
     # 记录开始时间
     start_time = time.time()
-    logger.info(f"开始任务: {task_id}")
-    logger.info(f"命令: {' '.join(cmd)}")
+    log_file.write(f"开始时间: {datetime.fromtimestamp(start_time).strftime('%Y-%m-%d %H:%M:%S')}\n\n")
     
-    # 创建日志文件
-    log_path = os.path.join(output_path, "task_log.txt")
-    log_file = open(log_path, "w", encoding="utf-8")
-    log_file.write(f"命令: {' '.join(cmd)}\n")
-    log_file.write(f"开始时间: {datetime.fromtimestamp(start_time).strftime('%Y-%m-%d %H:%M:%S')}\n")
-    log_file.flush()
+    # 分配GPU
+    gpu_id = gpu_manager.allocate()
+    if gpu_id is None:
+        logger.error(f"步骤3.4: 无法为任务 {task_id} 分配GPU，任务将等待")
+        log_file.write("无法分配GPU，任务将等待\n")
+        log_file.close()
+        
+        # 等待一段时间后重试
+        time.sleep(30)
+        return None
     
-    # 运行命令
+    logger.info(f"步骤3.5: 为任务 {task_id} 分配GPU {gpu_id}")
+    log_file.write(f"分配GPU: {gpu_id}\n\n")
+    
+    # 更新运行中的任务信息
+    task_info = {
+        "task_type": task_type,
+        "sub_task": sub_task,
+        "start_time": start_time,
+        "priority": priority,
+        "gpu_id": gpu_id
+    }
+    running_tasks[task_id] = task_info
+    
+    # 设置环境变量
+    env = os.environ.copy()
+    env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+    
+    # 状态
     status = "失败"
-    stderr = ""
-    stdout = ""
-    attempt = 0
     
-    while attempt < retry_count and not stop_event.is_set():
-        attempt += 1
-        if attempt > 1:
-            logger.info(f"重试任务 {task_id}，第 {attempt} 次尝试")
-            log_file.write(f"\n重试任务，第 {attempt} 次尝试\n")
-            log_file.flush()
+    # 尝试运行任务
+    for attempt in range(1, retry_count + 1):
+        if stop_event.is_set():
+            logger.info(f"步骤3.6: 收到停止信号，取消任务 {task_id}")
+            break
+        
+        logger.info(f"步骤3.7: 开始执行任务 {task_id}，尝试 {attempt}/{retry_count}")
+        log_file.write(f"尝试 {attempt}/{retry_count}\n")
+        
+        # 构建命令
+        cmd = [
+            "python", "../src/train/run_finetune.py",
+            "--data_path", data_path,
+            "--checkpoint", checkpoint,
+            "--ngram_encoder_dir", ngram_encoder_dir,
+            "--per_device_train_batch_size", str(per_device_train_batch_size),
+            "--per_device_eval_batch_size", str(per_device_eval_batch_size),
+            "--lr", str(learning_rate),
+            "--num_train_epochs", str(num_train_epochs),
+            "--out", output_path
+        ]
+        
+        if fp16:
+            cmd.append("--fp16")
+        
+        logger.info(f"步骤3.8: 执行命令: {' '.join(cmd)}")
+        log_file.write(f"执行命令: {' '.join(cmd)}\n\n")
+        log_file.flush()
         
         process = subprocess.Popen(
             cmd, 
@@ -273,22 +332,26 @@ def run_finetune_task(task_config):
         if task_id in running_processes:
             del running_processes[task_id]
         
+        # 从运行中的任务列表中移除
+        if task_id in running_tasks:
+            del running_tasks[task_id]
+        
         # 检查是否成功
         if return_code == 0:
             status = "成功"
-            logger.info(f"任务完成: {task_id}")
+            logger.info(f"步骤3.9: 任务完成: {task_id}")
             break
         else:
-            logger.error(f"任务失败: {task_id}，返回码: {return_code}")
+            logger.error(f"步骤3.10: 任务失败: {task_id}，返回码: {return_code}")
             if attempt < retry_count and not stop_event.is_set():
-                logger.info(f"将在5秒后重试...")
+                logger.info(f"步骤3.11: 将在5秒后重试...")
                 time.sleep(5)
             else:
-                logger.error(f"任务 {task_id} 达到最大重试次数，放弃")
+                logger.error(f"步骤3.12: 任务 {task_id} 达到最大重试次数，放弃")
     
     # 释放GPU
     if gpu_id is not None:
-        release_gpu(gpu_id)
+        gpu_manager.release(gpu_id)
     
     # 记录结束时间
     end_time = time.time()
@@ -307,8 +370,9 @@ def run_finetune_task(task_config):
         try:
             with open(eval_results_path, "r") as f:
                 eval_results = json.load(f)
+            logger.info(f"步骤3.13: 读取评估结果: {eval_results}")
         except Exception as e:
-            logger.error(f"读取评估结果失败: {e}")
+            logger.error(f"步骤3.14: 读取评估结果失败: {e}")
     
     # 返回任务结果
     return {
@@ -318,7 +382,8 @@ def run_finetune_task(task_config):
         "duration": duration,
         "output_path": output_path,
         "eval_results": eval_results,
-        "priority": priority
+        "priority": priority,
+        "end_time": end_time
     }
 
 def log_output_stream(stream, log_file, prefix=""):
@@ -330,8 +395,9 @@ def log_output_stream(stream, log_file, prefix=""):
             log_file.write(f"{log_line}\n")
             log_file.flush()
 
-def monitor_tasks(tasks_queue, results_queue, args):
+def monitor_tasks(tasks_queue, completed_tasks, args, gpu_manager):
     """监控任务执行情况"""
+    logger.info("步骤4: 启动任务监控线程")
     last_report_time = time.time()
     
     while not stop_event.is_set():
@@ -340,380 +406,328 @@ def monitor_tasks(tasks_queue, results_queue, args):
         # 每隔一段时间生成报告
         if current_time - last_report_time > args.monitor_interval:
             # 收集当前结果
-            current_results = list(results_queue.queue)
             pending_tasks = list(tasks_queue.queue)
             
             # 生成临时报告
             temp_report_path = os.path.join(args.output_dir, "progress_report.html")
-            generate_progress_report(current_results, pending_tasks, running_processes, temp_report_path)
+            report.generate_parallel_finetune_progress_report(completed_tasks, pending_tasks, running_tasks, temp_report_path)
+            
+            # 输出当前状态
+            logger.info(f"步骤4.1: 当前状态 - 已完成: {len(completed_tasks)}, 运行中: {len(running_tasks)}, 等待中: {len(pending_tasks)}")
+            
+            # 检查GPU使用情况
+            available_gpus = gpu_manager.get_available_gpus()
+            gpu_info = ", ".join([f"GPU {gpu['index']}: {gpu['free_memory']}MB可用" for gpu in available_gpus])
+            logger.info(f"步骤4.2: GPU使用情况 - {gpu_info}")
             
             last_report_time = current_time
         
         time.sleep(5)
 
-def generate_progress_report(completed_tasks, pending_tasks, running_tasks, output_path):
-    """生成进度报告"""
-    logger.info(f"生成进度报告: {output_path}")
+def main():
+    """主函数"""
+    # 步骤1: 解析命令行参数
+    args = parse_args()
+    logger.info("步骤1: 解析命令行参数完成")
     
-    # 计算总体进度
-    total_tasks = len(completed_tasks) + len(pending_tasks) + len(running_tasks)
-    completed_count = len(completed_tasks)
-    running_count = len(running_tasks)
-    pending_count = len(pending_tasks)
+    # 步骤2: 注册信号处理器，用于优雅地处理中断
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    logger.info("步骤2: 注册信号处理器完成")
     
-    if total_tasks > 0:
-        progress_percentage = (completed_count / total_tasks) * 100
+    # 步骤3: 创建输出目录
+    os.makedirs(args.output_dir, exist_ok=True)
+    
+    # 设置日志目录
+    if args.log_dir is None:
+        args.log_dir = os.path.join(args.output_dir, "logs")
+    os.makedirs(args.log_dir, exist_ok=True)
+    logger.info(f"步骤3: 创建输出目录: {args.output_dir}")
+    logger.info(f"步骤3.1: 创建日志目录: {args.log_dir}")
+    
+    # 步骤4: 解析GPU IDs
+    gpu_ids = None
+    if args.gpu_ids:
+        try:
+            gpu_ids = [int(gpu_id.strip()) for gpu_id in args.gpu_ids.split(",")]
+            logger.info(f"步骤4: 将使用指定的GPU: {gpu_ids}")
+        except ValueError:
+            logger.error("步骤4: GPU IDs格式错误，应为逗号分隔的整数")
+            sys.exit(1)
+    
+    # 步骤5: 加载任务配置
+    logger.info(f"步骤5: 加载任务配置: {args.config}")
+    try:
+        with open(args.config, "r", encoding="utf-8") as f:
+            config = json.load(f)
+    except Exception as e:
+        logger.error(f"步骤5: 加载任务配置失败: {e}")
+        sys.exit(1)
+    
+    # 步骤6: 准备任务列表
+    tasks = []
+    
+    # 检查配置文件格式
+    if isinstance(config, dict):
+        # 检查是否有特殊的数据目录配置
+        data_base_dir = ""
+        if "data_base_dir" in config:
+            data_base_dir = config.get("data_base_dir", "")
+            logger.info(f"步骤6.0: 找到基础数据目录: {data_base_dir}")
+        
+        # 检查是否有任务列表
+        if "tasks" in config and isinstance(config["tasks"], list):
+            logger.info("步骤6.0: 找到任务列表配置")
+            task_list = config["tasks"]
+            
+            for task_config in task_list:
+                if not isinstance(task_config, dict):
+                    logger.warning(f"步骤6.1: 跳过无效的任务配置: {task_config}")
+                    continue
+                
+                task_type = task_config.get("task_type")
+                if not task_type:
+                    logger.warning(f"步骤6.1: 跳过缺少任务类型的配置: {task_config}")
+                    continue
+                
+                logger.info(f"步骤6.2: 处理任务类型: {task_type}")
+                
+                # 获取子任务列表
+                sub_tasks = task_config.get("sub_tasks", [])
+                if not sub_tasks:
+                    logger.warning(f"步骤6.3: 任务类型 {task_type} 没有子任务")
+                    continue
+                
+                # 获取任务参数
+                data_dir = os.path.join(data_base_dir, task_config.get("data_dir", ""))
+                priority = task_config.get("priority", 0)
+                num_train_epochs = task_config.get("num_train_epochs", 5)
+                per_device_train_batch_size = task_config.get("per_device_train_batch_size", 8)
+                per_device_eval_batch_size = task_config.get("per_device_eval_batch_size", 8)
+                gradient_accumulation_steps = task_config.get("gradient_accumulation_steps", 1)
+                learning_rate = task_config.get("learning_rate", 5e-5)
+                fp16 = task_config.get("fp16", False)
+                
+                # 处理每个子任务
+                for sub_task in sub_tasks:
+                    logger.info(f"步骤6.4: 添加子任务: {task_type}/{sub_task}")
+                    
+                    # 构建数据路径
+                    data_path = os.path.join(data_dir, sub_task)
+                    
+                    # 构建输出路径
+                    output_path = os.path.join(args.output_dir, task_type, sub_task)
+                    
+                    # 添加任务
+                    tasks.append({
+                        "task_type": task_type,
+                        "sub_task": sub_task,
+                        "data_path": data_path,
+                        "output_path": output_path,
+                        "checkpoint": args.checkpoint,
+                        "ngram_encoder_dir": args.ngram_encoder_dir,
+                        "num_train_epochs": num_train_epochs,
+                        "per_device_train_batch_size": per_device_train_batch_size,
+                        "per_device_eval_batch_size": per_device_eval_batch_size,
+                        "gradient_accumulation_steps": gradient_accumulation_steps,
+                        "learning_rate": learning_rate,
+                        "fp16": fp16,
+                        "priority": priority
+                    })
+        else:
+            # 原始格式: {"task_type": {"sub_tasks": [...], ...}, ...}
+            for task_type, task_config in config.items():
+                # 跳过特殊键
+                if task_type in ["data_base_dir", "tasks"]:
+                    continue
+                
+                logger.info(f"步骤6: 处理任务类型: {task_type}")
+                
+                # 获取子任务列表
+                if isinstance(task_config, dict):
+                    sub_tasks = task_config.get("sub_tasks", [])
+                    priority = task_config.get("priority", 0)
+                    data_dir = os.path.join(data_base_dir, task_config.get("data_dir", ""))
+                    num_train_epochs = task_config.get("num_train_epochs", 5)
+                    per_device_train_batch_size = task_config.get("per_device_train_batch_size", 8)
+                    per_device_eval_batch_size = task_config.get("per_device_eval_batch_size", 8)
+                    gradient_accumulation_steps = task_config.get("gradient_accumulation_steps", 1)
+                    learning_rate = task_config.get("learning_rate", 5e-5)
+                    fp16 = task_config.get("fp16", False)
+                else:
+                    # 如果task_config是字符串或其他类型，假设它是子任务列表
+                    logger.warning(f"步骤6.1: 任务类型 {task_type} 的配置不是字典，尝试作为子任务列表处理")
+                    if isinstance(task_config, list):
+                        sub_tasks = task_config
+                    elif isinstance(task_config, str):
+                        sub_tasks = [task_config]
+                    else:
+                        logger.warning(f"步骤6.1: 无法解析任务类型 {task_type} 的配置，跳过")
+                        continue
+                    
+                    # 使用默认值
+                    priority = 0
+                    data_dir = data_base_dir
+                    num_train_epochs = 5
+                    per_device_train_batch_size = 8
+                    per_device_eval_batch_size = 8
+                    gradient_accumulation_steps = 1
+                    learning_rate = 5e-5
+                    fp16 = False
+                
+                if not sub_tasks:
+                    logger.warning(f"步骤6.2: 任务类型 {task_type} 没有子任务")
+                    continue
+                
+                # 处理每个子任务
+                for sub_task in sub_tasks:
+                    logger.info(f"步骤6.3: 添加子任务: {task_type}/{sub_task}")
+                    
+                    # 构建数据路径
+                    data_path = os.path.join(data_dir, sub_task)
+                    
+                    # 构建输出路径
+                    output_path = os.path.join(args.output_dir, task_type, sub_task)
+                    
+                    # 添加任务
+                    tasks.append({
+                        "task_type": task_type,
+                        "sub_task": sub_task,
+                        "data_path": data_path,
+                        "output_path": output_path,
+                        "checkpoint": args.checkpoint,
+                        "ngram_encoder_dir": args.ngram_encoder_dir,
+                        "num_train_epochs": num_train_epochs,
+                        "per_device_train_batch_size": per_device_train_batch_size,
+                        "per_device_eval_batch_size": per_device_eval_batch_size,
+                        "gradient_accumulation_steps": gradient_accumulation_steps,
+                        "learning_rate": learning_rate,
+                        "fp16": fp16,
+                        "priority": priority
+                    })
+    elif isinstance(config, list):
+        # 替代格式: [{"task_type": "...", "sub_task": "...", ...}, ...]
+        logger.info("步骤6: 配置文件为任务列表格式")
+        for task_item in config:
+            if not isinstance(task_item, dict):
+                logger.warning(f"步骤6.1: 跳过无效的任务项: {task_item}")
+                continue
+            
+            task_type = task_item.get("task_type")
+            sub_task = task_item.get("sub_task")
+            
+            if not task_type or not sub_task:
+                logger.warning(f"步骤6.2: 跳过缺少必要字段的任务项: {task_item}")
+                continue
+            
+            logger.info(f"步骤6.3: 添加任务: {task_type}/{sub_task}")
+            
+            # 构建数据路径
+            data_path = task_item.get("data_path", os.path.join(task_item.get("data_dir", ""), sub_task))
+            
+            # 构建输出路径
+            output_path = task_item.get("output_path", os.path.join(args.output_dir, task_type, sub_task))
+            
+            # 添加任务
+            tasks.append({
+                "task_type": task_type,
+                "sub_task": sub_task,
+                "data_path": data_path,
+                "output_path": output_path,
+                "checkpoint": args.checkpoint,
+                "ngram_encoder_dir": args.ngram_encoder_dir,
+                "num_train_epochs": task_item.get("num_train_epochs", 5),
+                "per_device_train_batch_size": task_item.get("per_device_train_batch_size", 8),
+                "per_device_eval_batch_size": task_item.get("per_device_eval_batch_size", 8),
+                "gradient_accumulation_steps": task_item.get("gradient_accumulation_steps", 1),
+                "learning_rate": task_item.get("learning_rate", 5e-5),
+                "fp16": task_item.get("fp16", False),
+                "priority": task_item.get("priority", 0)
+            })
     else:
-        progress_percentage = 0
+        logger.error(f"步骤6: 无法识别的配置文件格式: {type(config)}")
+        sys.exit(1)
     
-    # 计算平均指标
-    all_accuracy = []
-    all_f1 = []
-    all_matthews = []
+    # 如果没有任务，退出
+    if not tasks:
+        logger.error("步骤6.4: 没有找到任务，退出")
+        sys.exit(1)
     
-    for result in completed_tasks:
-        if result["status"] == "成功":
-            eval_results = result.get("eval_results", {})
-            accuracy = eval_results.get("eval_accuracy")
-            f1 = eval_results.get("eval_f1")
-            matthews = eval_results.get("eval_matthews_correlation")
+    logger.info(f"步骤6.5: 共找到 {len(tasks)} 个任务")
+    
+    # 步骤7: 按优先级排序任务
+    tasks.sort(key=lambda x: x["priority"], reverse=True)
+    logger.info("步骤7: 任务已按优先级排序")
+    
+    # 步骤8: 创建任务队列和结果队列
+    tasks_queue = queue.Queue()
+    completed_tasks = []
+    
+    # 将任务添加到队列
+    for task in tasks:
+        tasks_queue.put(task)
+    
+    logger.info(f"步骤8: 创建任务队列，包含 {tasks_queue.qsize()} 个任务")
+    
+    # 创建GPU管理器
+    gpu_manager = GPUManager(gpu_ids)
+    
+    # 步骤9: 启动监控线程
+    monitor_thread = threading.Thread(
+        target=monitor_tasks,
+        args=(tasks_queue, completed_tasks, args, gpu_manager)
+    )
+    monitor_thread.daemon = True
+    monitor_thread.start()
+    logger.info("步骤9: 启动监控线程")
+    
+    # 步骤10: 使用线程池执行任务
+    logger.info(f"步骤10: 开始执行任务，最大并行数: {args.max_workers}")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.max_workers) as executor:
+        # 提交任务
+        futures = []
+        while not tasks_queue.empty() and not stop_event.is_set():
+            try:
+                # 获取任务
+                task = tasks_queue.get()
+                
+                # 提交任务
+                future = executor.submit(run_finetune_task, task, gpu_manager, args)
+                futures.append(future)
+                
+                # 等待一小段时间，避免同时启动多个任务
+                time.sleep(1)
+            except Exception as e:
+                logger.error(f"步骤10.1: 提交任务时出错: {e}")
+        
+        # 等待所有任务完成
+        for future in concurrent.futures.as_completed(futures):
+            if stop_event.is_set():
+                break
             
-            if accuracy is not None:
-                all_accuracy.append(accuracy)
-            if f1 is not None:
-                all_f1.append(f1)
-            if matthews is not None:
-                all_matthews.append(matthews)
+            try:
+                result = future.result()
+                if result:  # 如果任务成功完成
+                    completed_tasks.append(result)
+                    logger.info(f"步骤10.2: 任务完成: {result['task_type']}/{result['sub_task']}, 状态: {result['status']}")
+            except Exception as e:
+                logger.error(f"步骤10.3: 任务执行出错: {e}")
     
-    avg_accuracy = np.mean(all_accuracy) if all_accuracy else 0
-    avg_f1 = np.mean(all_f1) if all_f1 else 0
-    avg_matthews = np.mean(all_matthews) if all_matthews else 0
+    # 如果收到停止信号，提前退出
+    if stop_event.is_set():
+        logger.info("步骤11: 收到停止信号，提前退出")
+        sys.exit(0)
     
-    # 生成HTML内容
-    html_content = f"""
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>微调任务进度报告</title>
-    <meta http-equiv="refresh" content="60"> <!-- 每60秒自动刷新 -->
-    <style>
-        body {{
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            margin: 0;
-            padding: 20px;
-            color: #333;
-        }}
-        h1, h2, h3 {{
-            color: #2c3e50;
-        }}
-        .container {{
-            max-width: 1200px;
-            margin: 0 auto;
-        }}
-        .summary {{
-            background-color: #f8f9fa;
-            border-radius: 5px;
-            padding: 15px;
-            margin-bottom: 20px;
-        }}
-        .metrics {{
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-            margin-bottom: 20px;
-        }}
-        .metric-card {{
-            background-color: #fff;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            padding: 15px;
-            flex: 1;
-            min-width: 200px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }}
-        .metric-value {{
-            font-size: 24px;
-            font-weight: bold;
-            color: #3498db;
-        }}
-        .progress-container {{
-            width: 100%;
-            background-color: #f1f1f1;
-            border-radius: 5px;
-            margin-bottom: 20px;
-        }}
-        .progress-bar {{
-            height: 30px;
-            background-color: #4CAF50;
-            border-radius: 5px;
-            text-align: center;
-            line-height: 30px;
-            color: white;
-            font-weight: bold;
-        }}
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }}
-        th, td {{
-            border: 1px solid #ddd;
-            padding: 12px;
-            text-align: left;
-        }}
-        th {{
-            background-color: #f2f2f2;
-        }}
-        tr:nth-child(even) {{
-            background-color: #f9f9f9;
-        }}
-        .success {{
-            color: #28a745;
-        }}
-        .failure {{
-            color: #dc3545;
-        }}
-        .running {{
-            color: #007bff;
-        }}
-        .pending {{
-            color: #6c757d;
-        }}
-        .task-group {{
-            margin-bottom: 30px;
-        }}
-        .accordion {{
-            background-color: #f1f1f1;
-            color: #444;
-            cursor: pointer;
-            padding: 18px;
-            width: 100%;
-            text-align: left;
-            border: none;
-            outline: none;
-            transition: 0.4s;
-            font-size: 16px;
-            font-weight: bold;
-        }}
-        .active, .accordion:hover {{
-            background-color: #ddd;
-        }}
-        .panel {{
-            padding: 0 18px;
-            background-color: white;
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.2s ease-out;
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>DNA序列微调任务进度报告</h1>
-        <p>生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-        
-        <div class="summary">
-            <h2>总体进度</h2>
-            <div class="progress-container">
-                <div class="progress-bar" style="width:{progress_percentage}%">
-                    {progress_percentage:.2f}%
-                </div>
-            </div>
-            
-            <div class="metrics">
-                <div class="metric-card">
-                    <h3>总任务数</h3>
-                    <div class="metric-value">{total_tasks}</div>
-                </div>
-                <div class="metric-card">
-                    <h3>已完成</h3>
-                    <div class="metric-value">{completed_count}</div>
-                </div>
-                <div class="metric-card">
-                    <h3>运行中</h3>
-                    <div class="metric-value">{running_count}</div>
-                </div>
-                <div class="metric-card">
-                    <h3>等待中</h3>
-                    <div class="metric-value">{pending_count}</div>
-                </div>
-            </div>
-            
-            <h2>当前平均性能指标</h2>
-            <div class="metrics">
-                <div class="metric-card">
-                    <h3>平均准确率</h3>
-                    <div class="metric-value">{avg_accuracy:.4f}</div>
-                </div>
-                <div class="metric-card">
-                    <h3>平均F1分数</h3>
-                    <div class="metric-value">{avg_f1:.4f}</div>
-                </div>
-                <div class="metric-card">
-                    <h3>平均Matthews相关系数</h3>
-                    <div class="metric-value">{avg_matthews:.4f}</div>
-                </div>
-            </div>
-        </div>
-        
-        <h2>运行中的任务</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>任务类型</th>
-                    <th>子任务</th>
-                    <th>状态</th>
-                    <th>已运行时间(秒)</th>
-                    <th>优先级</th>
-                    <th>GPU</th>
-                </tr>
-            </thead>
-            <tbody>
-"""
+    # 步骤11: 收集所有结果
+    logger.info(f"步骤11: 所有任务已完成，共 {len(completed_tasks)} 个结果")
     
-    # 添加运行中的任务
-    current_time = time.time()
-    for task_id, task_info in running_tasks.items():
-        task_type = task_info.get("task_type", "未知")
-        sub_task = task_info.get("sub_task", "未知")
-        start_time = task_info.get("start_time", current_time)
-        running_time = current_time - start_time
-        priority = task_info.get("priority", 0)
-        gpu_id = task_info.get("gpu_id", "未知")
-        
-        html_content += f"""
-                <tr class="running">
-                    <td>{task_type}</td>
-                    <td>{sub_task}</td>
-                    <td>运行中</td>
-                    <td>{running_time:.2f}</td>
-                    <td>{priority}</td>
-                    <td>{gpu_id}</td>
-                </tr>
-"""
+    # 步骤12: 生成汇总报告
+    summary_report_path = os.path.join(args.output_dir, args.summary_report)
+    report.generate_parallel_finetune_summary_report(completed_tasks, summary_report_path)
+    logger.info(f"步骤12: 生成汇总报告: {summary_report_path}")
     
-    if not running_tasks:
-        html_content += """
-                <tr>
-                    <td colspan="6" style="text-align: center;">当前没有运行中的任务</td>
-                </tr>
-"""
-    
-    html_content += """
-            </tbody>
-        </table>
-        
-        <h2>等待中的任务</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>任务类型</th>
-                    <th>子任务</th>
-                    <th>优先级</th>
-                </tr>
-            </thead>
-            <tbody>
-"""
-    
-    # 添加等待中的任务
-    for task in pending_tasks:
-        task_type = task.get("task_type", "未知")
-        sub_task = task.get("sub_task", "未知")
-        priority = task.get("priority", 0)
-        
-        html_content += f"""
-                <tr class="pending">
-                    <td>{task_type}</td>
-                    <td>{sub_task}</td>
-                    <td>{priority}</td>
-                </tr>
-"""
-    
-    if not pending_tasks:
-        html_content += """
-                <tr>
-                    <td colspan="3" style="text-align: center;">当前没有等待中的任务</td>
-                </tr>
-"""
-    
-    html_content += """
-            </tbody>
-        </table>
-        
-        <h2>已完成的任务</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>任务类型</th>
-                    <th>子任务</th>
-                    <th>状态</th>
-                    <th>耗时(秒)</th>
-                    <th>准确率</th>
-                    <th>F1分数</th>
-                    <th>Matthews相关系数</th>
-                </tr>
-            </thead>
-            <tbody>
-"""
-    
-    # 添加已完成的任务，按完成时间倒序排列
-    completed_tasks_sorted = sorted(completed_tasks, key=lambda x: x.get("end_time", 0), reverse=True)
-    
-    for result in completed_tasks_sorted:
-        task_type = result.get("task_type", "未知")
-        sub_task = result.get("sub_task", "未知")
-        status = result.get("status", "未知")
-        duration = result.get("duration", 0)
-        
-        # 设置状态样式
-        status_class = "success" if status == "成功" else "failure"
-        
-        # 获取评估指标
-        eval_results = result.get("eval_results", {})
-        accuracy = eval_results.get("eval_accuracy", "N/A")
-        if accuracy != "N/A":
-            accuracy = f"{accuracy:.4f}"
-        
-        f1 = eval_results.get("eval_f1", "N/A")
-        if f1 != "N/A":
-            f1 = f"{f1:.4f}"
-        
-        matthews = eval_results.get("eval_matthews_correlation", "N/A")
-        if matthews != "N/A":
-            matthews = f"{matthews:.4f}"
-        
-        html_content += f"""
-                <tr class="{status_class}">
-                    <td>{task_type}</td>
-                    <td>{sub_task}</td>
-                    <td>{status}</td>
-                    <td>{duration:.2f}</td>
-                    <td>{accuracy}</td>
-                    <td>{f1}</td>
-                    <td>{matthews}</td>
-                </tr>
-"""
-    
-    if not completed_tasks:
-        html_content += """
-                <tr>
-                    <td colspan="7" style="text-align: center;">当前没有已完成的任务</td>
-                </tr>
-"""
-    
-    html_content += """
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
-"""
-    
-    # 保存HTML文件
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(html_content)
-    
-    logger.info(f"进度报告已生成: {output_path}")
+    # 步骤13: 完成
+    logger.info("步骤13: 所有任务已完成")
+
+if __name__ == "__main__":
+    main()
