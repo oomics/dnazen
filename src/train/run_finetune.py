@@ -225,6 +225,16 @@ def generate_prediction_html_report(results_df, metrics, output_path):
             background-color: #cccccc;
             cursor: not-allowed;
         }}
+        .metrics-detail {{
+            font-family: monospace;
+            white-space: pre;
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+        }}
     </style>
 </head>
 <body>
@@ -255,6 +265,15 @@ def generate_prediction_html_report(results_df, metrics, output_path):
         
         <div class="all-metrics">
             <h2>所有评估指标</h2>
+            
+            <div class="metrics-detail">
+{'='*50}
+{'指标名称':<30}{'值':>15}
+{'='*50}
+{chr(10).join([f"{metric_name:<30}{metrics[metric_name]:>15.6f}" if isinstance(metrics[metric_name], float) else f"{metric_name:<30}{metrics[metric_name]:>15}" for metric_name in sorted(metrics.keys())])}
+{'='*50}
+            </div>
+            
             <table class="metric-table">
                 <thead>
                     <tr>
