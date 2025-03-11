@@ -111,6 +111,11 @@ def generate_prediction_html_report(results_df, metrics, output_path):
     total_predictions = len(results_df)
     accuracy = correct_predictions / total_predictions if total_predictions > 0 else 0
     
+    logger.info(f"总样本数: {total_predictions}")
+    logger.info(f"正确预测数: {correct_predictions}")
+    logger.info(f"准确率: {accuracy}")
+
+
     # 生成HTML内容
     html_content = f"""
 <!DOCTYPE html>
@@ -270,7 +275,8 @@ def generate_prediction_html_report(results_df, metrics, output_path):
 {'='*50}
 {'指标名称':<30}{'值':>15}
 {'='*50}
-{chr(10).join([f"{metric_name:<30}{metrics[metric_name]:>15.6f}" if isinstance(metrics[metric_name], float) else f"{metric_name:<30}{metrics[metric_name]:>15}" for metric_name in sorted(metrics.keys())])}
+{chr(10).join([f"{metric_name:<30}{metrics[metric_name]:>15.6f}" if isinstance(metrics[metric_name], float) 
+               else f"{metric_name:<30}{str(metrics[metric_name]):>15}" for metric_name in sorted(metrics.keys())])}
 {'='*50}
             </div>
             

@@ -253,6 +253,11 @@ process_task() {
     # 复制输出文件到报告保存文件夹，但排除checkpoint-*目录
     echo "复制输出文件到 $REPORT_OUT_DIR，排除checkpoint目录..."
     find "$task_output_path" -type f -not -path "*/checkpoint-*/*" -exec cp --parents {} "$REPORT_OUT_DIR" \;
+    
+    # 删除checkpoint目录以节省空间
+    echo "删除checkpoint目录以节省空间..."
+    find "$task_output_path" -type d -name "checkpoint-*" -exec rm -rf {} \; 2>/dev/null || true
+    
     return 0
   else
     echo "任务 ${task_type}/${sub_task} 执行失败，退出代码: $result"
@@ -441,7 +446,16 @@ else
 
     # 复制输出文件到报告保存文件夹，但排除checkpoint-*目录
     echo "复制输出文件到 $OUTPUT_DIR/finetune/output，排除checkpoint目录..."
-    find "$TASK_OUTPUT_PATH" -type f -not -path "*/checkpoint-*/*" -exec cp --parents {} "$REPORT_OUT_DIR" \;
+    #find "$TASK_OUTPUT_PATH" -type f -not -path "*/checkpoint-*/*" -exec cp --parents {} "$REPORT_OUT_DIR" \;
+    
+    echo "=================================================================="
+    echo "删除checkpoint目录以节省空间"
+    echo "find ../data/output/finetune/output/ -type d -name "checkpoint-*" -exec du -sh {} \;"
+    echo "find ../data/output/finetune/output/ -type d -name "checkpoint-*" -exec rm -rf {} \; 2>/dev/null || true;"
+    echo "=================================================================="
+
+    find "$TASK_OUTPUT_PATH" -type d -name "checkpoint-*" -exec du -sh {} \;
+    find "$TASK_OUTPUT_PATH" -type d -name "checkpoint-*" -exec rm -rf {} \; 2>/dev/null || true
 
     echo "=================================================================="
     echo "微调训练成功完成！"

@@ -236,6 +236,8 @@ def generate_parallel_finetune_progress_report(tasks_dir, output_path):
     avg_f1 = np.mean(all_f1) if all_f1 else 0
     avg_matthews = np.mean(all_matthews) if all_matthews else 0
     
+    
+    
     # 生成HTML内容
     html_content = f"""
 <!DOCTYPE html>
@@ -675,3 +677,197 @@ def main():
 #python ../src/train/report.py --tasks_dir ../data/output/finetune/output/ --output ./report.html
 if __name__ == "__main__":
     main()
+
+def read_excel_to_json(excel_file_path):
+    """
+    读取Excel文件并转换为JSON对象
+    
+    参数:
+        excel_file_path (str): Excel文件路径
+        
+    返回:
+        dict: 包含Excel数据的JSON对象
+    """
+    try:
+        logger.info(f"正在读取Excel文件: {excel_file_path}")
+        # 读取Excel文件
+        df = pd.read_excel(excel_file_path)
+        
+        # 将DataFrame转换为字典列表
+        records = df.to_dict(orient='records')
+        
+        # 构建JSON对象
+        result = {
+            "data": records,
+            "total_rows": len(records),
+            "columns": df.columns.tolist(),
+            "file_path": excel_file_path,
+            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        
+        logger.info(f"Excel文件读取成功，共{len(records)}行数据")
+        return result
+    
+    except Exception as e:
+        logger.error(f"读取Excel文件时出错: {e}")
+        return {
+            "error": str(e),
+            "file_path": excel_file_path,
+            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+
+def save_json_to_file(json_data, output_path):
+    """
+    将JSON对象保存到文件
+    
+    参数:
+        json_data (dict): JSON对象
+        output_path (str): 输出文件路径
+    """
+    try:
+        logger.info(f"正在保存JSON数据到文件: {output_path}")
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(json_data, f, ensure_ascii=False, indent=4)
+        logger.info(f"JSON数据已成功保存到: {output_path}")
+    except Exception as e:
+        logger.error(f"保存JSON数据时出错: {e}")
+
+def process_excel_with_eval_results(excel_path, eval_results_dict, output_path):
+    """
+    读取prepare_data.xlsx，将评估结果数据写入匹配的数据名称行
+    
+    参数:
+        excel_path (str): Excel文件路径
+        eval_results_dict (dict): 评估结果字典，键为数据名称，值为评估结果
+        output_path (str): 输出Excel文件路径
+    """
+    try:
+        logger.info(f"正在处理Excel文件: {excel_path}")
+        
+        # 读取Excel文件
+        df = pd.read_excel(excel_path)
+        
+        # 假设Excel中有一列名为"数据名称"或"task_name"用于匹配
+        name_column = None
+        for possible_name in ["数据名称", "task_name", "name", "任务名称", "子任务"]:
+            if possible_name in df.columns:
+                name_column = possible_name
+                break
+        
+        if name_column is None:
+            logger.error("无法在Excel中找到数据名称列")
+            return False
+        
+        # 为评估结果创建新列
+        for metric_name in ["accuracy", "f1", "matthews_correlation", "precision", "recall"]:
+            column_name = f"eval_{metric_name}"
+            if column_name not in df.columns:
+                df[column_name] = None
+        
+        # 遍历数据行，匹配评估结果
+        updated_count = 0
+        for index, row in df.iterrows():
+            task_name = row[name_column]
+            
+            # 尝试不同的键格式进行匹配
+            result_key = None
+            possible_keys = [
+                task_name,
+                task_name.strip(),
+                task_name.lower(),
+                task_name.replace(" ", "_"),
+                task_name.replace("-", "_")
+            ]
+            
+            for key in possible_keys:
+                if key in eval_results_dict:
+                    result_key = key
+                    break
+            
+            # 如果找到匹配的评估结果，更新行数据
+            if result_key:
+                eval_result = eval_results_dict[result_key]
+                for metric_name in ["accuracy", "f1", "matthews_correlation", "precision", "recall"]:
+                    column_name = f"eval_{metric_name}"
+                    metric_key = f"eval_{metric_name}"
+                    
+                    if metric_key in eval_result:
+                        df.at[index, column_name] = eval_result[metric_key]
+                updated_count += 1
+        
+        # 保存更新后的Excel文件
+        df.to_excel(output_path, index=False)
+        
+        logger.info(f"Excel处理完成，已更新{updated_count}行数据，保存到: {output_path}")
+        return True
+    
+    except Exception as e:
+        logger.error(f"处理Excel文件时出错: {e}")
+        return False
+
+def collect_eval_results(tasks_dir):
+    """
+    从任务目录收集所有评估结果
+    
+    参数:
+        tasks_dir (str): 任务输出目录
+        
+    返回:
+        dict: 评估结果字典，键为任务名称，值为评估结果
+    """
+    eval_results_dict = {}
+    
+    # 遍历任务类型目录
+    for task_type in os.listdir(tasks_dir):
+        task_type_dir = os.path.join(tasks_dir, task_type)
+        if not os.path.isdir(task_type_dir):
+            continue
+        
+        # 遍历子任务目录
+        for sub_task in os.listdir(task_type_dir):
+            sub_task_dir = os.path.join(task_type_dir, sub_task)
+            if not os.path.isdir(sub_task_dir):
+                continue
+            
+            # 检查评估结果文件
+            eval_results_path = os.path.join(sub_task_dir, "eval_results.json")
+            if os.path.exists(eval_results_path):
+                try:
+                    with open(eval_results_path, "r", encoding="utf-8") as f:
+                        eval_results = json.load(f)
+                    
+                    # 使用子任务名称作为键
+                    eval_results_dict[sub_task] = eval_results
+                    # 也添加任务类型/子任务组合作为键
+                    eval_results_dict[f"{task_type}/{sub_task}"] = eval_results
+                    
+                except Exception as e:
+                    logger.error(f"读取评估结果时出错 ({task_type}/{sub_task}): {e}")
+    
+    logger.info(f"已收集{len(eval_results_dict)}个任务的评估结果")
+    return eval_results_dict
+
+def update_prepare_data_with_results(tasks_dir, excel_path, output_path=None):
+    """
+    更新prepare_data.xlsx文件，添加评估结果
+    
+    参数:
+        tasks_dir (str): 任务输出目录
+        excel_path (str): prepare_data.xlsx文件路径
+        output_path (str, optional): 输出文件路径，默认为在原文件名后添加_with_results
+    """
+    if output_path is None:
+        # 在原文件名后添加_with_results
+        file_name, file_ext = os.path.splitext(excel_path)
+        output_path = f"{file_name}_with_results{file_ext}"
+    
+    # 收集评估结果
+    eval_results_dict = collect_eval_results(tasks_dir)
+    
+    # 处理Excel文件
+    success = process_excel_with_eval_results(excel_path, eval_results_dict, output_path)
+    
+    if success:
+        logger.info(f"已将评估结果更新到Excel文件: {output_path}")
+    else:
+        logger.error("更新Excel文件失败")
