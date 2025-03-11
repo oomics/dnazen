@@ -372,8 +372,8 @@ if [ "$PARALLEL" = true ]; then
   declare -A TASK_CONFIGS
   
   # TF任务
-  #TF_SUBTASKS=("0" "1" "2" "3" "4")
-  TF_SUBTASKS=("1" "2" "3" "4")
+  TF_SUBTASKS=("0" "1" "2" "3" "4")
+  #TF_SUBTASKS=("1" "2" "3" "4")
   # Mouse任务
   MOUSE_SUBTASKS=("0" "1" "2" "3" "4")
   # PD任务
