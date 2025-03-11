@@ -8,6 +8,7 @@ from datetime import datetime
 import numpy as np
 import time
 import re
+import csv
 
 # import sklearn
 from sklearn.metrics import (
@@ -38,6 +39,496 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+
+
+data_in_parpare_dict = [
+      {
+        "DATA": "EMP_H3",
+        "Task": "Epigenetic Marks Prediction-H3",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 78.27,
+        "MCC_USE_GUE_paper": 80.17,
+        "DNABERT准确率复现": 0.8824,
+        "DNABERT2 MCC复现": 0.7661,
+        "复现偏差": -0.016599999999999965
+      },
+      {
+        "DATA": "EMP_H3K14ac",
+        "Task": "Epigenetic Marks Prediction-H3K14ac",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 52.57,
+        "MCC_USE_GUE_paper": 57.42,
+        "DNABERT准确率复现": 0.7628,
+        "DNABERT2 MCC复现": 0.5233,
+        "复现偏差": -0.0024000000000000197
+      },
+      {
+        "DATA": "EMP_H3K36me3",
+        "Task": "Epigenetic Marks Prediction-H3K36me3",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 56.88,
+        "MCC_USE_GUE_paper": 61.9,
+        "DNABERT准确率复现": 0.7907,
+        "DNABERT2 MCC复现": 0.5742,
+        "复现偏差": 0.005399999999999992
+      },
+      {
+        "DATA": "EMP_H3K4me1",
+        "Task": "Epigenetic Marks Prediction-H3K4me1",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 50.52,
+        "MCC_USE_GUE_paper": 53.0,
+        "DNABERT准确率复现": 0.7516,
+        "DNABERT2 MCC复现": 0.4965,
+        "复现偏差": -0.008700000000000046
+      },
+      {
+        "DATA": "EMP_H3K4me2",
+        "Task": "Epigenetic Marks Prediction-H3K4me2",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 31.13,
+        "MCC_USE_GUE_paper": 39.89,
+        "DNABERT准确率复现": 0.6432,
+        "DNABERT2 MCC复现": 0.295,
+        "复现偏差": -0.01629999999999999
+      },
+      {
+        "DATA": "EMP_H3K4me3",
+        "Task": "Epigenetic Marks Prediction-H3K4me3",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 36.27,
+        "MCC_USE_GUE_paper": 41.2,
+        "DNABERT准确率复现": 0.6766,
+        "DNABERT2 MCC复现": 0.354,
+        "复现偏差": -0.008700000000000046
+      },
+      {
+        "DATA": "EMP_H3K79me3",
+        "Task": "Epigenetic Marks Prediction-H3K79me3",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 67.39,
+        "MCC_USE_GUE_paper": 65.46,
+        "DNABERT准确率复现": 0.8266,
+        "DNABERT2 MCC复现": 0.6522,
+        "复现偏差": -0.021700000000000018
+      },
+      {
+        "DATA": "EMP_H3K9ac",
+        "Task": "Epigenetic Marks Prediction-H3K9ac",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 55.63,
+        "MCC_USE_GUE_paper": 57.07,
+        "DNABERT准确率复现": 0.7769,
+        "DNABERT2 MCC复现": 0.5562,
+        "复现偏差": -9.999999999998011e-05
+      },
+      {
+        "DATA": "EMP_H4",
+        "Task": "Epigenetic Marks Prediction-H4",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 80.71,
+        "MCC_USE_GUE_paper": 81.86,
+        "DNABERT准确率复现": 0.898,
+        "DNABERT2 MCC复现": 0.7972,
+        "复现偏差": -0.009899999999999949
+      },
+      {
+        "DATA": "EMP_H4ac",
+        "Task": "Epigenetic Marks Prediction-H4ac",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 50.43,
+        "MCC_USE_GUE_paper": 50.35,
+        "DNABERT准确率复现": 0.7387,
+        "DNABERT2 MCC复现": 0.4744,
+        "复现偏差": -0.02990000000000002
+      },
+      {
+        "DATA": "prom_prom_300_all",
+        "Task": "Promoter Detection-all",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 86.77,
+        "MCC_USE_GUE_paper": 88.31,
+        "DNABERT准确率复现": 0.9368,
+        "DNABERT2 MCC复现": 0.874,
+        "复现偏差": 0.006300000000000096
+      },
+      {
+        "DATA": "prom_prom_300_notata",
+        "Task": "Promoter Detection-notata",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 94.27,
+        "MCC_USE_GUE_paper": 94.34,
+        "DNABERT准确率复现": 0.9708,
+        "DNABERT2 MCC复现": 0.9418,
+        "复现偏差": -0.0009000000000000341
+      },
+      {
+        "DATA": "prom_prom_300_tata",
+        "Task": "Promoter Detection-tata",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 71.59,
+        "MCC_USE_GUE_paper": 68.79,
+        "DNABERT准确率复现": 0.7749,
+        "DNABERT2 MCC复现": 0.5661,
+        "复现偏差": -0.14979999999999996
+      },
+      {
+        "DATA": "tf_0",
+        "Task": "Transcription Factor Prediction (Human)-0",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 71.99,
+        "MCC_USE_GUE_paper": 69.12,
+        "DNABERT准确率复现": 0.848,
+        "DNABERT2 MCC复现": 0.698,
+        "复现偏差": -0.02189999999999998
+      },
+      {
+        "DATA": "tf_1",
+        "Task": "Transcription Factor Prediction (Human)-1",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 76.06,
+        "MCC_USE_GUE_paper": 71.87,
+        "DNABERT准确率复现": 0.858,
+        "DNABERT2 MCC复现": 0.7202,
+        "复现偏差": -0.04040000000000006
+      },
+      {
+        "DATA": "tf_2",
+        "Task": "Transcription Factor Prediction (Human)-2",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 66.52,
+        "MCC_USE_GUE_paper": 62.96,
+        "DNABERT准确率复现": 0.825,
+        "DNABERT2 MCC复现": 0.6516,
+        "复现偏差": -0.013599999999999994
+      },
+      {
+        "DATA": "tf_3",
+        "Task": "Transcription Factor Prediction (Human)-3",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 58.54,
+        "MCC_USE_GUE_paper": 55.35,
+        "DNABERT准确率复现": 0.804,
+        "DNABERT2 MCC复现": 0.6094,
+        "复现偏差": 0.024000000000000056
+      },
+      {
+        "DATA": "tf_4",
+        "Task": "Transcription Factor Prediction (Human)-4",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 77.43,
+        "MCC_USE_GUE_paper": 74.94,
+        "DNABERT准确率复现": 0.879,
+        "DNABERT2 MCC复现": 0.7589,
+        "复现偏差": -0.015400000000000063
+      },
+      {
+        "DATA": "prom_prom_core_all",
+        "Task": "Core Promoter Detection-all",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 69.37,
+        "MCC_USE_GUE_paper": 67.5,
+        "DNABERT准确率复现": 0.8287,
+        "DNABERT2 MCC复现": 0.6581,
+        "复现偏差": -0.03560000000000002
+      },
+      {
+        "DATA": "prom_prom_core_notata",
+        "Task": "Core Promoter Detection-notata",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 68.04,
+        "MCC_USE_GUE_paper": 69.53,
+        "DNABERT准确率复现": 0.8444,
+        "DNABERT2 MCC复现": 0.6888,
+        "复现偏差": 0.008399999999999892
+      },
+      {
+        "DATA": "prom_prom_core_tata",
+        "Task": "Core Promoter Detection-tata",
+        "Metric": "mcc",
+        "Train": 4094.0,
+        "Dev": 613.0,
+        "Test": 613.0,
+        "MCC_paper": 74.17,
+        "MCC_USE_GUE_paper": 76.18,
+        "DNABERT准确率复现": 0.8711,
+        "DNABERT2 MCC复现": 0.7424,
+        "复现偏差": 0.0006999999999999318
+      },
+      {
+        "DATA": "mouse_0",
+        "Task": "Transcription Factor prediction (Mouse)-0",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 56.76,
+        "MCC_USE_GUE_paper": 64.23,
+        "DNABERT准确率复现": 0.7716,
+        "DNABERT2 MCC复现": 0.545,
+        "复现偏差": -0.02259999999999991
+      },
+      {
+        "DATA": "mouse_1",
+        "Task": "Transcription Factor prediction (Mouse)-1",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 84.77,
+        "MCC_USE_GUE_paper": 86.28,
+        "DNABERT准确率复现": 0.9272,
+        "DNABERT2 MCC复现": 0.8548,
+        "复现偏差": 0.007100000000000079
+      },
+      {
+        "DATA": "mouse_2",
+        "Task": "Transcription Factor prediction (Mouse)-2",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 79.32,
+        "MCC_USE_GUE_paper": 81.28,
+        "DNABERT准确率复现": 0.9146,
+        "DNABERT2 MCC复现": 0.8293,
+        "复现偏差": 0.03610000000000014
+      },
+      {
+        "DATA": "mouse_3",
+        "Task": "Transcription Factor prediction (Mouse)-3",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 66.47,
+        "MCC_USE_GUE_paper": 73.49,
+        "DNABERT准确率复现": 0.8452,
+        "DNABERT2 MCC复现": 0.7015,
+        "复现偏差": 0.03680000000000007
+      },
+      {
+        "DATA": "mouse_4",
+        "Task": "Transcription Factor prediction (Mouse)-4",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 52.66,
+        "MCC_USE_GUE_paper": 50.8,
+        "DNABERT准确率复现": 0.7573,
+        "DNABERT2 MCC复现": 0.5152,
+        "复现偏差": -0.011400000000000006
+      },
+      {
+        "DATA": "virus_covid",
+        "Task": "Covid Variant Classification",
+        "Metric": "f1",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 71.02,
+        "MCC_USE_GUE_paper": 68.49,
+        "DNABERT准确率复现": None,
+        "DNABERT2 MCC复现": None,
+        "复现偏差": None
+      },
+      {
+        "DATA": "splice_reconstructed",
+        "Task": "Species Classification",
+        "Metric": "mcc",
+        "Train": None,
+        "Dev": None,
+        "Test": None,
+        "MCC_paper": 84.99,
+        "MCC_USE_GUE_paper": 85.93,
+        "DNABERT准确率复现": 0.9165,
+        "DNABERT2 MCC复现": 0.8565,
+        "复现偏差": 0.006600000000000108
+      }
+    ]
+
+
+
+class ReportData:
+    """和论文对比的统计信息"""
+
+    def __init__(self, eval_results=None, data=None):
+        """初始化数据统计对象"""
+        # 确保eval_results不为None
+        self.eval_results = eval_results if eval_results is not None else {}
+        
+        if eval_results is None:
+            # 从eval_results中提取指标
+            self.accuracy = self.eval_results.get("eval_accuracy")
+            self.f1 = self.eval_results.get("eval_f1")
+            self.matthews = self.eval_results.get("eval_matthews_correlation")
+            self.mcc = self.eval_results.get("eval_matthews_correlation")
+        else:
+            self.accuracy = None
+            self.f1 = None
+            self.matthews = None
+            self.mcc = None
+        
+        # 确保data参数存在
+        if data:
+            self.data_name = data.get("DATA")
+            self.task = data.get("Task")
+            self.metric = data.get("Metric")
+            self.train = data.get("Train")
+            self.dev = data.get("Dev")
+            self.test = data.get("Test")
+            self.mcc_paper = data.get("MCC_paper")
+            self.mcc_gue_paper = data.get("MCC_USE_GUE_paper")
+            self.dnabert_accuracy = data.get("DNABERT准确率复现")
+            self.dnabert2_mcc = data.get("DNABERT2 MCC复现")
+            self.bias = data.get("复现偏差")
+        else:
+            self.data_name = None
+            self.task = None
+            self.metric = None
+            self.train = None
+            self.dev = None
+            self.test = None
+            self.mcc_paper = None
+            self.mcc_gue_paper = None
+            self.dnabert_accuracy = None
+            self.dnabert2_mcc = None
+            self.bias = None
+
+
+def save_report_data_to_csv(report_data_list, output_path):
+    """
+    将报告数据列表保存为CSV文件
+    
+    参数:
+        report_data_list (list): ReportData对象列表
+        output_path (str): 输出CSV文件路径
+    """
+    logger.info(f"将报告数据保存到CSV文件: {output_path}")
+    
+    # 定义CSV表头
+    headers = [
+        "数据集", "任务", "指标", "训练集大小", "验证集大小", "测试集大小", 
+        "论文MCC", "论文MCC(GUE)", "DNABERT准确率", "DNABERT2 MCC", "复现偏差",
+        "实验MCC", "MCC差异", "MCC(GUE)差异"
+    ]
+    
+    # 准备CSV数据
+    csv_data = []
+    for report_data in report_data_list:
+        # 获取实验MCC和差异值
+        experiment_mcc = 0.0
+        mcc_diff = ""
+        mcc_gue_diff = ""
+        
+        if hasattr(report_data, "eval_results") and report_data.eval_results:
+            if "eval_matthews_correlation" in report_data.eval_results:
+                # 将MCC值乘以100并保留2位小数
+                experiment_mcc = round(report_data.eval_results["eval_matthews_correlation"] * 100, 2)
+                
+                if report_data.mcc_paper is not None:
+                    # 计算差异百分比并格式化为字符串
+                    diff_value = round((experiment_mcc - report_data.mcc_paper)/report_data.mcc_paper * 100, 2)
+                    mcc_diff = f"{diff_value}%"
+                
+                if report_data.mcc_gue_paper is not None:
+                    # 计算差异百分比并格式化为字符串
+                    diff_value = round((experiment_mcc - report_data.mcc_gue_paper)/report_data.mcc_gue_paper * 100, 2)
+                    mcc_gue_diff = f"{diff_value}%"
+        
+        # 构建CSV行数据
+        row = [
+            report_data.data_name,
+            report_data.task,
+            report_data.metric,
+            report_data.train,
+            report_data.dev,
+            report_data.test,
+            report_data.mcc_paper,
+            report_data.mcc_gue_paper,
+            report_data.dnabert_accuracy,
+            report_data.dnabert2_mcc,
+            report_data.bias,
+            experiment_mcc,
+            mcc_diff,
+            mcc_gue_diff
+        ]
+        
+        csv_data.append(row)
+    
+    # 写入CSV文件
+    try:
+        with open(output_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(headers)
+            writer.writerows(csv_data)
+        logger.info(f"成功将{len(csv_data)}条报告数据保存到: {output_path}")
+        return True
+    except Exception as e:
+        logger.error(f"保存CSV文件时出错: {e}")
+        return False
 
 
 
@@ -115,55 +606,15 @@ def generate_parallel_finetune_progress_report(tasks_dir, output_path):
                         except:
                             pass
                     
-                    # 从日志中提取开始和结束时间
-                    start_time = None
-                    end_time = None
-                    duration = 0
-                    
-                    if os.path.exists(log_path):
-                        try:
-                            with open(log_path, "r", encoding="utf-8") as f:
-                                log_content = f.read()
-                                
-                                # 提取开始时间
-                                start_match = re.search(r"开始时间: (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", log_content)
-                                if start_match:
-                                    start_time_str = start_match.group(1)
-                                    start_time = datetime.strptime(start_time_str, "%Y-%m-%d %H:%M:%S").timestamp()
-                                
-                                # 提取结束时间
-                                end_match = re.search(r"结束时间: (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", log_content)
-                                if end_match:
-                                    end_time_str = end_match.group(1)
-                                    end_time = datetime.strptime(end_time_str, "%Y-%m-%d %H:%M:%S").timestamp()
-                                
-                                # 计算持续时间
-                                if start_time and end_time:
-                                    duration = end_time - start_time
-                        except:
-                            pass
-                    
-                    # 如果没有从日志中提取到时间信息，使用文件修改时间
-                    if not start_time or not end_time:
-                        try:
-                            # 使用目录创建时间作为开始时间
-                            start_time = os.path.getctime(sub_task_dir)
-                            # 使用评估结果文件修改时间作为结束时间
-                            end_time = os.path.getmtime(eval_results_path)
-                            duration = end_time - start_time
-                        except:
-                            pass
                     
                     # 构建任务结果
                     task_result = {
+                        "task_name": task_type+"_"+sub_task,
                         "task_type": task_type,
                         "sub_task": sub_task,
                         "status": "成功",
                         "output_path": sub_task_dir,
                         "eval_results": eval_results,
-                        "start_time": start_time,
-                        "end_time": end_time,
-                        "duration": duration,
                         **task_info  # 合并任务信息
                     }
                     
@@ -172,35 +623,7 @@ def generate_parallel_finetune_progress_report(tasks_dir, output_path):
                 except Exception as e:
                     logger.error(f"处理任务 {task_id} 结果时出错: {e}")
             
-            # 如果存在checkpoint但没有评估结果，可能是运行中或失败的任务
-            elif os.path.exists(os.path.join(sub_task_dir, "checkpoint-*")):
-                # 检查是否有正在运行的进程
-                is_running = False
-                
-                # 在Linux上可以通过检查进程来确定任务是否在运行
-                try:
-                    import subprocess
-                    result = subprocess.run(f"ps aux | grep '{task_id}' | grep -v grep", shell=True, capture_output=True, text=True)
-                    if result.stdout.strip():
-                        is_running = True
-                except:
-                    pass
-                
-                if is_running:
-                    running_tasks[task_id] = {
-                        "task_type": task_type,
-                        "sub_task": sub_task,
-                        "output_path": sub_task_dir
-                    }
-                else:
-                    # 可能是失败的任务
-                    completed_tasks.append({
-                        "task_type": task_type,
-                        "sub_task": sub_task,
-                        "status": "失败",
-                        "output_path": sub_task_dir,
-                        "eval_results": {}
-                    })
+           
     
     # 计算总体进度
     total_tasks = len(completed_tasks) + len(pending_tasks) + len(running_tasks)
@@ -218,656 +641,41 @@ def generate_parallel_finetune_progress_report(tasks_dir, output_path):
     all_f1 = []
     all_matthews = []
     
-    for result in completed_tasks:
-        if result["status"] == "成功":
-            eval_results = result.get("eval_results", {})
-            accuracy = eval_results.get("eval_accuracy")
-            f1 = eval_results.get("eval_f1")
-            matthews = eval_results.get("eval_matthews_correlation")
-            
-            if accuracy is not None:
-                all_accuracy.append(accuracy)
-            if f1 is not None:
-                all_f1.append(f1)
-            if matthews is not None:
-                all_matthews.append(matthews)
+    report_data_list = []
+
     
-    avg_accuracy = np.mean(all_accuracy) if all_accuracy else 0
-    avg_f1 = np.mean(all_f1) if all_f1 else 0
-    avg_matthews = np.mean(all_matthews) if all_matthews else 0
-    
-    
-    
-    # 生成HTML内容
-    html_content = f"""
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>微调任务进度报告</title>
-    <meta http-equiv="refresh" content="60"> <!-- 每60秒自动刷新 -->
-    <style>
-        body {{
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            margin: 0;
-            padding: 20px;
-            color: #333;
-        }}
-        h1, h2, h3 {{
-            color: #2c3e50;
-        }}
-        .container {{
-            max-width: 1200px;
-            margin: 0 auto;
-        }}
-        .summary {{
-            background-color: #f8f9fa;
-            border-radius: 5px;
-            padding: 15px;
-            margin-bottom: 20px;
-        }}
-        .metrics {{
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-            margin-bottom: 20px;
-        }}
-        .metric-card {{
-            background-color: #fff;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            padding: 15px;
-            flex: 1;
-            min-width: 200px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }}
-        .metric-value {{
-            font-size: 24px;
-            font-weight: bold;
-            color: #3498db;
-        }}
-        .progress-container {{
-            width: 100%;
-            background-color: #f1f1f1;
-            border-radius: 5px;
-            margin-bottom: 20px;
-        }}
-        .progress-bar {{
-            height: 30px;
-            background-color: #4CAF50;
-            border-radius: 5px;
-            text-align: center;
-            line-height: 30px;
-            color: white;
-            font-weight: bold;
-        }}
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }}
-        th, td {{
-            border: 1px solid #ddd;
-            padding: 12px;
-            text-align: left;
-        }}
-        th {{
-            background-color: #f2f2f2;
-        }}
-        tr:nth-child(even) {{
-            background-color: #f9f9f9;
-        }}
-        .success {{
-            color: #28a745;
-        }}
-        .failure {{
-            color: #dc3545;
-        }}
-        .running {{
-            color: #007bff;
-        }}
-        .pending {{
-            color: #6c757d;
-        }}
-        .task-group {{
-            margin-bottom: 30px;
-        }}
-        .accordion {{
-            background-color: #f1f1f1;
-            color: #444;
-            cursor: pointer;
-            padding: 18px;
-            width: 100%;
-            text-align: left;
-            border: none;
-            outline: none;
-            transition: 0.4s;
-            font-size: 16px;
-            font-weight: bold;
-        }}
-        .active, .accordion:hover {{
-            background-color: #ddd;
-        }}
-        .panel {{
-            padding: 0 18px;
-            background-color: white;
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.2s ease-out;
-        }}
-        .details-btn {{
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            padding: 5px 10px;
-            text-align: center;
-            text-decoration: none;
-            display: inline-block;
-            font-size: 12px;
-            margin: 2px 2px;
-            cursor: pointer;
-            border-radius: 3px;
-        }}
-        .metric-details {{
-            display: none;
-            margin-top: 10px;
-            padding: 10px;
-            background-color: #f9f9f9;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-        }}
-        .metric-table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-            font-size: 14px;
-        }}
-        .metric-table th, .metric-table td {{
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-        }}
-        .metric-table th {{
-            background-color: #f2f2f2;
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>DNA序列微调任务进度报告</h1>
-        <p>生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-        
-        <div class="summary">
-            <h2>总体进度</h2>
-            <div class="progress-container">
-                <div class="progress-bar" style="width:{progress_percentage}%">
-                    {progress_percentage:.2f}%
-                </div>
-            </div>
-            
-            <div class="metrics">
-                <div class="metric-card">
-                    <h3>总任务数</h3>
-                    <div class="metric-value">{total_tasks}</div>
-                </div>
-                <div class="metric-card">
-                    <h3>已完成</h3>
-                    <div class="metric-value">{completed_count}</div>
-                </div>
-                <div class="metric-card">
-                    <h3>运行中</h3>
-                    <div class="metric-value">{running_count}</div>
-                </div>
-                <div class="metric-card">
-                    <h3>等待中</h3>
-                    <div class="metric-value">{pending_count}</div>
-                </div>
-            </div>
-            
-            <h2>当前平均性能指标</h2>
-            <div class="metrics">
-                <div class="metric-card">
-                    <h3>平均准确率</h3>
-                    <div class="metric-value">{avg_accuracy:.4f}</div>
-                </div>
-                <div class="metric-card">
-                    <h3>平均F1分数</h3>
-                    <div class="metric-value">{avg_f1:.4f}</div>
-                </div>
-                <div class="metric-card">
-                    <h3>平均Matthews相关系数</h3>
-                    <div class="metric-value">{avg_matthews:.4f}</div>
-                </div>
-            </div>
-        </div>
-        
-        <h2>运行中的任务</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>任务类型</th>
-                    <th>子任务</th>
-                    <th>状态</th>
-                    <th>已运行时间(秒)</th>
-                    <th>优先级</th>
-                    <th>GPU</th>
-                </tr>
-            </thead>
-            <tbody>
-"""
-    
-    # 添加运行中的任务
-    current_time = time.time()
-    for task_id, task_info in running_tasks.items():
-        task_type = task_info.get("task_type", "未知")
-        sub_task = task_info.get("sub_task", "未知")
-        start_time = task_info.get("start_time", current_time)
-        running_time = current_time - start_time
-        priority = task_info.get("priority", 0)
-        gpu_id = task_info.get("gpu_id", "未知")
-        
-        html_content += f"""
-                <tr class="running">
-                    <td>{task_type}</td>
-                    <td>{sub_task}</td>
-                    <td>运行中</td>
-                    <td>{running_time:.2f}</td>
-                    <td>{priority}</td>
-                    <td>{gpu_id}</td>
-                </tr>
-"""
-    
-    if not running_tasks:
-        html_content += """
-                <tr>
-                    <td colspan="6" style="text-align: center;">当前没有运行中的任务</td>
-                </tr>
-"""
-    
-    html_content += """
-            </tbody>
-        </table>
-        
-        <h2>等待中的任务</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>任务类型</th>
-                    <th>子任务</th>
-                    <th>优先级</th>
-                </tr>
-            </thead>
-            <tbody>
-"""
-    
-    # 添加等待中的任务
-    for task in pending_tasks:
-        task_type = task.get("task_type", "未知")
-        sub_task = task.get("sub_task", "未知")
-        priority = task.get("priority", 0)
-        
-        html_content += f"""
-                <tr class="pending">
-                    <td>{task_type}</td>
-                    <td>{sub_task}</td>
-                    <td>{priority}</td>
-                </tr>
-"""
-    
-    if not pending_tasks:
-        html_content += """
-                <tr>
-                    <td colspan="3" style="text-align: center;">当前没有等待中的任务</td>
-                </tr>
-"""
-    
-    html_content += """
-            </tbody>
-        </table>
-        
-        <h2>已完成的任务</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>任务类型</th>
-                    <th>子任务</th>
-                    <th>状态</th>
-                    <th>耗时(秒)</th>
-                    <th>准确率</th>
-                    <th>F1分数</th>
-                    <th>Matthews相关系数</th>
-                    <th>详细指标</th>
-                </tr>
-            </thead>
-            <tbody>
-"""
-    
-    # 添加已完成的任务，按完成时间倒序排列
-    completed_tasks_sorted = sorted(completed_tasks, key=lambda x: x.get("end_time", 0), reverse=True)
-    
-    for i, result in enumerate(completed_tasks_sorted):
-        task_type = result.get("task_type", "未知")
-        sub_task = result.get("sub_task", "未知")
-        status = result.get("status", "未知")
-        duration = result.get("duration", 0)
-        
-        # 设置状态样式
-        status_class = "success" if status == "成功" else "failure"
-        
-        # 获取评估指标
-        eval_results = result.get("eval_results", {})
-        accuracy = eval_results.get("eval_accuracy", "N/A")
-        if accuracy != "N/A":
-            accuracy = f"{accuracy:.4f}"
-        
-        f1 = eval_results.get("eval_f1", "N/A")
-        if f1 != "N/A":
-            f1 = f"{f1:.4f}"
-        
-        matthews = eval_results.get("eval_matthews_correlation", "N/A")
-        if matthews != "N/A":
-            matthews = f"{matthews:.4f}"
-        
-        # 创建详细指标表格
-        metrics_table = ""
-        if eval_results:
-            metrics_table = f"""
-            <div id="metrics-{i}" class="metric-details">
-                <table class="metric-table">
-                    <thead>
-                        <tr>
-                            <th>指标名称</th>
-                            <th>值</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            """
-            
-            for metric_name, metric_value in sorted(eval_results.items()):
-                if isinstance(metric_value, (int, float)):
-                    formatted_value = f"{metric_value:.6f}" if isinstance(metric_value, float) else str(metric_value)
-                    metrics_table += f"""
-                        <tr>
-                            <td>{metric_name}</td>
-                            <td>{formatted_value}</td>
-                        </tr>
-                    """
-                else:
-                    metrics_table += f"""
-                        <tr>
-                            <td>{metric_name}</td>
-                            <td>{str(metric_value)}</td>
-                        </tr>
-                    """
-            
-            metrics_table += """
-                    </tbody>
-                </table>
-            </div>
-            """
-        
-        html_content += f"""
-                <tr class="{status_class}">
-                    <td>{task_type}</td>
-                    <td>{sub_task}</td>
-                    <td>{status}</td>
-                    <td>{duration:.2f}</td>
-                    <td>{accuracy}</td>
-                    <td>{f1}</td>
-                    <td>{matthews}</td>
-                    <td>
-                        <button class="details-btn" onclick="toggleMetrics('metrics-{i}')">查看详情</button>
-                        {metrics_table}
-                    </td>
-                </tr>
-"""
-    
-    if not completed_tasks:
-        html_content += """
-                <tr>
-                    <td colspan="8" style="text-align: center;">当前没有已完成的任务</td>
-                </tr>
-"""
-    
-    html_content += """
-            </tbody>
-        </table>
-    </div>
-    
-    <script>
-        function toggleMetrics(id) {
-            var metrics = document.getElementById(id);
-            if (metrics.style.display === "block") {
-                metrics.style.display = "none";
-            } else {
-                metrics.style.display = "block";
-            }
-        }
-    </script>
-</body>
-</html>
-"""
-    
-    # 保存HTML文件
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(html_content)
-    
-    logger.info(f"进度报告已生成: {output_path}")
-    
-    
-    
+    for item in data_in_parpare_dict:
+        report_data = ReportData(data=item)
+        match_task = None
+        for task in completed_tasks:
+            if report_data.data_name == task["task_name"]:
+                match_task=task
+        if match_task is not None:
+            report_data.eval_results = match_task.get("eval_results", {})
+            report_data.accuracy = match_task.get("eval_accuracy")
+            report_data.f1 = match_task.get("eval_f1")
+            report_data.matthews = match_task.get("eval_matthews_correlation")
+            report_data_list.append(report_data)
+
+
+        report_data_list.append(report_data)
+
+    save_report_data_to_csv(report_data_list, output_path)
+
+
+
 def main():
-    """
-    命令行入口点，用于生成微调任务进度报告
-    """
-    parser = argparse.ArgumentParser(description="生成微调任务进度报告")
-    parser.add_argument("--tasks_dir", type=str, required=True, help="任务输出目录，包含所有子任务的结果")
+    """主函数"""
+    parser = argparse.ArgumentParser(description="生成微调任务报告")
+    parser.add_argument("--tasks_dir", type=str, required=True, help="任务输出目录")
     parser.add_argument("--output", type=str, required=True, help="报告输出路径")
     
     args = parser.parse_args()
     
-    # 调用报告生成函数
     generate_parallel_finetune_progress_report(args.tasks_dir, args.output)
+
+     
     
-    logger.info(f"报告已生成: {args.output}")
-
-
 #python ../src/train/report.py --tasks_dir ../data/output/finetune/output/ --output ./report.html
 if __name__ == "__main__":
     main()
-
-def read_excel_to_json(excel_file_path):
-    """
-    读取Excel文件并转换为JSON对象
-    
-    参数:
-        excel_file_path (str): Excel文件路径
-        
-    返回:
-        dict: 包含Excel数据的JSON对象
-    """
-    try:
-        logger.info(f"正在读取Excel文件: {excel_file_path}")
-        # 读取Excel文件
-        df = pd.read_excel(excel_file_path)
-        
-        # 将DataFrame转换为字典列表
-        records = df.to_dict(orient='records')
-        
-        # 构建JSON对象
-        result = {
-            "data": records,
-            "total_rows": len(records),
-            "columns": df.columns.tolist(),
-            "file_path": excel_file_path,
-            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        }
-        
-        logger.info(f"Excel文件读取成功，共{len(records)}行数据")
-        return result
-    
-    except Exception as e:
-        logger.error(f"读取Excel文件时出错: {e}")
-        return {
-            "error": str(e),
-            "file_path": excel_file_path,
-            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        }
-
-def save_json_to_file(json_data, output_path):
-    """
-    将JSON对象保存到文件
-    
-    参数:
-        json_data (dict): JSON对象
-        output_path (str): 输出文件路径
-    """
-    try:
-        logger.info(f"正在保存JSON数据到文件: {output_path}")
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(json_data, f, ensure_ascii=False, indent=4)
-        logger.info(f"JSON数据已成功保存到: {output_path}")
-    except Exception as e:
-        logger.error(f"保存JSON数据时出错: {e}")
-
-def process_excel_with_eval_results(excel_path, eval_results_dict, output_path):
-    """
-    读取prepare_data.xlsx，将评估结果数据写入匹配的数据名称行
-    
-    参数:
-        excel_path (str): Excel文件路径
-        eval_results_dict (dict): 评估结果字典，键为数据名称，值为评估结果
-        output_path (str): 输出Excel文件路径
-    """
-    try:
-        logger.info(f"正在处理Excel文件: {excel_path}")
-        
-        # 读取Excel文件
-        df = pd.read_excel(excel_path)
-        
-        # 假设Excel中有一列名为"数据名称"或"task_name"用于匹配
-        name_column = None
-        for possible_name in ["数据名称", "task_name", "name", "任务名称", "子任务"]:
-            if possible_name in df.columns:
-                name_column = possible_name
-                break
-        
-        if name_column is None:
-            logger.error("无法在Excel中找到数据名称列")
-            return False
-        
-        # 为评估结果创建新列
-        for metric_name in ["accuracy", "f1", "matthews_correlation", "precision", "recall"]:
-            column_name = f"eval_{metric_name}"
-            if column_name not in df.columns:
-                df[column_name] = None
-        
-        # 遍历数据行，匹配评估结果
-        updated_count = 0
-        for index, row in df.iterrows():
-            task_name = row[name_column]
-            
-            # 尝试不同的键格式进行匹配
-            result_key = None
-            possible_keys = [
-                task_name,
-                task_name.strip(),
-                task_name.lower(),
-                task_name.replace(" ", "_"),
-                task_name.replace("-", "_")
-            ]
-            
-            for key in possible_keys:
-                if key in eval_results_dict:
-                    result_key = key
-                    break
-            
-            # 如果找到匹配的评估结果，更新行数据
-            if result_key:
-                eval_result = eval_results_dict[result_key]
-                for metric_name in ["accuracy", "f1", "matthews_correlation", "precision", "recall"]:
-                    column_name = f"eval_{metric_name}"
-                    metric_key = f"eval_{metric_name}"
-                    
-                    if metric_key in eval_result:
-                        df.at[index, column_name] = eval_result[metric_key]
-                updated_count += 1
-        
-        # 保存更新后的Excel文件
-        df.to_excel(output_path, index=False)
-        
-        logger.info(f"Excel处理完成，已更新{updated_count}行数据，保存到: {output_path}")
-        return True
-    
-    except Exception as e:
-        logger.error(f"处理Excel文件时出错: {e}")
-        return False
-
-def collect_eval_results(tasks_dir):
-    """
-    从任务目录收集所有评估结果
-    
-    参数:
-        tasks_dir (str): 任务输出目录
-        
-    返回:
-        dict: 评估结果字典，键为任务名称，值为评估结果
-    """
-    eval_results_dict = {}
-    
-    # 遍历任务类型目录
-    for task_type in os.listdir(tasks_dir):
-        task_type_dir = os.path.join(tasks_dir, task_type)
-        if not os.path.isdir(task_type_dir):
-            continue
-        
-        # 遍历子任务目录
-        for sub_task in os.listdir(task_type_dir):
-            sub_task_dir = os.path.join(task_type_dir, sub_task)
-            if not os.path.isdir(sub_task_dir):
-                continue
-            
-            # 检查评估结果文件
-            eval_results_path = os.path.join(sub_task_dir, "eval_results.json")
-            if os.path.exists(eval_results_path):
-                try:
-                    with open(eval_results_path, "r", encoding="utf-8") as f:
-                        eval_results = json.load(f)
-                    
-                    # 使用子任务名称作为键
-                    eval_results_dict[sub_task] = eval_results
-                    # 也添加任务类型/子任务组合作为键
-                    eval_results_dict[f"{task_type}/{sub_task}"] = eval_results
-                    
-                except Exception as e:
-                    logger.error(f"读取评估结果时出错 ({task_type}/{sub_task}): {e}")
-    
-    logger.info(f"已收集{len(eval_results_dict)}个任务的评估结果")
-    return eval_results_dict
-
-def update_prepare_data_with_results(tasks_dir, excel_path, output_path=None):
-    """
-    更新prepare_data.xlsx文件，添加评估结果
-    
-    参数:
-        tasks_dir (str): 任务输出目录
-        excel_path (str): prepare_data.xlsx文件路径
-        output_path (str, optional): 输出文件路径，默认为在原文件名后添加_with_results
-    """
-    if output_path is None:
-        # 在原文件名后添加_with_results
-        file_name, file_ext = os.path.splitext(excel_path)
-        output_path = f"{file_name}_with_results{file_ext}"
-    
-    # 收集评估结果
-    eval_results_dict = collect_eval_results(tasks_dir)
-    
-    # 处理Excel文件
-    success = process_excel_with_eval_results(excel_path, eval_results_dict, output_path)
-    
-    if success:
-        logger.info(f"已将评估结果更新到Excel文件: {output_path}")
-    else:
-        logger.error("更新Excel文件失败")

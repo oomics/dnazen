@@ -341,6 +341,11 @@ if [ "$RESUME" = true ]; then
               echo "发现已完成但未记录的任务: $TASK_ID"
               echo "$TASK_ID" >> "$RESUME_FILE"
               echo "已添加到断点记录文件"
+              
+              # 打印评估结果内容
+              echo "任务 $TASK_ID 的评估结果:"
+              cat "$SUB_TASK_DIR/eval_results.json" | jq -C . || cat "$SUB_TASK_DIR/eval_results.json"
+              echo "----------------------------------------"
             fi
           fi
         fi
