@@ -443,7 +443,13 @@ class ReportData:
             self.mcc_gue_paper = data.get("MCC_USE_GUE_paper")
             self.dnabert_accuracy = data.get("DNABERT准确率复现")
             self.dnabert2_mcc = data.get("DNABERT2 MCC复现")
-            self.bias = data.get("复现偏差")
+            
+            # 安全处理复现偏差字段
+            bias_value = data.get("复现偏差")
+            if bias_value is not None:
+                self.bias = f"{round(bias_value*100, 2)}%"
+            else:
+                self.bias = None
         else:
             self.data_name = None
             self.task = None

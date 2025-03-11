@@ -107,6 +107,7 @@ else
     echo "代码已初始化并更新"
 fi
 
+git log -n 5
 echo "===== 代码准备完成 ====="
 
 ###################################################################################
@@ -116,33 +117,32 @@ echo "===== 开始准备数据和配置 ====="
 
 cd scripts
 
-cp ~/dnazen/data/downloads/* ../data/downloads/
-# 执行数据准备脚本
-if [ -f "./run.sh" ]; then
-    echo "执行数据准备脚本..."
-    bash ./run.sh
-    echo "数据准备完成"
-else
-    echo "警告: 未找到数据准备脚本 ./run.sh"
-fi
+#cp ~/dnazen/data/downloads/* ../data/downloads/
 
-echo "===== 数据和配置准备完成 ====="
 
 ###################################################################################
 # 4. 启动训练流程
 ###################################################################################
 echo "===== 开始启动训练流程 ====="
+python ../src/train/report.py --tasks_dir ../data/output/finetune/output/ --output ./report_$(date +%Y%m%d_%H%M%S).csv
 
-bash  ./prepare_data_and_config.sh --train-ngram    --experiment 4
+#bash  ./prepare_data_and_config.sh --train-ngram    --experiment 4
 #bash  ./prepare_data_and_config.sh --coverage-analysis   --experiment 4
-bash ./prepare_data_and_config.sh --tokenize-train  
+#bash ./prepare_data_and_config.sh --tokenize-train  
 #bash ./prepare_data_and_config.sh --tokenize-dev  
 
-bash  ./prepare_data_and_config.sh --prepare-dataset   --experiment 4
-bash  ./prepare_data_and_config.sh --pretrain   --experiment 4
+#bash  ./prepare_data_and_config.sh --prepare-dataset   --experiment 4
+#bash  ./prepare_data_and_config.sh --pretrain   --experiment 4
+#bash ./prepare_data_and_config.sh --pretrain   --experiment 4
+#bash finetune.sh --experiment 1 emp H3K4me3
+#bash finetune.sh --experiment 1 emp H3K4me1
+#bash finetune.sh --experiment 1 emp H3K4me2
+#bash finetune.sh --experiment 1 tf 3
+#tf/3 mouse/4 prom_300_all prom_core_all H3K14me1 H3K14me2 H3K14me3
 
-
+#bash finetune.sh --experiment 1 --parallel
+bash finetune.sh --experiment 1 --parallel --resume
 echo "===== 训练流程执行完成 ====="
-
+python ../src/train/report.py --tasks_dir ../data/output/finetune/output/ --output ./report_$(date +%Y%m%d_%H%M%S).csv
 echo "所有任务已完成"
 exit 0
