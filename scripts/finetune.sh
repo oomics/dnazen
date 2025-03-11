@@ -319,6 +319,36 @@ if [ "$RESUME" = true ]; then
     echo "已完成的任务:"
     cat "$RESUME_FILE"
   fi
+  
+  # 扫描任务目录，检查是否有已完成但未记录的任务
+  echo "扫描任务目录，检查已完成但未记录的任务..."
+  
+  # 遍历任务类型目录
+  for TASK_TYPE_DIR in "$FINETUNE_OUT_DIR"/*; do
+    if [ -d "$TASK_TYPE_DIR" ]; then
+      TASK_TYPE=$(basename "$TASK_TYPE_DIR")
+      
+      # 遍历子任务目录
+      for SUB_TASK_DIR in "$TASK_TYPE_DIR"/*; do
+        if [ -d "$SUB_TASK_DIR" ]; then
+          SUB_TASK=$(basename "$SUB_TASK_DIR")
+          TASK_ID="${TASK_TYPE}/${SUB_TASK}"
+          
+          # 检查是否存在eval_results.json文件
+          if [ -f "$SUB_TASK_DIR/eval_results.json" ]; then
+            # 检查任务是否已在断点记录文件中
+            if ! grep -q "^$TASK_ID$" "$RESUME_FILE"; then
+              echo "发现已完成但未记录的任务: $TASK_ID"
+              echo "$TASK_ID" >> "$RESUME_FILE"
+              echo "已添加到断点记录文件"
+            fi
+          fi
+        fi
+      done
+    fi
+  done
+  
+  echo "断点记录文件更新完成，共记录 $(wc -l < "$RESUME_FILE") 个已完成任务"
 fi
 
 if [ "$PARALLEL" = true ]; then
