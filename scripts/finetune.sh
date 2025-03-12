@@ -1,3 +1,4 @@
+
 #!/bin/bash
 ###################################################################################
 # 脚本名称: finetune.sh
@@ -298,9 +299,52 @@ if [ -z "$NGRAM_ENCODER_PATH" ]; then
   exit 1
 fi
 
-# 预训练检查点路径
-#PRETRAIN_CHECKPOINT="${EXPERIMENT_DIR}/output/checkpoint-${FINETUNE_CHECKPOINT_STEP}"
-PRETRAIN_CHECKPOINT="${OUTPUT_DIR}/checkpoint-${FINETUNE_CHECKPOINT_STEP}"
+# 查找预训练最新的checkpoint
+find_latest_checkpoint() {
+  local checkpoint_dir="$1"
+  local latest_checkpoint=""
+  local max_step=0
+  
+  # 检查目录是否存在
+  if [ ! -d "$checkpoint_dir" ]; then
+    echo "错误: 检查点目录不存在: $checkpoint_dir"
+    return 1
+  fi
+  
+  # 查找所有checkpoint-*目录
+  for checkpoint in "$checkpoint_dir"/checkpoint-*; do
+    if [ -d "$checkpoint" ]; then
+      # 提取步数
+      step=$(basename "$checkpoint" | sed 's/checkpoint-//')
+      # 检查是否为数字
+      if [[ "$step" =~ ^[0-9]+$ ]]; then
+        # 比较步数
+        if [ "$step" -gt "$max_step" ]; then
+          max_step="$step"
+          latest_checkpoint="$checkpoint"
+        fi
+      fi
+    fi
+  done
+  
+  if [ -z "$latest_checkpoint" ]; then
+    echo "错误: 在目录 $checkpoint_dir 中未找到有效的checkpoint"
+    return 1
+  fi
+  
+  echo "$latest_checkpoint"
+}
+
+# 查找最新的checkpoint
+LATEST_CHECKPOINT=$(find_latest_checkpoint "${OUTPUT_DIR}")
+if [ $? -eq 0 ]; then
+  PRETRAIN_CHECKPOINT="$LATEST_CHECKPOINT"
+  echo "使用最新的检查点: $PRETRAIN_CHECKPOINT (步数: $(basename "$PRETRAIN_CHECKPOINT" | sed 's/checkpoint-//'))"
+else
+  # 如果查找失败，使用默认检查点
+  PRETRAIN_CHECKPOINT="${OUTPUT_DIR}/checkpoint-${FINETUNE_CHECKPOINT_STEP}"
+  echo "使用默认检查点: $PRETRAIN_CHECKPOINT"
+fi
 
 # 设置断点记录文件
 if [ "$RESUME" = true ] && [ -z "$RESUME_FILE" ]; then
@@ -503,5 +547,4 @@ else
     exit 1
   fi
 fi 
-
 
