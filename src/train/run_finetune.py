@@ -256,29 +256,29 @@ def main():
     # 步骤5: 加载数据集
     logger.info("步骤5: 加载训练、验证和测试数据集...")
     
-    # logger.info(f"加载训练集: {DATA_PATH}/train.csv")
-    # train_dataset = LabeledDataset(f"{DATA_PATH}/train.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
-    # logger.info(f"训练集大小: {len(train_dataset)}个样本")
+    logger.info(f"加载训练集: {DATA_PATH}/train.csv")
+    train_dataset = LabeledDataset(f"{DATA_PATH}/train.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
+    logger.info(f"训练集大小: {len(train_dataset)}个样本")
 
-    # logger.info(f"加载测试集: {DATA_PATH}/test.csv")
-    # test_dataset = LabeledDataset(f"{DATA_PATH}/test.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
-    # logger.info(f"测试集大小: {len(test_dataset)}个样本")
+    logger.info(f"加载测试集: {DATA_PATH}/test.csv")
+    test_dataset = LabeledDataset(f"{DATA_PATH}/test.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
+    logger.info(f"测试集大小: {len(test_dataset)}个样本")
 
-    # logger.info(f"加载验证集: {DATA_PATH}/dev.csv")
-    # val_dataset = LabeledDataset(f"{DATA_PATH}/dev.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
-    # logger.info(f"验证集大小: {len(val_dataset)}个样本")
+    logger.info(f"加载验证集: {DATA_PATH}/dev.csv")
+    val_dataset = LabeledDataset(f"{DATA_PATH}/dev.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
+    logger.info(f"验证集大小: {len(val_dataset)}个样本")
 
 
   # define datasets and data collator
-    train_dataset = SupervisedDataset(tokenizer=tokenizer, 
-                                      data_path=f"{DATA_PATH}/train.csv", 
-                                      kmer=-1)
-    val_dataset = SupervisedDataset(tokenizer=tokenizer, 
-                                     data_path=f"{DATA_PATH}/dev.csv",  
-                                     kmer=-1)
-    test_dataset = SupervisedDataset(tokenizer=tokenizer, 
-                                     data_path=f"{DATA_PATH}/test.csv", 
-                                     kmer=-1)
+    # train_dataset = SupervisedDataset(tokenizer=tokenizer, 
+    #                                   data_path=f"{DATA_PATH}/train.csv", 
+    #                                   kmer=-1)
+    # val_dataset = SupervisedDataset(tokenizer=tokenizer, 
+    #                                  data_path=f"{DATA_PATH}/dev.csv",  
+    #                                  kmer=-1)
+    # test_dataset = SupervisedDataset(tokenizer=tokenizer, 
+    #                                  data_path=f"{DATA_PATH}/test.csv", 
+    #                                  kmer=-1)
     #data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
 
 
@@ -292,16 +292,16 @@ def main():
     logger.info(f"模型配置: num_labels={config.num_labels}, hidden_size={config.hidden_size}")
 
     logger.info("加载预训练模型...")
-    #model = BertForSequenceClassification.from_pretrained(CHECKPOINT_DIR, config=config)
+    model = BertForSequenceClassification.from_pretrained(CHECKPOINT_DIR, config=config)
     #        tokenizer = AutoTokenizer.from_pretrained("zhihan1996/DNABERT-2-117M")
 
     # load model
-    model = transformers.AutoModelForSequenceClassification.from_pretrained(
-        "zhihan1996/DNABERT-2-117M",
-        cache_dir=CHECKPOINT_DIR,
-        num_labels=train_dataset.num_labels,
-        trust_remote_code=True,
-    )
+    # model = transformers.AutoModelForSequenceClassification.from_pretrained(
+    #     "zhihan1996/DNABERT-2-117M",
+    #     cache_dir=CHECKPOINT_DIR,
+    #     num_labels=train_dataset.num_labels,
+    #     trust_remote_code=True,
+    # )
     
     logger.info("模型加载完成")
 
@@ -446,4 +446,3 @@ def main():
 
 if __name__ == "__main__": 
     main()
-
