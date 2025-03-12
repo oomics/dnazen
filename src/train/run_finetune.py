@@ -2,8 +2,10 @@
 from typing import Any
 import argparse
 import os
+import csv
 import json
 import logging
+from typing import Any, Optional, Dict, Sequence, Tuple, List, Union
 
 import numpy as np
 
@@ -27,6 +29,7 @@ from transformers.models.bert.configuration_bert import BertConfig
 from dnazen.model.bert_models import BertForSequenceClassification
 from dnazen.data.labeled_dataset import LabeledDataset
 from dnazen.ngram import NgramEncoder
+from torch.utils.data import Dataset
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,6 +38,117 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+
+#@dataclass
+class DataCollatorForSupervisedDataset(object):
+    """Collate examples for supervised fine-tuning."""
+
+    tokenizer: transformers.PreTrainedTokenizer
+
+    def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
+        input_ids, labels = tuple([instance[key] for instance in instances] for key in ("input_ids", "labels"))
+        input_ids = torch.nn.utils.rnn.pad_sequence(
+            input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id
+        )
+        labels = torch.Tensor(labels).long()
+        return dict(
+            input_ids=input_ids,
+            labels=labels,
+            attention_mask=input_ids.ne(self.tokenizer.pad_token_id),
+        )
+ 
+
+"""
+Load or generate k-mer string for each DNA sequence. The generated k-mer string will be saved to the same directory as the original data with the same name but with a suffix of "_{k}mer".
+"""
+def load_or_generate_kmer(data_path: str, texts: List[str], k: int) -> List[str]:
+    """Load or generate k-mer string for each DNA sequence."""
+    kmer_path = data_path.replace(".csv", f"_{k}mer.json")
+    if os.path.exists(kmer_path):
+        logging.warning(f"Loading k-mer from {kmer_path}...")
+        with open(kmer_path, "r") as f:
+            kmer = json.load(f)
+    else:        
+        logging.warning(f"Generating k-mer...")
+        kmer = [generate_kmer_str(text, k) for text in texts]
+        with open(kmer_path, "w") as f:
+            logging.warning(f"Saving k-mer to {kmer_path}...")
+            json.dump(kmer, f)
+        
+    return kmer
+
+        
+class SupervisedDataset(Dataset):
+    """用于监督训练的数据集类
+    
+    支持两种格式的输入:
+    1. [text, label] - 单序列分类
+    2. [text1, text2, label] - 序列对分类
+    """
+
+    def __init__(self, 
+                 data_path: str, 
+                 tokenizer: transformers.PreTrainedTokenizer, 
+                 kmer: int = -1):
+        """
+        Args:
+            data_path: 数据文件路径
+            tokenizer: 分词器
+            kmer: k-mer大小，-1表示不使用k-mer
+        """
+        super(SupervisedDataset, self).__init__()
+
+        # load data from the disk
+        with open(data_path, "r") as f:
+            data = list(csv.reader(f))[1:]
+        if len(data[0]) == 2:
+            # data is in the format of [text, label]
+            logging.warning("Perform single sequence classification...")
+            texts = [d[0] for d in data]
+            labels = [int(d[1]) for d in data]
+        elif len(data[0]) == 3:
+            # data is in the format of [text1, text2, label]
+            logging.warning("Perform sequence-pair classification...")
+            texts = [[d[0], d[1]] for d in data]
+            labels = [int(d[2]) for d in data]
+        else:
+            raise ValueError("Data format not supported.")
+        
+        if kmer != -1:
+            # only write file on the first process
+            if torch.distributed.get_rank() not in [0, -1]:
+                torch.distributed.barrier()
+
+            logging.warning(f"Using {kmer}-mer as input...")
+            texts = load_or_generate_kmer(data_path, texts, kmer)
+
+            if torch.distributed.get_rank() == 0:
+                torch.distributed.barrier()
+
+        # 设置一个合理的最大长度，避免整数溢出
+        max_length = min(tokenizer.model_max_length, 512) if hasattr(tokenizer, "model_max_length") else 512
+        
+        output = tokenizer(
+            texts,
+            return_tensors="pt",
+            padding="longest",
+            max_length=max_length,  # 使用安全的最大长度值
+            truncation=True,
+        )
+
+        self.input_ids = output["input_ids"]
+        self.attention_mask = output["attention_mask"]
+        self.labels = labels
+        self.num_labels = len(set(labels))
+
+    def __len__(self):
+        return len(self.input_ids)
+
+    def __getitem__(self, i) -> Dict[str, torch.Tensor]:
+        return dict(input_ids=self.input_ids[i], labels=self.labels[i])
+
+
 
 def compute_metrics(eval_pred):
     """
@@ -92,349 +206,6 @@ def parse_args():
     return parser.parse_args()
 
 
-# def generate_prediction_html_report(results_df, metrics, output_path):
-#     """
-#     生成预测结果的HTML可视化报告
-    
-#     参数:
-#         results_df (pd.DataFrame): 包含预测结果的DataFrame，需要包含'text', 'actual_label', 'prediction_label'列
-#         metrics (dict): 评估指标字典
-#         output_path (str): HTML报告输出路径
-    
-#     返回:
-#         str: 生成的HTML报告路径
-#     """
-#     logger.info(f"生成HTML报告: {output_path}")
-    
-#     # 计算准确率
-#     correct_predictions = sum(results_df["actual_label"] == results_df["prediction_label"])
-#     total_predictions = len(results_df)
-#     accuracy = correct_predictions / total_predictions if total_predictions > 0 else 0
-    
-#     logger.info(f"总样本数: {total_predictions}")
-#     logger.info(f"正确预测数: {correct_predictions}")
-#     logger.info(f"准确率: {accuracy}")
-
-
-#     # 生成HTML内容
-#     html_content = f"""
-# <!DOCTYPE html>
-# <html lang="zh-CN">
-# <head>
-#     <meta charset="UTF-8">
-#     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-#     <title>DNA序列分类预测结果</title>
-#     <style>
-#         body {{
-#             font-family: Arial, sans-serif;
-#             line-height: 1.6;
-#             margin: 0;
-#             padding: 20px;
-#             color: #333;
-#         }}
-#         h1, h2, h3 {{
-#             color: #2c3e50;
-#         }}
-#         .container {{
-#             max-width: 1200px;
-#             margin: 0 auto;
-#         }}
-#         .summary {{
-#             background-color: #f8f9fa;
-#             border-radius: 5px;
-#             padding: 15px;
-#             margin-bottom: 20px;
-#         }}
-#         .metrics {{
-#             display: flex;
-#             flex-wrap: wrap;
-#             gap: 20px;
-#             margin-bottom: 20px;
-#         }}
-#         .metric-card {{
-#             background-color: #fff;
-#             border: 1px solid #ddd;
-#             border-radius: 5px;
-#             padding: 15px;
-#             flex: 1;
-#             min-width: 200px;
-#             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-#         }}
-#         .metric-value {{
-#             font-size: 24px;
-#             font-weight: bold;
-#             color: #3498db;
-#         }}
-#         .all-metrics {{
-#             background-color: #f8f9fa;
-#             border-radius: 5px;
-#             padding: 15px;
-#             margin-bottom: 20px;
-#         }}
-#         .metric-table {{
-#             width: 100%;
-#             border-collapse: collapse;
-#         }}
-#         .metric-table th, .metric-table td {{
-#             border: 1px solid #ddd;
-#             padding: 8px;
-#             text-align: left;
-#         }}
-#         .metric-table th {{
-#             background-color: #f2f2f2;
-#         }}
-#         table {{
-#             width: 100%;
-#             border-collapse: collapse;
-#             margin-top: 20px;
-#         }}
-#         th, td {{
-#             border: 1px solid #ddd;
-#             padding: 12px;
-#             text-align: left;
-#         }}
-#         th {{
-#             background-color: #f2f2f2;
-#             font-weight: bold;
-#         }}
-#         tr:nth-child(even) {{
-#             background-color: #f9f9f9;
-#         }}
-#         tr:hover {{
-#             background-color: #f1f1f1;
-#         }}
-#         .correct {{
-#             background-color: #d4edda;
-#         }}
-#         .incorrect {{
-#             background-color: #f8d7da;
-#         }}
-#         .pagination {{
-#             display: flex;
-#             justify-content: center;
-#             margin-top: 20px;
-#         }}
-#         .pagination button {{
-#             background-color: #4CAF50;
-#             color: white;
-#             border: none;
-#             padding: 8px 16px;
-#             margin: 0 4px;
-#             cursor: pointer;
-#             border-radius: 4px;
-#         }}
-#         .pagination button:hover {{
-#             background-color: #45a049;
-#         }}
-#         .pagination button:disabled {{
-#             background-color: #cccccc;
-#             cursor: not-allowed;
-#         }}
-#         .metrics-detail {{
-#             font-family: monospace;
-#             white-space: pre;
-#             background-color: #f5f5f5;
-#             padding: 15px;
-#             border-radius: 5px;
-#             overflow-x: auto;
-#             margin-bottom: 20px;
-#             border: 1px solid #ddd;
-#         }}
-#     </style>
-# </head>
-# <body>
-#     <div class="container">
-#         <h1>DNA序列分类预测结果</h1>
-        
-#         <div class="summary">
-#             <h2>预测摘要</h2>
-#             <p>总样本数: {total_predictions}</p>
-#             <p>正确预测数: {correct_predictions}</p>
-#             <p>准确率: {accuracy:.2%}</p>
-#         </div>
-        
-#         <div class="metrics">
-#             <div class="metric-card">
-#                 <h3>准确率</h3>
-#                 <div class="metric-value">{accuracy:.2%}</div>
-#             </div>
-#             <div class="metric-card">
-#                 <h3>F1分数</h3>
-#                 <div class="metric-value">{metrics.get('eval_f1', 0):.4f}</div>
-#             </div>
-#             <div class="metric-card">
-#                 <h3>Matthews相关系数</h3>
-#                 <div class="metric-value">{metrics.get('eval_matthews_correlation', 0):.4f}</div>
-#             </div>
-#         </div>
-        
-#         <div class="all-metrics">
-#             <h2>所有评估指标</h2>
-            
-#             <div class="metrics-detail">
-# {'='*50}
-# {'指标名称':<30}{'值':>15}
-# {'='*50}
-# {chr(10).join([f"{metric_name:<30}{metrics[metric_name]:>15.6f}" if isinstance(metrics[metric_name], float) 
-#                else f"{metric_name:<30}{str(metrics[metric_name]):>15}" for metric_name in sorted(metrics.keys())])}
-# {'='*50}
-#             </div>
-            
-#             <table class="metric-table">
-#                 <thead>
-#                     <tr>
-#                         <th>指标名称</th>
-#                         <th>值</th>
-#                     </tr>
-#                 </thead>
-#                 <tbody>
-# """
-
-#     # 添加所有评估指标
-#     for metric_name, metric_value in sorted(metrics.items()):
-#         if isinstance(metric_value, (int, float)):
-#             formatted_value = f"{metric_value:.6f}" if isinstance(metric_value, float) else str(metric_value)
-#             html_content += f"""
-#                     <tr>
-#                         <td>{metric_name}</td>
-#                         <td>{formatted_value}</td>
-#                     </tr>
-# """
-
-#     html_content += """
-#                 </tbody>
-#             </table>
-#         </div>
-        
-#         <h2>预测详情</h2>
-#         <div>
-#             <input type="text" id="searchInput" placeholder="搜索序列..." style="padding: 8px; width: 300px; margin-bottom: 10px;">
-#             <button onclick="searchTable()" style="padding: 8px 16px;">搜索</button>
-#         </div>
-        
-#         <table id="resultsTable">
-#             <thead>
-#                 <tr>
-#                     <th>#</th>
-#                     <th>DNA序列</th>
-#                     <th>实际标签</th>
-#                     <th>预测标签</th>
-#                     <th>预测状态</th>
-#                 </tr>
-#             </thead>
-#             <tbody>
-# """
-
-#     # 添加表格行
-#     for i, (_, row) in enumerate(results_df.iterrows()):
-#         correct = row["actual_label"] == row["prediction_label"]
-#         row_class = "correct" if correct else "incorrect"
-#         status = "正确" if correct else "错误"
-        
-#         html_content += f"""
-#                 <tr class="{row_class}">
-#                     <td>{i+1}</td>
-#                     <td>{row["text"]}</td>
-#                     <td>{row["actual_label"]}</td>
-#                     <td>{row["prediction_label"]}</td>
-#                     <td>{status}</td>
-#                 </tr>
-#         """
-
-#     # 完成HTML内容
-#     html_content += """
-#             </tbody>
-#         </table>
-        
-#         <div class="pagination">
-#             <button id="prevBtn" onclick="previousPage()" disabled>上一页</button>
-#             <span id="pageInfo">第 1 页，共 1 页</span>
-#             <button id="nextBtn" onclick="nextPage()">下一页</button>
-#         </div>
-#     </div>
-
-#     <script>
-#         // 分页功能
-#         let currentPage = 1;
-#         const rowsPerPage = 20;
-#         const table = document.getElementById('resultsTable');
-#         const rows = table.getElementsByTagName('tbody')[0].rows;
-#         const pageCount = Math.ceil(rows.length / rowsPerPage);
-        
-#         document.getElementById('pageInfo').textContent = `第 ${currentPage} 页，共 ${pageCount} 页`;
-        
-#         function showPage(page) {
-#             // 隐藏所有行
-#             for (let i = 0; i < rows.length; i++) {
-#                 rows[i].style.display = 'none';
-#             }
-            
-#             // 显示当前页的行
-#             const start = (page - 1) * rowsPerPage;
-#             const end = start + rowsPerPage;
-            
-#             for (let i = start; i < end && i < rows.length; i++) {
-#                 rows[i].style.display = '';
-#             }
-            
-#             // 更新按钮状态
-#             document.getElementById('prevBtn').disabled = page === 1;
-#             document.getElementById('nextBtn').disabled = page === pageCount;
-#             document.getElementById('pageInfo').textContent = `第 ${page} 页，共 ${pageCount} 页`;
-#         }
-        
-#         function nextPage() {
-#             if (currentPage < pageCount) {
-#                 currentPage++;
-#                 showPage(currentPage);
-#             }
-#         }
-        
-#         function previousPage() {
-#             if (currentPage > 1) {
-#                 currentPage--;
-#                 showPage(currentPage);
-#             }
-#         }
-        
-#         // 搜索功能
-#         function searchTable() {
-#             const input = document.getElementById('searchInput').value.toLowerCase();
-            
-#             for (let i = 0; i < rows.length; i++) {
-#                 const text = rows[i].cells[1].textContent.toLowerCase();
-#                 if (text.includes(input)) {
-#                     rows[i].style.display = '';
-#                 } else {
-#                     rows[i].style.display = 'none';
-#                 }
-#             }
-            
-#             // 禁用分页
-#             if (input) {
-#                 document.getElementById('prevBtn').disabled = true;
-#                 document.getElementById('nextBtn').disabled = true;
-#                 document.getElementById('pageInfo').textContent = '搜索模式';
-#             } else {
-#                 showPage(currentPage);
-#             }
-#         }
-        
-#         // 初始化显示第一页
-#         showPage(1);
-#     </script>
-# </body>
-# </html>
-# """
-
-#     # 保存HTML文件
-#     with open(output_path, "w", encoding="utf-8") as f:
-#         f.write(html_content)
-
-#     logger.info(f"HTML报告已生成: {output_path}")
-#     return output_path
-
-
 # --- main ---
 def main():
     # 步骤1: 解析命令行参数
@@ -485,18 +256,30 @@ def main():
     # 步骤5: 加载数据集
     logger.info("步骤5: 加载训练、验证和测试数据集...")
     
-    logger.info(f"加载训练集: {DATA_PATH}/train.csv")
-    train_dataset = LabeledDataset(f"{DATA_PATH}/train.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
-    logger.info(f"训练集大小: {len(train_dataset)}个样本")
+    # logger.info(f"加载训练集: {DATA_PATH}/train.csv")
+    # train_dataset = LabeledDataset(f"{DATA_PATH}/train.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
+    # logger.info(f"训练集大小: {len(train_dataset)}个样本")
 
-    logger.info(f"加载测试集: {DATA_PATH}/test.csv")
-    test_dataset = LabeledDataset(f"{DATA_PATH}/test.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
-    logger.info(f"测试集大小: {len(test_dataset)}个样本")
+    # logger.info(f"加载测试集: {DATA_PATH}/test.csv")
+    # test_dataset = LabeledDataset(f"{DATA_PATH}/test.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
+    # logger.info(f"测试集大小: {len(test_dataset)}个样本")
 
-    logger.info(f"加载验证集: {DATA_PATH}/dev.csv")
-    val_dataset = LabeledDataset(f"{DATA_PATH}/dev.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
-    logger.info(f"验证集大小: {len(val_dataset)}个样本")
+    # logger.info(f"加载验证集: {DATA_PATH}/dev.csv")
+    # val_dataset = LabeledDataset(f"{DATA_PATH}/dev.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
+    # logger.info(f"验证集大小: {len(val_dataset)}个样本")
 
+
+  # define datasets and data collator
+    train_dataset = SupervisedDataset(tokenizer=tokenizer, 
+                                      data_path=f"{DATA_PATH}/train.csv", 
+                                      kmer=-1)
+    val_dataset = SupervisedDataset(tokenizer=tokenizer, 
+                                     data_path=f"{DATA_PATH}/dev.csv",  
+                                     kmer=-1)
+    test_dataset = SupervisedDataset(tokenizer=tokenizer, 
+                                     data_path=f"{DATA_PATH}/test.csv", 
+                                     kmer=-1)
+    #data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
 
 
     # 步骤6: 加载模型配置和模型
@@ -509,7 +292,17 @@ def main():
     logger.info(f"模型配置: num_labels={config.num_labels}, hidden_size={config.hidden_size}")
 
     logger.info("加载预训练模型...")
-    model = BertForSequenceClassification.from_pretrained(CHECKPOINT_DIR, config=config)
+    #model = BertForSequenceClassification.from_pretrained(CHECKPOINT_DIR, config=config)
+    #        tokenizer = AutoTokenizer.from_pretrained("zhihan1996/DNABERT-2-117M")
+
+    # load model
+    model = transformers.AutoModelForSequenceClassification.from_pretrained(
+        "zhihan1996/DNABERT-2-117M",
+        cache_dir=CHECKPOINT_DIR,
+        num_labels=train_dataset.num_labels,
+        trust_remote_code=True,
+    )
+    
     logger.info("模型加载完成")
 
 
@@ -651,5 +444,6 @@ def main():
     logger.info("所有步骤完成")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__": 
     main()
+
