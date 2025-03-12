@@ -61,8 +61,10 @@ class BertModel(BertPreTrainedModel):
 
     def __init__(self, config, add_pooling_layer=True):
         super(BertModel, self).__init__(config)
+        use_zen = getattr(config, "use_zen", True) # default to use zen. This is to avoid breaking changes
+        
         self.embeddings = BertEmbeddings(config)
-        self.ngram_embeddings = ZenNgramEmbeddings(config)
+        self.ngram_embeddings = ZenNgramEmbeddings(config) if use_zen else None
         self.encoder: BertEncoder = BertEncoder(config)
         self.pooler = BertPooler(config) if add_pooling_layer else None
         self.post_init()
@@ -76,7 +78,7 @@ class BertModel(BertPreTrainedModel):
     def forward(
         self,
         input_ids: torch.Tensor,
-        ngram_input_ids: torch.Tensor,
+        ngram_input_ids: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         ngram_attention_mask: Optional[torch.Tensor] = None,
@@ -88,7 +90,7 @@ class BertModel(BertPreTrainedModel):
     ) -> Tuple[Union[List[torch.Tensor], torch.Tensor], Optional[torch.Tensor]]:
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
-        if ngram_attention_mask is None:
+        if ngram_attention_mask is None and ngram_input_ids is not None:
             ngram_attention_mask = torch.ones_like(ngram_input_ids)
         if token_type_ids is None:
             token_type_ids = torch.zeros_like(input_ids)
@@ -96,7 +98,7 @@ class BertModel(BertPreTrainedModel):
         embedding_output = self.embeddings(input_ids, token_type_ids, position_ids)
         ngram_embedding_output = self.ngram_embeddings(
             ngram_input_ids,
-        )
+        ) if self.ngram_embeddings is not None else None
 
         encoder_outputs = self.encoder(
             hidden_states=embedding_output,
@@ -172,7 +174,7 @@ class BertForMaskedLM(BertPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: torch.Tensor,
-        ngram_input_ids: torch.Tensor,
+        ngram_input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         ngram_attention_mask: Optional[torch.Tensor] = None,
         ngram_position_matrix: Optional[torch.Tensor] = None,
@@ -323,7 +325,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
     def forward(
         self,
         input_ids: torch.Tensor,
-        ngram_input_ids: torch.Tensor,
+        ngram_input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         ngram_attention_mask: Optional[torch.Tensor] = None,
         ngram_position_matrix: Optional[torch.Tensor] = None,

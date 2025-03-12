@@ -10,6 +10,8 @@ dependencies = [
     "datasets>=3.2.0,<4", 
     "peft>=0.14.0,<0.15", 
     "click>=8.1.8,<9",
+    "plotly==6.0.0",
+    "kaleido>=0.2.1"
 ]
 description = "Ngram utilities for Large Language Model Pre-training."
 name = "dnazen"

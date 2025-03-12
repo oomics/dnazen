@@ -485,10 +485,10 @@ class BertEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        ngram_hidden_states: torch.Tensor,
+        ngram_hidden_states: torch.Tensor | None,
         attention_mask: torch.Tensor,
-        ngram_attention_mask: torch.Tensor,
-        ngram_position_matrix: torch.Tensor,
+        ngram_attention_mask: torch.Tensor | None,
+        ngram_position_matrix: torch.Tensor | None,
         output_all_encoded_layers: Optional[bool] = True,
         # subset_mask: Optional[torch.Tensor] = None,
     ) -> List[torch.Tensor]:
@@ -496,9 +496,12 @@ class BertEncoder(nn.Module):
         extended_attention_mask = extended_attention_mask.to(dtype=torch.float32)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
-        extended_ngram_attention_mask = ngram_attention_mask.unsqueeze(1).unsqueeze(2)
-        extended_ngram_attention_mask = extended_ngram_attention_mask.to(dtype=torch.float32)
-        extended_ngram_attention_mask = (1.0 - extended_ngram_attention_mask) * -10000.0
+        if ngram_attention_mask is not None:
+            extended_ngram_attention_mask = ngram_attention_mask.unsqueeze(1).unsqueeze(2)
+            extended_ngram_attention_mask = extended_ngram_attention_mask.to(dtype=torch.float32)
+            extended_ngram_attention_mask = (1.0 - extended_ngram_attention_mask) * -10000.0
+        else:
+            extended_ngram_attention_mask = None
 
         batch, seqlen = hidden_states.shape[:2]
 
@@ -521,18 +524,20 @@ class BertEncoder(nn.Module):
                 # attn_mask=attention_mask,
                 bias=alibi_attn_mask,
             )
-            if idx < self.num_ngram_hidden_layer:
+            
+            if (ngram_hidden_states is not None) and idx < self.num_ngram_hidden_layer:
                 ngram_layer_module = self.ngram_layer[idx]
                 ngram_hidden_states = ngram_layer_module(
                     ngram_hidden_states,
                     bias=extended_ngram_attention_mask,
                 )
 
-            _dtype = hidden_states.dtype
-            hidden_states = hidden_states + torch.bmm(
-                ngram_position_matrix.to(dtype=_dtype),
-                ngram_hidden_states.to(dtype=_dtype),
-            )
+            if ngram_hidden_states is not None:
+                _dtype = hidden_states.dtype
+                hidden_states = hidden_states + torch.bmm(
+                    ngram_position_matrix.to(dtype=_dtype),
+                    ngram_hidden_states.to(dtype=_dtype),
+                )
 
             if output_all_encoded_layers:
                 all_encoder_layers.append(hidden_states)

@@ -146,7 +146,11 @@ class SupervisedDataset(Dataset):
         return len(self.input_ids)
 
     def __getitem__(self, i) -> Dict[str, torch.Tensor]:
-        return dict(input_ids=self.input_ids[i], labels=self.labels[i])
+        return dict(
+            input_ids=self.input_ids[i], 
+            labels=self.labels[i], 
+            attention_mask=self.attention_mask[i] # this line removes necessarily of using `DataCollator`
+        )
 
 
 
@@ -201,6 +205,7 @@ def parse_args():
     parser.add_argument("--num_train_epochs", type=int, default=4)
     parser.add_argument("--lr", type=float, default=3e-5)
     parser.add_argument("--fp16", action="store_true")
+    parser.add_argument("--bert", action="store_true", help="Use dnabert2 instead of dnazen")
     parser.add_argument("--seed", default=42)
 
     return parser.parse_args()
@@ -219,6 +224,7 @@ def main():
     LEARNING_RATE = args.lr
     NUM_TRAIN_EPOCHS = args.num_train_epochs
     CHECKPOINT_DIR = args.checkpoint
+    USE_DNABERT2 = args.bert
     
     logger.info(f"数据路径: {DATA_PATH}")
     logger.info(f"结果输出路径: {RESULTS_PATH}")
@@ -247,39 +253,38 @@ def main():
     )  # type: ignore
     logger.info("分词器加载完成")
     
-    # 步骤4: 加载n-gram编码器
-    logger.info(f"步骤4: 加载n-gram编码器，路径: {NGRAM_ENCODER_DIR}")
-    ngram_encoder = NgramEncoder.from_file(NGRAM_ENCODER_DIR)
-    logger.info(f"n-gram词汇表大小: {ngram_encoder.get_vocab_size()}")
-
+    # # 步骤4: 加载n-gram编码器
+    # logger.info(f"步骤4: 加载n-gram编码器，路径: {NGRAM_ENCODER_DIR}")
+    # ngram_encoder = NgramEncoder.from_file(NGRAM_ENCODER_DIR)
+    # logger.info(f"n-gram词汇表大小: {ngram_encoder.get_vocab_size()}")
+    ngram_encoder = None
 
     # 步骤5: 加载数据集
     logger.info("步骤5: 加载训练、验证和测试数据集...")
     
-    logger.info(f"加载训练集: {DATA_PATH}/train.csv")
-    train_dataset = LabeledDataset(f"{DATA_PATH}/train.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
-    logger.info(f"训练集大小: {len(train_dataset)}个样本")
+    # logger.info(f"加载训练集: {DATA_PATH}/train.csv")
+    # train_dataset = LabeledDataset(f"{DATA_PATH}/train.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
+    # logger.info(f"训练集大小: {len(train_dataset)}个样本")
 
-    logger.info(f"加载测试集: {DATA_PATH}/test.csv")
-    test_dataset = LabeledDataset(f"{DATA_PATH}/test.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
-    logger.info(f"测试集大小: {len(test_dataset)}个样本")
+    # logger.info(f"加载测试集: {DATA_PATH}/test.csv")
+    # test_dataset = LabeledDataset(f"{DATA_PATH}/test.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
+    # logger.info(f"测试集大小: {len(test_dataset)}个样本")
 
-    logger.info(f"加载验证集: {DATA_PATH}/dev.csv")
-    val_dataset = LabeledDataset(f"{DATA_PATH}/dev.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
-    logger.info(f"验证集大小: {len(val_dataset)}个样本")
+    # logger.info(f"加载验证集: {DATA_PATH}/dev.csv")
+    # val_dataset = LabeledDataset(f"{DATA_PATH}/dev.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
+    # logger.info(f"验证集大小: {len(val_dataset)}个样本")
 
 
   # define datasets and data collator
-    # train_dataset = SupervisedDataset(tokenizer=tokenizer, 
-    #                                   data_path=f"{DATA_PATH}/train.csv", 
-    #                                   kmer=-1)
-    # val_dataset = SupervisedDataset(tokenizer=tokenizer, 
-    #                                  data_path=f"{DATA_PATH}/dev.csv",  
-    #                                  kmer=-1)
-    # test_dataset = SupervisedDataset(tokenizer=tokenizer, 
-    #                                  data_path=f"{DATA_PATH}/test.csv", 
-    #                                  kmer=-1)
-    #data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
+    train_dataset = SupervisedDataset(tokenizer=tokenizer,
+                                      data_path=f"{DATA_PATH}/train.csv", 
+                                      kmer=-1)
+    val_dataset = SupervisedDataset(tokenizer=tokenizer, 
+                                     data_path=f"{DATA_PATH}/dev.csv",  
+                                     kmer=-1)
+    test_dataset = SupervisedDataset(tokenizer=tokenizer, 
+                                     data_path=f"{DATA_PATH}/test.csv", 
+                                     kmer=-1)
 
 
     # 步骤6: 加载模型配置和模型
@@ -287,8 +292,13 @@ def main():
     logger.info(f"步骤6: 从检查点加载模型，路径: {CHECKPOINT_DIR}")
     logger.info("加载模型配置...")
     config = BertConfig.from_pretrained(CHECKPOINT_DIR)
-    setattr(config, "ngram_vocab_size", ngram_encoder.get_vocab_size())
-    setattr(config, "num_word_hidden_layers", 6)
+    # setattr(config, "ngram_vocab_size", ngram_encoder.get_vocab_size())
+    if USE_DNABERT2:
+        setattr(config, "use_zen", False)
+        setattr(config, "num_word_hidden_layers", 0)
+    else:
+        setattr(config, "use_zen", True)
+        setattr(config, "num_word_hidden_layers", 6)
     logger.info(f"模型配置: num_labels={config.num_labels}, hidden_size={config.hidden_size}")
 
     logger.info("加载预训练模型...")
