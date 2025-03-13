@@ -4,19 +4,19 @@
 ###################################################################################
 
 echo "===============================run.sh ngram抽取==============================================="
- #./prepare_data_and_config.sh --train-ngram    --experiment 1
- #./prepare_data_and_config.sh --coverage-analysis   --experiment 1
+ ./prepare_data_and_config.sh --train-ngram    --experiment 1
+ ./prepare_data_and_config.sh --coverage-analysis   --experiment 1
 echo "===============================run.sh ngram抽取完成==============================================="
 
 
 echo "===============================run.sh 开始tokenize分词==============================================="
-#./prepare_data_and_config.sh --tokenize-train   
-#./prepare_data_and_config.sh --tokenize-dev  
+./prepare_data_and_config.sh --tokenize-train   
+./prepare_data_and_config.sh --tokenize-dev  
 echo "===============================run.sh tokenize分词完成==============================================="
 
 
 echo "===============================run.sh 开始准备数据集dataset==============================================="
-#./prepare_data_and_config.sh --prepare-dataset   --experiment 1
+./prepare_data_and_config.sh --prepare-dataset   --experiment 1
 echo "===============================run.sh 准备数据集dataset完成==============================================="
 
 
