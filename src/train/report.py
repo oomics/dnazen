@@ -473,6 +473,7 @@ def save_report_data_to_csv(report_data_list, output_path):
         output_path (str): 输出CSV文件路径
     """
     logger.info(f"将报告数据保存到CSV文件: {output_path}")
+    logger.info(f"report_data_list: len{len(report_data_list)}")
     
     # 定义CSV表头
     headers = [
@@ -485,6 +486,7 @@ def save_report_data_to_csv(report_data_list, output_path):
     csv_data = []
     for report_data in report_data_list:
         # 获取实验MCC和差异值
+
         experiment_mcc = 0.0
         mcc_diff = ""
         mcc_gue_diff = ""
@@ -521,7 +523,7 @@ def save_report_data_to_csv(report_data_list, output_path):
             mcc_diff,
             mcc_gue_diff
         ]
-        
+        logger.info(f"row: {row}")
         csv_data.append(row)
     
     # 写入CSV文件
@@ -656,12 +658,12 @@ def generate_parallel_finetune_progress_report(tasks_dir, output_path):
         for task in completed_tasks:
             if report_data.data_name == task["task_name"]:
                 match_task=task
+                logger.info(f"找到匹配任务: {match_task}")
         if match_task is not None:
             report_data.eval_results = match_task.get("eval_results", {})
             report_data.accuracy = match_task.get("eval_accuracy")
             report_data.f1 = match_task.get("eval_f1")
             report_data.matthews = match_task.get("eval_matthews_correlation")
-            report_data_list.append(report_data)
 
 
         report_data_list.append(report_data)

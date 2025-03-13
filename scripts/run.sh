@@ -3,28 +3,27 @@
 # 脚本名称: run.sh
 ###################################################################################
 
-
+echo "===============================run.sh ngram抽取==============================================="
  #./prepare_data_and_config.sh --train-ngram    --experiment 1
  #./prepare_data_and_config.sh --coverage-analysis   --experiment 1
+echo "===============================run.sh ngram抽取完成==============================================="
 
 
-
-#./prepare_data_and_config.sh --train-ngram    --experiment 3
-#./prepare_data_and_config.sh --coverage-analysis   --experiment 3
-
-
-
-#./prepare_data_and_config.sh --coverage-analysis   --experiment 4
-#./prepare_data_and_config.sh --coverage-analysis   --experiment 5
-#./prepare_data_and_config.sh --coverage-analysis   --experiment 6
-
-
-
+echo "===============================run.sh 开始tokenize分词==============================================="
 #./prepare_data_and_config.sh --tokenize-train   
-#./prepare_data_and_config.sh --tokenize-dev   
+#./prepare_data_and_config.sh --tokenize-dev  
+echo "===============================run.sh tokenize分词完成==============================================="
 
+
+echo "===============================run.sh 开始准备数据集dataset==============================================="
 #./prepare_data_and_config.sh --prepare-dataset   --experiment 1
+echo "===============================run.sh 准备数据集dataset完成==============================================="
 
 
+echo "===============================run.sh 开始预训练==============================================="
+bash ./pretrain.sh --experiment 1
+echo "===============================run.sh 预训练完成==============================================="
 
-./prepare_data_and_config.sh --pretrain  --experiment 1
+echo "===============================run.sh 开始微调==============================================="
+bash ./finetune.sh --experiment 1 --parallel --resume
+echo "===============================run.sh 微调完成==============================================="

@@ -223,6 +223,28 @@ def get_gue_sequences(gue_dir: str, sequences):
             logger.info(f"从 {csv_file} 提取了 {len(file_sequences)} 条DNA序列，累计: {total_extracted}")
 
 
+def get_gue_sequences_type(gue_dir: str, sequences_dev,sequences_train,sequences_test):
+    logger.info(f"从GUE数据集加载数据: {gue_dir}")
+    csv_files = find_csv_files(gue_dir)
+     # 处理所有CSV文件
+    total_extracted = 0
+    for csv_file in csv_files:
+        logger.info(f"处理CSV文件: {csv_file}")
+        file_sequences = extract_dna_sequences(csv_file)
+        if csv_file.endswith("dev.csv"):
+            sequences_dev.extend(file_sequences)
+        elif csv_file.endswith("train.csv"):
+            sequences_train.extend(file_sequences)
+        elif csv_file.endswith("test.csv"):
+            sequences_test.extend(file_sequences)
+            
+        total_extracted += len(file_sequences)
+        logger.info(f"从 {csv_file} 提取了 {len(file_sequences)} 条DNA序列，累计: {total_extracted}")
+    logger.info(f"共提取了 {len(sequences_train)} 条DNA序列用于训练，{len(sequences_dev)} 条DNA序列用于验证，{len(sequences_test)} 条DNA序列用于测试")
+
+    
+    
+
 def get_mspecies_sequences(data_dir: str, sequences):
     logger.info(f"从输入文件加载mspecies数据: {data_dir}")
     start_time = time.time()

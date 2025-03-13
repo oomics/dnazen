@@ -120,7 +120,7 @@ class TokenMasker:
         sep_token: int,
         pad_token: int,
         mask_token: int,
-        whole_ngram_masking: bool = True,
+        whole_ngram_masking: bool = False,
         verbose: bool = True,
     ):
         """
@@ -304,7 +304,7 @@ class MlmDataset(Dataset):
         ngram_encoder: NgramEncoder,
         core_ngrams: set[tuple[int, ...]],
         mlm_prob: float = 0.15,
-        whole_ngram_masking: bool = True,
+        whole_ngram_masking: bool = False,
         mlm_data_symlink: str | None = None,
         verbose: bool = True,
     ):
@@ -807,7 +807,7 @@ class MlmDatasetV2(Dataset):
         ngram_encoder: NgramEncoder,
         core_ngrams: set[tuple[int, ...]],
         mlm_prob: float = 0.15,
-        whole_ngram_masking: bool = True,
+        whole_ngram_masking: bool = False,
     ):
         super().__init__()
 
