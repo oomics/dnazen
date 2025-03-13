@@ -58,11 +58,6 @@ def main():
     parser.add_argument("--output-dev", type=str, required=True, help="输出dev.txt文件路径")
     args = parser.parse_args()
 
-    # 检查是否至少提供了一个输入源
-    if not args.input and not args.gue_dir:
-        logger.error("错误：必须提供至少一个输入源（--mspecies-dir 或 --gue-dir）")
-        parser.print_help()
-        return
 
     # 加载数据
     gue_sequences_train = []
@@ -79,47 +74,77 @@ def main():
 
     # 从GUE数据集加载数据
     if args.gue_dir:
-        get_gue_sequences_type(args.gue_dir, gue_sequences_train,gue_sequences_dev,gue_sequences_test)
+        get_gue_sequences_type(args.gue_dir, gue_sequences_dev,gue_sequences_train,gue_sequences_test)
         sequences_train.extend(gue_sequences_train)
-        sequences_train.extend(gue_sequences_dev)
-        sequences_train.extend(gue_sequences_test)
+        logger.info(f"gue_sequences_train 从GUE数据集数量: {len(gue_sequences_train)}")
+        #sequences_train.extend(gue_sequences_dev)
+        #sequences_train.extend(gue_sequences_test)
         
         sequences_dev.extend(gue_sequences_dev)
-        sequences_dev.extend(gue_sequences_test)
+        #sequences_dev.extend(gue_sequences_test)
+        logger.info(f"gue_sequences_dev 从GUE数据集数量: {len(gue_sequences_dev)}")
 
 
     # 从输入文件加载数据
     if args.mspecies_dir:
-        get_mspecies_sequences(args.input, mspecies_sequences_train)
+        get_mspecies_sequences(args.mspecies_dir, mspecies_sequences_train)
         sequences_train.extend(mspecies_sequences_train)
-        sequences_dev.extend(mspecies_sequences_train[int(len(mspecies_sequences_train) * 0.9):])
+        logger.info(f"gue_sequences_train 从mspecies数据集数量: {len(mspecies_sequences_train)}")
 
+        mspecies_sequences_dev = mspecies_sequences_train[int(len(mspecies_sequences_train) * 0.9):]    
+        sequences_dev.extend(mspecies_sequences_dev)
+        logger.info(f"gue_sequences_dev 从mspecies数据集数量: {len(mspecies_sequences_dev)}")
 
-    # 去重
-    unique_sequences_train = list(set(sequences_train))
-    logger.info(f"序列去重: train原始序列数 {len(sequences_train)}，去重后 {len(unique_sequences_train)}")
-    sequences_train = unique_sequences_train
+    # # 去重
+    # unique_sequences_train = list(set(sequences_train))
+    # logger.info(f"序列去重: train原始序列数 {len(sequences_train)}，去重后 {len(unique_sequences_train)}")
+    # sequences_train = unique_sequences_train
     
-    unique_sequences_dev = list(set(sequences_dev))
-    logger.info(f"序列去重: dev原始序列数 {len(sequences_dev)}，去重后 {len(unique_sequences_dev)}")
-    sequences_dev = unique_sequences_dev
+    # unique_sequences_dev = list(set(sequences_dev))
+    # logger.info(f"序列去重: dev原始序列数 {len(sequences_dev)}，去重后 {len(unique_sequences_dev)}")
+    # sequences_dev = unique_sequences_dev
 
     # 打印序列统计信息
-    print_sequence_stats(unique_sequences_train, "所有train数据源")
-    print_sequence_stats(unique_sequences_dev, "所有dev数据源")
+    print_sequence_stats(sequences_train, "所有train数据源")
+    print_sequence_stats(sequences_dev, "所有dev数据源")
 
 
     # 创建输出目录
     output_tarin_dir = os.path.dirname(args.output_train)
-    if output_tarin_dir and not os.path.exists(output_tarin_dir):
+    # 确保目录存在
+    if output_tarin_dir:
         os.makedirs(output_tarin_dir, exist_ok=True)
     
+    # 如果文件存在，先删除
+    if os.path.exists(args.output_train):
+        os.remove(args.output_train)
+    
+    # 保存序列到train.txt文件
+    with open(args.output_train, "w") as f:
+        for seq in sequences_train:
+            f.write(seq + "\n")
+    logger.info(f"训练文件保存完成{args.output_train}，共 {len(sequences_train)} 个序列")
+    
     output_dev_dir = os.path.dirname(args.output_dev)
-    if output_dev_dir and not os.path.exists(output_dev_dir):
+    # 确保目录存在
+    if output_dev_dir:
         os.makedirs(output_dev_dir, exist_ok=True)
+    
+    # 如果文件存在，先删除
+    if os.path.exists(args.output_dev):
+        os.remove(args.output_dev)
+        
+    # 保存序列到dev.txt文件
+    with open(args.output_dev, "w") as f:
+        for seq in sequences_dev:
+            f.write(seq + "\n")
+    logger.info(f"开发文件保存完成{args.output_dev}，共 {len(sequences_dev)} 个序列")
 
     
 
-
+###
+#python ../src/dataset/make_gue_pretrain_rowdata.py --gue-dir  ../data/GUE/ --mspecies-dir ../data/mspecies/dev/dev.txt --output-train ../data/pretrain/train/train.txt --output-dev ../data/pretrain/dev/dev.txt
+###
 if __name__ == "__main__":
     main()
+
