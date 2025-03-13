@@ -100,7 +100,8 @@ TRAIN_DIR_FILE="$DATA_DIR/train/train.pt"
 # 验证数据目录文件
 DEV_DIR_FILE="$DATA_DIR/dev/dev.pt"
 # 模型保存输出目录
-OUTPUT_DIR="../data/output"
+#OUTPUT_DIR="../data/output"
+OUTPUT_DIR="../data/pretrain/exp1_gue_mspecies/output"
 
 # 微调评估结果保存目录
 REPORT_OUT_DIR="~/jenkins/workspace/output/"
@@ -122,8 +123,8 @@ FINETUNE_CHECKPOINT_STEP=10000
 # 2. 训练参数配置
 ###################################################################################
 
-PER_DEVICE_TRAIN_BATCH_SIZE=8
-PER_DEVICE_EVAL_BATCH_SIZE=32
+PER_DEVICE_TRAIN_BATCH_SIZE=128
+PER_DEVICE_EVAL_BATCH_SIZE=128
 # 梯度累积步数
 GRADIENT_ACCUMULATION_STEPS=1
 # 学习率
