@@ -320,7 +320,7 @@ def main():
     # 步骤7: 设置优化器
     logger.info("-------------------------------------------------------...")
     logger.info("步骤7: 配置优化器...")
-    learning_rate = 1e-5
+    learning_rate = args.lr
     logger.info(f"使用AdamW优化器，学习率={learning_rate}，权重衰减=0.01")
 
     ngram_layer_params = [
