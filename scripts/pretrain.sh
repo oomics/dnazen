@@ -2,74 +2,14 @@
 ###################################################################################
 # 脚本名称: pretrain.sh
 # 描述: DNA序列预训练模型训练启动脚本
-# 用法: bash pretrain.sh [--experiment <id>] [--parent-experiment <name>]
+# 用法: bash pretrain.sh 
 # 作者: DnaZen Team
 ###################################################################################
 
 # 解析命令行参数
-EXPERIMENT_ID=""
-PARENT_EXPERIMENT=""
+EXPERIMENT_ID="1"
+EXPERIMENT_DIR="../data/pretrain/exp1_gue_mspecies/"
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --experiment)
-      EXPERIMENT_ID="$2"
-      shift 2
-      ;;
-    --parent-experiment)
-      PARENT_EXPERIMENT="$2"
-      shift 2
-      ;;
-    *)
-      echo "未知选项: $1"
-      echo "用法: bash pretrain.sh [--experiment <id>] [--parent-experiment <name>]"
-      exit 1
-      ;;
-  esac
-done
-
-# 如果没有指定实验ID，使用默认值
-if [[ -z "$EXPERIMENT_ID" ]]; then
-  echo "警告: 未指定实验ID，使用默认值1"
-  EXPERIMENT_ID="1"
-fi
-
-# 根据实验ID设置实验名称
-case "$EXPERIMENT_ID" in
-  1)
-    EXPERIMENT_NAME="exp1_gue_mspecies"
-    ;;
-  2)
-    EXPERIMENT_NAME="exp2_mspecies"
-    ;;
-  3)
-    EXPERIMENT_NAME="exp3_gue"
-    ;;
-  4)
-    EXPERIMENT_NAME="exp3_gue_ngram_ref_5"
-    PARENT_EXPERIMENT="exp3_gue"
-    ;;
-  5)
-    EXPERIMENT_NAME="exp3_gue_ngram_ref_1"
-    PARENT_EXPERIMENT="exp3_gue"
-    ;;
-  6)
-    EXPERIMENT_NAME="exp3_gue_ngram_ref_100"
-    PARENT_EXPERIMENT="exp3_gue"
-    ;;
-  *)
-    echo "错误: 无效的实验ID: $EXPERIMENT_ID"
-    echo "有效的实验ID: 1-6"
-    exit 1
-    ;;
-esac
-
-# 如果指定了父实验，使用父实验目录
-if [[ -n "$PARENT_EXPERIMENT" ]]; then
-  EXPERIMENT_DIR="../data/pretrain/${PARENT_EXPERIMENT}"
-else
-  EXPERIMENT_DIR="../data/pretrain/${EXPERIMENT_NAME}"
-fi
 
 echo "使用实验: $EXPERIMENT_NAME (ID: $EXPERIMENT_ID)"
 echo "实验目录: $EXPERIMENT_DIR"

@@ -320,8 +320,8 @@ if [[ "$RUN_COVERAGE_ANALYSIS" == "true" ]]; then
     --tok zhihan1996/DNABERT-2-117M \
     --gue-dir ../data/GUE \
     --mspecies-dir ../data/pretrain/dev/dev.txt \
-    --ngram-list ${EXPERIMENT_DIR}/ngram_list.txt \
-    --min-freq-filter ${MIN_FREQ_FILTER}"
+    --ngram-list ${EXPERIMENT_DIR}/ngram_list.txt 
+
   
   echo "执行命令: $CMD"
   eval $CMD
