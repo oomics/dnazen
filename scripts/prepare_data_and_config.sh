@@ -313,6 +313,12 @@ fi
 if [[ "$RUN_COVERAGE_ANALYSIS" == "true" ]]; then
   echo "===== Step1.1 开始验证N-gram编码在训练数据集上的覆盖率 ====="
   
+  # 检查并删除已存在的ngram_encoder.json文件
+  if [[ -f "${EXPERIMENT_DIR}/ngram_encoder.json" ]]; then
+    echo "发现已存在的ngram_encoder.json文件，正在删除..."
+    rm -f "${EXPERIMENT_DIR}/ngram_encoder.json"
+  fi
+
   # 构建命令
   CMD="python ../src/dataset/ngram_encoder_analyze.py \
     --encoder ${EXPERIMENT_DIR}/ngram_encoder.json \
@@ -320,11 +326,12 @@ if [[ "$RUN_COVERAGE_ANALYSIS" == "true" ]]; then
     --tok zhihan1996/DNABERT-2-117M \
     --gue-dir ../data/GUE \
     --mspecies-dir ../data/pretrain/dev/dev.txt \
-    --ngram-list ${EXPERIMENT_DIR}/ngram_list.txt 
+    --ngram-list ${EXPERIMENT_DIR}/ngram_list.txt "
 
   
   echo "执行命令: $CMD"
   eval $CMD
+  
   
   if [[ $? -ne 0 ]]; then
     echo "N-gram编码覆盖率分析失败"
