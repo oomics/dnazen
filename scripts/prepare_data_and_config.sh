@@ -285,6 +285,12 @@ mkdir -p ${COVERAGE_DIR}
 # Step1:提取N-gram编码
 if [[ "$RUN_NGRAM_ENCODER" == "true" ]]; then
   echo "===== Step1 开始提取N-gram编码器 (实验${EXPERIMENT_ID}: ${EXPERIMENT_DESC}) ====="  
+  # 检查并删除已存在的ngram_encoder.json文件
+  if [[ -f "${EXPERIMENT_DIR}/ngram_encoder.json" ]]; then
+    echo "发现已存在的ngram_encoder.json文件，正在删除..."
+    rm -f "${EXPERIMENT_DIR}/ngram_encoder.json"
+  fi
+  
   CMD="python ../src/train/train_ngram_encoder.py \
     ${USE_GUE} \
     ${USE_INPUT} \
@@ -313,11 +319,7 @@ fi
 if [[ "$RUN_COVERAGE_ANALYSIS" == "true" ]]; then
   echo "===== Step1.1 开始验证N-gram编码在训练数据集上的覆盖率 ====="
   
-  # 检查并删除已存在的ngram_encoder.json文件
-  if [[ -f "${EXPERIMENT_DIR}/ngram_encoder.json" ]]; then
-    echo "发现已存在的ngram_encoder.json文件，正在删除..."
-    rm -f "${EXPERIMENT_DIR}/ngram_encoder.json"
-  fi
+
 
   # 构建命令
   CMD="python ../src/dataset/ngram_encoder_analyze.py \
