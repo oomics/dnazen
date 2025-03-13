@@ -99,7 +99,7 @@ DEV_DIR=$(dirname "$DEV_DIR_FILE")
 # 2. 训练参数配置
 ###################################################################################
 # GPU每批次样本数，H800可以使用128，A100/4090可以使用32
-PER_DEVICE_BATCH_SIZE=16
+PER_DEVICE_BATCH_SIZE=128
 # 梯度累积步数 (实际批大小 = PER_DEVICE_BATCH_SIZE * GRAD_ACCU_STEPS)，
 # 4096=32*8*16，每过4096个sample（data）才做一次梯度下降batch
 GRAD_ACCU_STEPS=16
