@@ -5,7 +5,7 @@ import os
 import csv
 import json
 import logging
-from typing import Any, Optional, Dict, Sequence, Tuple, List, Union
+from typing import Dict, Sequence, List
 
 import numpy as np
 
@@ -27,8 +27,8 @@ from transformers import (
 from transformers.models.bert.configuration_bert import BertConfig
 
 from dnazen.model.bert_models import BertForSequenceClassification
-from dnazen.data.labeled_dataset import LabeledDataset
 from dnazen.ngram import NgramEncoder
+from dnazen.data.labeled_dataset import LabeledDataset
 from torch.utils.data import Dataset
 
 logging.basicConfig(
@@ -40,14 +40,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-#@dataclass
+# @dataclass
 class DataCollatorForSupervisedDataset(object):
     """Collate examples for supervised fine-tuning."""
 
     tokenizer: transformers.PreTrainedTokenizer
 
     def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
-        input_ids, labels = tuple([instance[key] for instance in instances] for key in ("input_ids", "labels"))
+        input_ids, labels = tuple(
+            [instance[key] for instance in instances] for key in ("input_ids", "labels")
+        )
         input_ids = torch.nn.utils.rnn.pad_sequence(
             input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id
         )
@@ -57,11 +59,8 @@ class DataCollatorForSupervisedDataset(object):
             labels=labels,
             attention_mask=input_ids.ne(self.tokenizer.pad_token_id),
         )
- 
 
-"""
-Load or generate k-mer string for each DNA sequence. The generated k-mer string will be saved to the same directory as the original data with the same name but with a suffix of "_{k}mer".
-"""
+
 def load_or_generate_kmer(data_path: str, texts: List[str], k: int) -> List[str]:
     """Load or generate k-mer string for each DNA sequence."""
     kmer_path = data_path.replace(".csv", f"_{k}mer.json")
@@ -69,28 +68,25 @@ def load_or_generate_kmer(data_path: str, texts: List[str], k: int) -> List[str]
         logging.warning(f"Loading k-mer from {kmer_path}...")
         with open(kmer_path, "r") as f:
             kmer = json.load(f)
-    else:        
-        logging.warning(f"Generating k-mer...")
+    else:
+        logging.warning("Generating k-mer...")
         kmer = [generate_kmer_str(text, k) for text in texts]
         with open(kmer_path, "w") as f:
             logging.warning(f"Saving k-mer to {kmer_path}...")
             json.dump(kmer, f)
-        
+
     return kmer
 
-        
+
 class SupervisedDataset(Dataset):
     """用于监督训练的数据集类
-    
+
     支持两种格式的输入:
     1. [text, label] - 单序列分类
     2. [text1, text2, label] - 序列对分类
     """
 
-    def __init__(self, 
-                 data_path: str, 
-                 tokenizer: transformers.PreTrainedTokenizer, 
-                 kmer: int = -1):
+    def __init__(self, data_path: str, tokenizer: transformers.PreTrainedTokenizer, kmer: int = -1):
         """
         Args:
             data_path: 数据文件路径
@@ -114,7 +110,7 @@ class SupervisedDataset(Dataset):
             labels = [int(d[2]) for d in data]
         else:
             raise ValueError("Data format not supported.")
-        
+
         if kmer != -1:
             # only write file on the first process
             if torch.distributed.get_rank() not in [0, -1]:
@@ -128,7 +124,7 @@ class SupervisedDataset(Dataset):
 
         # 设置一个合理的最大长度，避免整数溢出
         max_length = min(tokenizer.model_max_length, 512) if hasattr(tokenizer, "model_max_length") else 512
-        
+
         output = tokenizer(
             texts,
             return_tensors="pt",
@@ -147,11 +143,10 @@ class SupervisedDataset(Dataset):
 
     def __getitem__(self, i) -> Dict[str, torch.Tensor]:
         return dict(
-            input_ids=self.input_ids[i], 
-            labels=self.labels[i], 
-            attention_mask=self.attention_mask[i] # this line removes necessarily of using `DataCollator`
+            input_ids=self.input_ids[i],
+            labels=self.labels[i],
+            attention_mask=self.attention_mask[i],  # this line removes necessarily of using `DataCollator`
         )
-
 
 
 def compute_metrics(eval_pred):
@@ -225,14 +220,14 @@ def main():
     NUM_TRAIN_EPOCHS = args.num_train_epochs
     CHECKPOINT_DIR = args.checkpoint
     USE_DNABERT2 = args.bert
-    
+
     logger.info(f"数据路径: {DATA_PATH}")
     logger.info(f"结果输出路径: {RESULTS_PATH}")
     logger.info(f"N-gram编码器路径: {NGRAM_ENCODER_DIR}")
     logger.info(f"学习率: {LEARNING_RATE}")
     logger.info(f"训练轮数: {NUM_TRAIN_EPOCHS}")
     logger.info(f"模型检查点路径: {CHECKPOINT_DIR}")
-    
+
     # 步骤2: 准备输出目录
     logger.info("步骤2: 准备输出目录...")
     if not os.path.exists(RESULTS_PATH):
@@ -240,7 +235,7 @@ def main():
         os.makedirs(RESULTS_PATH)
     else:
         logger.info(f"输出目录已存在: {RESULTS_PATH}")
-    
+
     # 步骤3: 加载分词器
     logger.info("步骤3: 加载分词器...")
     tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
@@ -252,40 +247,42 @@ def main():
         trust_remote_code=True,
     )  # type: ignore
     logger.info("分词器加载完成")
-    
-    # # 步骤4: 加载n-gram编码器
-    # logger.info(f"步骤4: 加载n-gram编码器，路径: {NGRAM_ENCODER_DIR}")
-    # ngram_encoder = NgramEncoder.from_file(NGRAM_ENCODER_DIR)
-    # logger.info(f"n-gram词汇表大小: {ngram_encoder.get_vocab_size()}")
-    ngram_encoder = None
+
+    # 步骤4: 加载n-gram编码器
+    if USE_DNABERT2:
+        ngram_encoder = None
+    else:
+        logger.info(f"步骤4: 加载n-gram编码器，路径: {NGRAM_ENCODER_DIR}")
+        ngram_encoder = NgramEncoder.from_file(NGRAM_ENCODER_DIR)
+        logger.info(f"n-gram词汇表大小: {ngram_encoder.get_vocab_size()}")
+
 
     # 步骤5: 加载数据集
     logger.info("步骤5: 加载训练、验证和测试数据集...")
-    
-    # logger.info(f"加载训练集: {DATA_PATH}/train.csv")
-    # train_dataset = LabeledDataset(f"{DATA_PATH}/train.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
-    # logger.info(f"训练集大小: {len(train_dataset)}个样本")
 
-    # logger.info(f"加载测试集: {DATA_PATH}/test.csv")
-    # test_dataset = LabeledDataset(f"{DATA_PATH}/test.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
-    # logger.info(f"测试集大小: {len(test_dataset)}个样本")
+    if USE_DNABERT2:
+        # define datasets and data collator
+        train_dataset = SupervisedDataset(tokenizer=tokenizer, data_path=f"{DATA_PATH}/train.csv", kmer=-1)
+        val_dataset = SupervisedDataset(tokenizer=tokenizer, data_path=f"{DATA_PATH}/dev.csv", kmer=-1)
+        test_dataset = SupervisedDataset(tokenizer=tokenizer, data_path=f"{DATA_PATH}/test.csv", kmer=-1)
+    else:
+        logger.info(f"加载训练集: {DATA_PATH}/train.csv")
+        train_dataset = LabeledDataset(
+            f"{DATA_PATH}/train.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder
+        )
+        logger.info(f"训练集大小: {len(train_dataset)}个样本")
 
-    # logger.info(f"加载验证集: {DATA_PATH}/dev.csv")
-    # val_dataset = LabeledDataset(f"{DATA_PATH}/dev.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder)
-    # logger.info(f"验证集大小: {len(val_dataset)}个样本")
+        logger.info(f"加载测试集: {DATA_PATH}/test.csv")
+        test_dataset = LabeledDataset(
+            f"{DATA_PATH}/test.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder
+        )
+        logger.info(f"测试集大小: {len(test_dataset)}个样本")
 
-
-  # define datasets and data collator
-    train_dataset = SupervisedDataset(tokenizer=tokenizer,
-                                      data_path=f"{DATA_PATH}/train.csv", 
-                                      kmer=-1)
-    val_dataset = SupervisedDataset(tokenizer=tokenizer, 
-                                     data_path=f"{DATA_PATH}/dev.csv",  
-                                     kmer=-1)
-    test_dataset = SupervisedDataset(tokenizer=tokenizer, 
-                                     data_path=f"{DATA_PATH}/test.csv", 
-                                     kmer=-1)
-
+        logger.info(f"加载验证集: {DATA_PATH}/dev.csv")
+        val_dataset = LabeledDataset(
+            f"{DATA_PATH}/dev.csv", tokenizer=tokenizer, ngram_encoder=ngram_encoder
+        )
+        logger.info(f"验证集大小: {len(val_dataset)}个样本")
 
     # 步骤6: 加载模型配置和模型
     logger.info("-------------------------------------------------------...")
@@ -312,16 +309,13 @@ def main():
     #     num_labels=train_dataset.num_labels,
     #     trust_remote_code=True,
     # )
-    
+
     logger.info("模型加载完成")
-
-
 
     # 步骤7: 设置优化器
     logger.info("-------------------------------------------------------...")
     logger.info("步骤7: 配置优化器...")
-    learning_rate = 1e-5
-    logger.info(f"使用AdamW优化器，学习率={learning_rate}，权重衰减=0.01")
+    logger.info(f"使用AdamW优化器，学习率={LEARNING_RATE}，权重衰减=0.01")
 
     ngram_layer_params = [
         param for name, param in model.named_parameters() if ("ngram_layer" in name and "Norm" not in name)
@@ -329,7 +323,7 @@ def main():
     logger.info(f"n-gram层参数数量: {len(ngram_layer_params)}")
     optimizer = torch.optim.AdamW(
         model.parameters(),
-        learning_rate,
+        LEARNING_RATE,
         # momentum=args.momentum,
         weight_decay=0.01,
     )
@@ -342,8 +336,9 @@ def main():
         do_train=True,
         do_eval=True,
         eval_strategy="steps",
-        eval_steps=500,
-        max_grad_norm=1,
+        save_steps=200,
+        eval_steps=200,
+        # max_grad_norm=1,
         per_device_train_batch_size=args.per_device_train_batch_size,
         per_device_eval_batch_size=args.per_device_train_batch_size,
         learning_rate=LEARNING_RATE,
@@ -389,13 +384,13 @@ def main():
     logger.info("-------------------------------------------------------...")
     logger.info("步骤11: 在测试集上评估模型...")
     results = trainer.evaluate(test_dataset)
-    
+
     # 打印评估结果
     logger.info(f"{DATA_PATH}测试集评估结果:")
     logger.info("-" * 50)
     logger.info(f"{'指标名称':<30}{'值':>15}")
     logger.info("-" * 50)
-    
+
     # 按字母顺序排序指标并打印
     for metric_name in sorted(results.keys()):
         metric_value = results[metric_name]
@@ -404,7 +399,7 @@ def main():
         else:
             logger.info(f"{metric_name:<30}{metric_value:>15}")
     logger.info("-" * 50)
-    
+
     # 保存评估结果
     results_path = os.path.join(RESULTS_PATH, "eval_results.json")
     logger.info(f"保存评估结果到: {results_path}")
@@ -431,7 +426,9 @@ def main():
 
         input_ids = data["input_ids"]
         actual_label = data["labels"]
-        texts = tokenizer.decode(input_ids).replace("[CLS] ", "").replace(" [SEP]", "").replace(" [PAD]", "")
+        texts = (
+            tokenizer.decode(input_ids).replace("[CLS] ", "").replace(" [SEP]", "").replace(" [PAD]", "")
+        )
 
         results["text"].append(texts)
         results["actual_label"].append(actual_label)
@@ -450,9 +447,9 @@ def main():
     # logger.info("步骤15: 生成HTML可视化报告...")
     # html_path = os.path.join(RESULTS_PATH, "prediction_report.html")
     # generate_prediction_html_report(df, results, html_path)
-    
+
     logger.info("所有步骤完成")
 
 
-if __name__ == "__main__": 
+if __name__ == "__main__":
     main()

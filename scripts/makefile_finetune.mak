@@ -5,70 +5,74 @@ define check_defined
 fi
 endef
 
-lr=3e-5
-PER_DEVICE_TRAIN_BATCH_SIZE=8
-PER_DEVICE_EVAL_BATCH_SIZE=32
+FINETUNE_LEARNING_RATE?=3e-5
+PER_DEVICE_TRAIN_BATCH_SIZE?=8
+PER_DEVICE_EVAL_BATCH_SIZE?=32
 
+# build finetune extra args. make sure we have whitespace between args
+FINETUNE_EXTRA_ARGS = --fp16
+# check if we are running dnabert2 instead of our model
+ifeq ($(DNABERT2), true)
+	FINETUNE_EXTRA_ARGS+=--bert
+	PRETRAIN_CHECKPOINT=zhihan1996/DNABERT-2-117M
+else
+	FINETUNE_EXTRA_ARGS+=--ngram_encoder_dir $(MAIN_NGRAM_ENCODER_DIR)
+	PRETRAIN_CHECKPOINT=$(DNAZEN_PRETRAIN_DATA_DIR)/output/checkpoint-$(FINETUNE_CHECKPOINT_STEP)
+endif
 
-# FINETUNE_DATA_DIR = /data1/peter/GUE
-PRETRAIN_CHECKPOINT=$(DNAZEN_PRETRAIN_DATA_DIR)/output/checkpoint-$(FINETUNE_CHECKPOINT_STEP)
+# FINETUNE_DATA_DIR = /data1/peter
 check_defined_all:
 	$(call check_defined,FINETUNE_DATA_DIR)
 	$(call check_defined,FINETUNE_OUT_DIR)
-	$(call check_defined,FINETUNE_CHECKPOINT_STEP)
-	$(call check_defined,MAIN_NGRAM_ENCODER_DIR)
+	
 
 
 $(FINETUNE_OUT_DIR)/emp/%:
-	python run_finetune.py \
+	python ../src/train/run_finetune.py \
 		--data_path $(FINETUNE_DATA_DIR)/GUE/EMP/$* \
 		--checkpoint $(PRETRAIN_CHECKPOINT) \
-		--ngram_encoder_dir $(MAIN_NGRAM_ENCODER_DIR) \
 		--per_device_train_batch_size $(PER_DEVICE_TRAIN_BATCH_SIZE) \
 		--per_device_eval_batch_size $(PER_DEVICE_EVAL_BATCH_SIZE) \
 		--gradient_accumulation_steps 1 \
-		--lr $(lr) \
+		--lr $(FINETUNE_LEARNING_RATE) \
 		--num_train_epochs 5 \
-		--fp16 \
+		$(FINETUNE_EXTRA_ARGS) \
 		--out $@
 
 $(FINETUNE_OUT_DIR)/pd/%:
-		python run_finetune.py \
+		python ../src/train/run_finetune.py \
 		--data_path $(FINETUNE_DATA_DIR)/GUE/prom/$* \
 		--checkpoint $(PRETRAIN_CHECKPOINT) \
-		--ngram_encoder_dir $(MAIN_NGRAM_ENCODER_DIR) \
 		--per_device_train_batch_size $(PER_DEVICE_TRAIN_BATCH_SIZE) \
 		--per_device_eval_batch_size $(PER_DEVICE_EVAL_BATCH_SIZE) \
 		--gradient_accumulation_steps 1 \
-		--lr $(lr) \
+		--lr $(FINETUNE_LEARNING_RATE) \
 		--num_train_epochs 10 \
-		--fp16 \
+		$(FINETUNE_EXTRA_ARGS) \
 		--out $@
 
 $(FINETUNE_OUT_DIR)/tf/%:
-		python run_finetune.py \
+		python ../src/train/run_finetune.py \
 		--data_path $(FINETUNE_DATA_DIR)/GUE/tf/$* \
 		--checkpoint $(PRETRAIN_CHECKPOINT) \
-		--ngram_encoder_dir $(MAIN_NGRAM_ENCODER_DIR) \
 		--per_device_train_batch_size $(PER_DEVICE_TRAIN_BATCH_SIZE) \
 		--per_device_eval_batch_size $(PER_DEVICE_EVAL_BATCH_SIZE) \
 		--gradient_accumulation_steps 1 \
-		--lr $(lr) \
+		--lr $(FINETUNE_LEARNING_RATE) \
 		--num_train_epochs 6 \
-		--fp16 \
+		$(FINETUNE_EXTRA_ARGS) \
 		--out $@
 
 $(FINETUNE_OUT_DIR)/mouse/%:
-		python run_finetune.py \
+		python ../src/train/run_finetune.py \
 		--data_path $(FINETUNE_DATA_DIR)/GUE/mouse/$* \
 		--checkpoint $(PRETRAIN_CHECKPOINT) \
-		--ngram_encoder_dir $(MAIN_NGRAM_ENCODER_DIR) \
 		--per_device_train_batch_size $(PER_DEVICE_TRAIN_BATCH_SIZE) \
 		--per_device_eval_batch_size $(PER_DEVICE_EVAL_BATCH_SIZE) \
 		--gradient_accumulation_steps 1 \
-		--lr $(lr) \
+		--lr $(FINETUNE_LEARNING_RATE) \
 		--num_train_epochs 6 \
-		--fp16 \
+		$(FINETUNE_EXTRA_ARGS) \
 		--out $@
 
 .PHONY: all finetune-emp finetune-pd finetune-tf check_defined_all
