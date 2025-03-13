@@ -220,7 +220,7 @@ def get_gue_sequences(gue_dir: str, sequences):
             file_sequences = extract_dna_sequences(csv_file)
             sequences.extend(file_sequences)
             total_extracted += len(file_sequences)
-            logger.info(f"从 {csv_file} 提取了 {len(file_sequences)} 条DNA序列，累计: {total_extracted}")
+            logger.debug(f"从 {csv_file} 提取了 {len(file_sequences)} 条DNA序列，累计: {total_extracted}")
 
 
 def get_gue_sequences_type(gue_dir: str, sequences_dev,sequences_train,sequences_test):
@@ -239,7 +239,7 @@ def get_gue_sequences_type(gue_dir: str, sequences_dev,sequences_train,sequences
             sequences_test.extend(file_sequences)
             
         total_extracted += len(file_sequences)
-        logger.info(f"从 {csv_file} 提取了 {len(file_sequences)} 条DNA序列，累计: {total_extracted}")
+        logger.info(f"从 {csv_file} 提取了 {len(file_sequences)}  {total_extracted}")
     logger.info(f"共提取了{len(csv_files)}个cvs文件， {len(sequences_train)} 条DNA序列用于训练，{len(sequences_dev)} 条DNA序列用于验证，{len(sequences_test)} 条DNA序列用于测试")
 
     
