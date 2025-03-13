@@ -138,7 +138,7 @@ python ../src/train/report.py --tasks_dir ../data/output/finetune/output/ --outp
 #bash finetune.sh --experiment 1 emp H3K4me1
 #bash finetune.sh --experiment 1 emp H3K4me2
 #bash finetune.sh --experiment 1 tf 3
-#tf/3 mouse/4 prom_300_all prom_core_all H3K14me1 H3K14me2 H3K14me3
+#tf/3 mouse/4 prom_300_all prom_core_all H3K4me1 H3K14me2 H3K14me3
 
 #bash finetune.sh --experiment 1 --parallel
 bash finetune.sh --experiment 1 --parallel --resume

@@ -427,7 +427,7 @@ if [ "$PARALLEL" = true ]; then
   # PD任务
   PD_SUBTASKS=("prom_300_all" "prom_core_all")
   # EMP任务
-  EMP_SUBTASKS=("H3" "H3K14ac" "H3K36me3" "H3K14me1" "H3K14me2" "H3K14me3" "H3K9ac" "H4" "H4ac")
+  EMP_SUBTASKS=("H3" "H3K14ac" "H3K36me3" "H3K4me1" "H3K4me2" "H3K4me3" "H3K9ac" "H4" "H4ac")
   
   # 处理所有任务
   echo "开始处理所有任务..."
