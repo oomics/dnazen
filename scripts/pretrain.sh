@@ -193,11 +193,8 @@ CMD="python ../src/train/run_pretrain.py \
   # --dev_dir \"$DEV_DIR\"  "
 
 # 根据数据加载模式添加相应参数
-if [ "$USE_STREAMING" = true ]; then
-  CMD="$CMD --streaming --buffer-size $BUFFER_SIZE"
-else
-  CMD="$CMD --cache-dir \"$CACHE_DIR\""
-fi
+CMD="$CMD --cache-dir \"$CACHE_DIR\""
+
 
 # 输出完整命令
 echo "执行命令: $CMD"
