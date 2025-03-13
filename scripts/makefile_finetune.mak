@@ -8,6 +8,12 @@ endef
 FINETUNE_LEARNING_RATE?=3e-5
 PER_DEVICE_TRAIN_BATCH_SIZE?=8
 PER_DEVICE_EVAL_BATCH_SIZE?=32
+FINETUNE_OUT_DIR?=../data/finetune-results
+
+ALL_EMP_TASK_NAMES?=H3K14ac H3K4me1 H3K4me2 H3K4me3
+ALL_PROM_DETECTION_TASK_NAMES?=prom_300_all prom_core_all
+ALL_TRANS_FACTORS_TASK_NAMES?=0 1 2 3 4
+ALL_TRANS_FACTORS_MOUSE_TASK_NAMES?=3 4
 
 # build finetune extra args. make sure we have whitespace between args
 FINETUNE_EXTRA_ARGS = --fp16
@@ -23,11 +29,9 @@ endif
 # FINETUNE_DATA_DIR = /data1/peter
 check_defined_all:
 	$(call check_defined,FINETUNE_DATA_DIR)
-	$(call check_defined,FINETUNE_OUT_DIR)
-	
+# $(call check_defined,FINETUNE_OUT_DIR)
 
-
-$(FINETUNE_OUT_DIR)/emp/%:
+$(FINETUNE_OUT_DIR)/EMP/%:
 	python ../src/train/run_finetune.py \
 		--data_path $(FINETUNE_DATA_DIR)/GUE/EMP/$* \
 		--checkpoint $(PRETRAIN_CHECKPOINT) \
@@ -39,7 +43,7 @@ $(FINETUNE_OUT_DIR)/emp/%:
 		$(FINETUNE_EXTRA_ARGS) \
 		--out $@
 
-$(FINETUNE_OUT_DIR)/pd/%:
+$(FINETUNE_OUT_DIR)/prom/%:
 		python ../src/train/run_finetune.py \
 		--data_path $(FINETUNE_DATA_DIR)/GUE/prom/$* \
 		--checkpoint $(PRETRAIN_CHECKPOINT) \
@@ -77,15 +81,24 @@ $(FINETUNE_OUT_DIR)/mouse/%:
 
 .PHONY: all finetune-emp finetune-pd finetune-tf check_defined_all
 
-finetune-emp: $(FINETUNE_OUT_DIR)/emp/H3K14ac \
-	$(FINETUNE_OUT_DIR)/emp/H3K4me1 \
-	$(FINETUNE_OUT_DIR)/emp/H3K4me2 \
-	$(FINETUNE_OUT_DIR)/emp/H3K4me3
+_EMP_TASKS=$(foreach target,$(ALL_EMP_TASK_NAMES),$(FINETUNE_OUT_DIR)/EMP/$(target))
+finetune-emp: $(_EMP_TASKS)
+# finetune-emp: $(FINETUNE_OUT_DIR)/EMP/H3K14ac \
+# 	$(FINETUNE_OUT_DIR)/EMP/H3K4me1 \
+# 	$(FINETUNE_OUT_DIR)/EMP/H3K4me2 \
+# 	$(FINETUNE_OUT_DIR)/EMP/H3K4me3
 
-finetune-pd: $(FINETUNE_OUT_DIR)/pd/prom_300_all \
-	$(FINETUNE_OUT_DIR)/pd/prom_core_all
+_PROM_DETECTION_TASKS=$(foreach target,$(ALL_PROM_DETECTION_TASK_NAMES),$(FINETUNE_OUT_DIR)/prom/$(target))
+finetune-pd: $(_PROM_DETECTION_TASKS)
+# finetune-pd: $(FINETUNE_OUT_DIR)/prom/prom_300_all \
+# 	$(FINETUNE_OUT_DIR)/prom/prom_core_all
 
-finetune-tf: $(FINETUNE_OUT_DIR)/tf/3 \
-	$(FINETUNE_OUT_DIR)/mouse/4
+_TRANS_FACTORS_TASKS=$(foreach target,$(ALL_TRANS_FACTORS_TASK_NAMES),$(FINETUNE_OUT_DIR)/tf/$(target))
+finetune-tf: $(_TRANS_FACTORS_TASKS)
 
-all: check_defined_all finetune-pd finetune-emp finetune-tf
+_TRANS_FACTORS_MOUSE_TASKS=$(foreach target,$(ALL_TRANS_FACTORS_MOUSE_TASK_NAMES),$(FINETUNE_OUT_DIR)/mouse/$(target))
+finetune-mouse: $(_TRANS_FACTORS_MOUSE_TASKS)
+# finetune-mouse: $(FINETUNE_OUT_DIR)/mouse/3 \
+# 	$(FINETUNE_OUT_DIR)/mouse/4
+
+all: check_defined_all finetune-pd finetune-emp finetune-tf finetune-mouse
