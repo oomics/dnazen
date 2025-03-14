@@ -1,11 +1,12 @@
 #!/bin/bash
-USE_GUE="../../GUE/"   
-USE_MSPECIES="../../GUE/"          
+USE_GUE="../../GUE/"        
 USE_MSPECIES="../../mspecies/dev/dev.txt"
 
-NGRAM_ENCODER_PATH="../../out/exp1_pmi2/ngram_encoder.json"
 EXPERIMENT_DIR="../data/pretrain/exp1_pmi2"
 COVERAGE_DIR="${EXPERIMENT_DIR}/coverage"
+NGRAM_ENCODER_PATH="${EXPERIMENT_DIR}/ngram_encoder.json"
+
+TOKENIZER="zhihan1996/DNABERT-2-117M"
 
 RUN_NGRAM_ENCODER=true
 RUN_COVERAGE_ANALYSIS=true
@@ -26,7 +27,7 @@ if [[ "$RUN_NGRAM_ENCODER" == "true" ]]; then
     --gue-dir ${USE_GUE} \
     --input ${USE_MSPECIES} \
     --output ${EXPERIMENT_DIR}/ngram_encoder.json \
-    --tok zhihan1996/DNABERT-2-117M \
+    --tok ${TOKENIZER} \
     --min-ngram-len 2 \
     --max-ngram-len 5 \
     --max-ngrams 30 \
@@ -59,9 +60,9 @@ if [[ "$RUN_COVERAGE_ANALYSIS" == "true" ]]; then
   CMD="python ../src/dataset/ngram_encoder_analyze.py \
     --encoder ${EXPERIMENT_DIR}/ngram_encoder.json \
     --output-dir ${COVERAGE_DIR} \
-    --tok zhihan1996/DNABERT-2-117M \
-    --gue-dir ../data/GUE \
-    --mspecies-dir ../data/pretrain/dev/dev.txt \
+    --tok ${TOKENIZER} \
+    --gue-dir ${USE_GUE} \
+    --mspecies-dir ${USE_MSPECIES} \
     --ngram-list ${EXPERIMENT_DIR}/ngram_list.txt "
 
   
