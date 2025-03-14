@@ -479,7 +479,7 @@ def save_report_data_to_csv(report_data_list, output_path):
     # 定义CSV表头
     headers = [
         "数据集", "任务", "指标", "训练集大小", "验证集大小", "测试集大小", 
-        "论文MCC", "论文MCC(GUE)", "DNABERT准确率", "DNABERT2 MCC", "复现偏差",
+        "论文MCC", "论文MCC(GUE)", "DNABERT准确率", "DNABERT2 复现MCC", "复现偏差",
         "实验MCC", "MCC差异", "MCC(GUE)差异"
     ]
     

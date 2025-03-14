@@ -10,6 +10,38 @@
 # 数据路径参数
 EXPERIMENT_ID="exp1_pmi2"
 
+
+# 显示帮助信息
+show_help() {
+    echo "用法: $0 [选项]"
+    echo
+    echo "选项:"
+    echo "  -h, --help                显示帮助信息"
+    echo "  -e, --experiment-id ID    指定实验ID (默认: $EXPERIMENT_ID)"
+    echo
+}
+
+# 解析命令行参数
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        -e|--experiment-id)
+            EXPERIMENT_ID="$2"
+            shift 2
+            ;;
+        *)
+            echo "未知参数: $1"
+            show_help
+            exit 1
+            ;;
+    esac
+done
+
+
+
 # 输出路径参数
 EXPERIMENT_DIR="../../out/${EXPERIMENT_ID}"
 PRETRAIN_OUTPUT_DIR="${EXPERIMENT_DIR}/pretrain"
