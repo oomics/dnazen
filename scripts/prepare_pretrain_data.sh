@@ -25,11 +25,11 @@ DEV_DATA="../../mspecies/dev/dev.txt"
 # 输出路径参数
 EXPERIMENT_ID="exp1_pmi2"
 EXPERIMENT_DIR="../../out/${EXPERIMENT_ID}"
-PRETRAIN_OUTPUT_DIR="${EXPERIMENT_DIR}/pretrain_data"
+PRETRAIN_OUTPUT_DIR="${EXPERIMENT_DIR}/pretrain"
 
-TRAIN_OUTPUT="${PRETRAIN_OUTPUT_DIR}/train/train.pt"
-DEV_OUTPUT="${PRETRAIN_OUTPUT_DIR}/dev/dev.pt"
-PRETRAIN_TOKENIZED_DATA_DIR="${PRETRAIN_OUTPUT_DIR}/"
+TRAIN_OUTPUT="../../mspecies/train/train.pt"
+DEV_OUTPUT="../../mspecies/dev/dev.pt"
+PRETRAIN_TOKENIZED_DATA_DIR="../../mspecies/"
 
 
 # 模型参数
