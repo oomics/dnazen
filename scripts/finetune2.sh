@@ -7,17 +7,26 @@
 # 全局配置变量
 ###################################################################################
 
+# 数据路径参数
+EXPERIMENT_ID="exp1_pmi2"
+
+# 输出路径参数
+EXPERIMENT_DIR="../../out/${EXPERIMENT_ID}"
+PRETRAIN_OUTPUT_DIR="${EXPERIMENT_DIR}/pretrain"
+
+# 路径配置
+GUE_DIR="../../GUE/"                        # 数据根目录
+PRETRAIN_CHECKPOINT="${EXPERIMENT_DIR}/checkpoint-" # 预训练模型检查点
+#NGRAM_ENCODER_PATH="../../out/exp1_pmi2/" # NGram编码器路径
+NGRAM_ENCODER_PATH="${EXPERIMENT_DIR}/ngram_encoder.json" # NGram编码器路径
+FINETUNE_OUT_DIR="../output/finetune"        # 微调输出目录
+REPORT_OUT_DIR="../output/report"            # 报告输出目录
+
+
 # 运行模式配置
 RESUME=true                                 # 是否从断点继续执行
 RESUME_FILE="./finetune_progress.txt"        # 存储已完成任务的文件
 
-# 路径配置
-GUE_DIR="../../GUE/"                        # 数据根目录
-PRETRAIN_CHECKPOINT="../../out/exp1_pmi2/checkpoint-198" # 预训练模型检查点
-#NGRAM_ENCODER_PATH="../../out/exp1_pmi2/" # NGram编码器路径
-NGRAM_ENCODER_PATH="../../out/exp1_pmi2/ngram_encoder.json" # NGram编码器路径
-FINETUNE_OUT_DIR="../output/finetune"        # 微调输出目录
-REPORT_OUT_DIR="../output/report"            # 报告输出目录
 
 # 微调参数配置
 PER_DEVICE_TRAIN_BATCH_SIZE=32               # 训练批次大小
@@ -242,9 +251,11 @@ task4() {
     echo "Task 4 completed"
 }
 
-task1
-task2
-task3
-task4
+task1 &
+task2 &
+task3 &
+task4 &
+
+wait
 
 echo "所有任务处理完成！"

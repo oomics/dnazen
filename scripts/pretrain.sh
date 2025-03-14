@@ -130,8 +130,8 @@ CMD="python ../src/train/run_pretrain.py \
   --n-epoch $N_EPOCH \
   --seed $SEED \
   --num-workers $NUM_WORKERS \
-  --train_dir \"$EXPERIMENT_DIR/pretrain_data/train\" \
-  --dev_dir \"$EXPERIMENT_DIR/pretrain_data/dev\" "
+  --train_dir \"$EXPERIMENT_DIR/pretrain/train\" \
+  --dev_dir \"$EXPERIMENT_DIR/pretrain/dev\" "
 
   # --train_dir \"$TRAIN_DIR\" \
   # --dev_dir \"$DEV_DIR\"  "
