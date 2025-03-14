@@ -49,7 +49,7 @@ declare -A TASK_PATHS
 TASK_PATHS[tf]="tf"
 TASK_PATHS[mouse]="mouse"
 TASK_PATHS[pd]="prom"
-TASK_PATHS[emp]="emp"
+TASK_PATHS[emp]="EMP"
 TASK_PATHS[virus]="virus"
 TASK_PATHS[splice]="splice"
 
@@ -202,132 +202,89 @@ process_task() {
 # 任务执行
 ###################################################################################
 
-# 创建日志目录
-LOG_DIR="${FINETUNE_OUT_DIR}/logs"
-mkdir -p "$LOG_DIR"
-echo "日志将保存在目录: $LOG_DIR"
-
 task1() {
-    local LOG_FILE="${LOG_DIR}/task1_tf.log"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [任务1-TF] 开始执行" | tee -a "$LOG_FILE"
-    echo "Task 1 started" | tee -a "$LOG_FILE"
+    echo "Task 1 started"
     # 处理TF任务
     for subtask in "${TF_SUBTASKS[@]}"; do
-      echo "[$(date '+%Y-%m-%d %H:%M:%S')] [任务1-TF] 处理子任务: $subtask" | tee -a "$LOG_FILE"
-      process_task "tf" "$subtask" "${TASK_EPOCHS[tf]}" 2>&1 | tee -a "$LOG_FILE"
+      process_task "tf" "$subtask" "${TASK_EPOCHS[tf]}"
       if [ $? -ne 0 ] && [ "$RESUME" = false ]; then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [任务1-TF] 子任务失败，退出执行" | tee -a "$LOG_FILE"
+        echo "任务失败，退出执行"
         exit 1
       fi
     done
     sleep 3
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [任务1-TF] 完成" | tee -a "$LOG_FILE"
+    echo "Task 1 completed"
 }
 
 task2() {
-    local LOG_FILE="${LOG_DIR}/task2_mouse.log"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [任务2-Mouse] 开始执行" | tee -a "$LOG_FILE"
-    echo "Task 2 started" | tee -a "$LOG_FILE"
+    echo "Task 2 started"
     # 处理Mouse任务
     for subtask in "${MOUSE_SUBTASKS[@]}"; do
-      echo "[$(date '+%Y-%m-%d %H:%M:%S')] [任务2-Mouse] 处理子任务: $subtask" | tee -a "$LOG_FILE"
-      process_task "mouse" "$subtask" "${TASK_EPOCHS[mouse]}" 2>&1 | tee -a "$LOG_FILE"
+      process_task "mouse" "$subtask" "${TASK_EPOCHS[mouse]}"
       if [ $? -ne 0 ] && [ "$RESUME" = false ]; then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [任务2-Mouse] 子任务失败，退出执行" | tee -a "$LOG_FILE"
+        echo "任务失败，退出执行"
         exit 1
       fi
     done
     sleep 3
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [任务2-Mouse] 完成" | tee -a "$LOG_FILE"
+    echo "Task 2 completed"
 }
 
 task3() {
-    local LOG_FILE="${LOG_DIR}/task3_pd.log"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [任务3-PD] 开始执行" | tee -a "$LOG_FILE"
-    echo "Task 3 started" | tee -a "$LOG_FILE"
+    echo "Task 3 started"
     # 处理PD任务
     for subtask in "${PD_SUBTASKS[@]}"; do
-      echo "[$(date '+%Y-%m-%d %H:%M:%S')] [任务3-PD] 处理子任务: $subtask" | tee -a "$LOG_FILE"
-      process_task "pd" "$subtask" "${TASK_EPOCHS[pd]}" 2>&1 | tee -a "$LOG_FILE"
+      process_task "pd" "$subtask" "${TASK_EPOCHS[pd]}"
       if [ $? -ne 0 ] && [ "$RESUME" = false ]; then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [任务3-PD] 子任务失败，退出执行" | tee -a "$LOG_FILE"
+        echo "任务失败，退出执行"
         exit 1
       fi
     done
     sleep 3
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [任务3-PD] 完成" | tee -a "$LOG_FILE"
+    echo "Task 3 completed"
 }
 
 task4() {
-    local LOG_FILE="${LOG_DIR}/task4_emp.log"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [任务4-EMP] 开始执行" | tee -a "$LOG_FILE"
-    echo "Task 4 started" | tee -a "$LOG_FILE"
+    echo "Task 4 started"
     # 处理EMP任务
     for subtask in "${EMP_SUBTASKS[@]}"; do
-      echo "[$(date '+%Y-%m-%d %H:%M:%S')] [任务4-EMP] 处理子任务: $subtask" | tee -a "$LOG_FILE"
-      process_task "emp" "$subtask" "${TASK_EPOCHS[emp]}" 2>&1 | tee -a "$LOG_FILE"
+      process_task "emp" "$subtask" "${TASK_EPOCHS[emp]}"
       if [ $? -ne 0 ] && [ "$RESUME" = false ]; then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [任务4-EMP] 子任务失败，退出执行" | tee -a "$LOG_FILE"
+        echo "任务失败，退出执行"
         exit 1
       fi
     done
     sleep 3
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [任务4-EMP] 完成" | tee -a "$LOG_FILE"
+    echo "Task 4 completed"
 }
 
 task5() {
-    local LOG_FILE="${LOG_DIR}/task5_virus.log"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [任务5-Virus] 开始执行" | tee -a "$LOG_FILE"
-    echo "Task 5 started" | tee -a "$LOG_FILE"
+    echo "Task 5 started"
     # 处理Virus任务
     for subtask in "${VIRUS_SUBTASKS[@]}"; do
-      echo "[$(date '+%Y-%m-%d %H:%M:%S')] [任务5-Virus] 处理子任务: $subtask" | tee -a "$LOG_FILE"
-      process_task "virus" "$subtask" "${TASK_EPOCHS[virus]}" 2>&1 | tee -a "$LOG_FILE"
+      process_task "virus" "$subtask" "${TASK_EPOCHS[virus]}"
     done
     sleep 3
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [任务5-Virus] 完成" | tee -a "$LOG_FILE"
+    echo "Task 5 completed"
 } 
 
 task6() {
-    local LOG_FILE="${LOG_DIR}/task6_splice.log"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [任务6-Splice] 开始执行" | tee -a "$LOG_FILE"
-    echo "Task 6 started" | tee -a "$LOG_FILE"
+    echo "Task 6 started"
     # 处理Splice任务
     for subtask in "${SPLICE_SUBTASKS[@]}"; do
-      echo "[$(date '+%Y-%m-%d %H:%M:%S')] [任务6-Splice] 处理子任务: $subtask" | tee -a "$LOG_FILE"
-      process_task "splice" "$subtask" "${TASK_EPOCHS[splice]}" 2>&1 | tee -a "$LOG_FILE"
+      process_task "splice" "$subtask" "${TASK_EPOCHS[splice]}"
     done
     sleep 3
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [任务6-Splice] 完成" | tee -a "$LOG_FILE"
+    echo "Task 6 completed"
 }
 
-# 并行执行所有任务
-echo "开始并行执行所有任务..."
-echo "可以通过查看 $LOG_DIR 目录下的日志文件跟踪各任务进度"
-
-task1 > >(tee -a "${LOG_DIR}/stdout_task1.log") 2> >(tee -a "${LOG_DIR}/stderr_task1.log" >&2) &
-task2 > >(tee -a "${LOG_DIR}/stdout_task2.log") 2> >(tee -a "${LOG_DIR}/stderr_task2.log" >&2) &
-task3 > >(tee -a "${LOG_DIR}/stdout_task3.log") 2> >(tee -a "${LOG_DIR}/stderr_task3.log" >&2) &
-task4 > >(tee -a "${LOG_DIR}/stdout_task4.log") 2> >(tee -a "${LOG_DIR}/stderr_task4.log" >&2) &
-task5 > >(tee -a "${LOG_DIR}/stdout_task5.log") 2> >(tee -a "${LOG_DIR}/stderr_task5.log" >&2) &
-task6 > >(tee -a "${LOG_DIR}/stdout_task6.log") 2> >(tee -a "${LOG_DIR}/stderr_task6.log" >&2) &
+task1 &
+task2 &
+task3 & 
+task4 &
+task5 &
+task6 &
 
 wait
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] 所有任务处理完成！"
-echo "详细日志可在 $LOG_DIR 目录下查看"
-
-# 生成汇总报告
-SUMMARY_LOG="${LOG_DIR}/summary.log"
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] 任务执行汇总" > "$SUMMARY_LOG"
-echo "================================================" >> "$SUMMARY_LOG"
-echo "任务完成统计:" >> "$SUMMARY_LOG"
-grep -c "完成" "${LOG_DIR}/task1_tf.log" >> "$SUMMARY_LOG"
-grep -c "完成" "${LOG_DIR}/task2_mouse.log" >> "$SUMMARY_LOG"
-grep -c "完成" "${LOG_DIR}/task3_pd.log" >> "$SUMMARY_LOG"
-grep -c "完成" "${LOG_DIR}/task4_emp.log" >> "$SUMMARY_LOG"
-grep -c "完成" "${LOG_DIR}/task5_virus.log" >> "$SUMMARY_LOG"
-grep -c "完成" "${LOG_DIR}/task6_splice.log" >> "$SUMMARY_LOG"
-echo "================================================" >> "$SUMMARY_LOG"
-
-echo "已生成任务汇总报告: $SUMMARY_LOG"
+echo "所有任务处理完成！"
