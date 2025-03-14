@@ -7,9 +7,13 @@
 ###################################################################################
 
 # 解析命令行参数
-EXPERIMENT_ID="1"
-EXPERIMENT_DIR="../data/pretrain/exp1_gue_mspecies/"
 
+# 数据路径参数
+EXPERIMENT_ID="exp1_pmi2"
+
+# 输出路径参数
+EXPERIMENT_DIR="../../out/${EXPERIMENT_ID}"
+PRETRAIN_OUTPUT_DIR="${EXPERIMENT_DIR}/pretrain"
 
 echo "使用实验: $EXPERIMENT_NAME (ID: $EXPERIMENT_ID)"
 echo "实验目录: $EXPERIMENT_DIR"
@@ -19,7 +23,7 @@ echo "实验目录: $EXPERIMENT_DIR"
 ###################################################################################
 
 # 基础数据目录
-DATA_DIR="../data/pretrain"
+DATA_DIR="${EXPERIMENT_DIR}/pretrain"
 # 训练数据目录文件
 TRAIN_DIR_FILE="$DATA_DIR/train/train.pt" 
 # 验证数据目录文件
