@@ -299,7 +299,7 @@ if [[ "$RUN_NGRAM_ENCODER" == "true" ]]; then
     --min-ngram-len 2 \
     --max-ngram-len 5 \
     --max-ngrams 30 \
-    --min-pmi 5 \
+    --min-pmi 2 \
     --min-token-count 5 \
     --min-ngram-freq 5 \
     --method pmi \
