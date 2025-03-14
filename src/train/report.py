@@ -19,6 +19,7 @@ from sklearn.metrics import (
     recall_score,
 )
 import pandas as pd
+import ipdb; 
 #import transformers
 #import torch
 #from transformers import (
@@ -174,7 +175,7 @@ data_in_parpare_dict = [
         "复现偏差": -0.02990000000000002
       },
       {
-        "DATA": "prom_prom_300_all",
+        "DATA": "pd_prom_300_all",
         "Task": "Promoter Detection-all",
         "Metric": "mcc",
         "Train": None,
@@ -187,7 +188,7 @@ data_in_parpare_dict = [
         "复现偏差": 0.006300000000000096
       },
       {
-        "DATA": "prom_prom_300_notata",
+        "DATA": "pd_prom_300_notata",
         "Task": "Promoter Detection-notata",
         "Metric": "mcc",
         "Train": None,
@@ -200,7 +201,7 @@ data_in_parpare_dict = [
         "复现偏差": -0.0009000000000000341
       },
       {
-        "DATA": "prom_prom_300_tata",
+        "DATA": "pd_prom_300_tata",
         "Task": "Promoter Detection-tata",
         "Metric": "mcc",
         "Train": None,
@@ -278,7 +279,7 @@ data_in_parpare_dict = [
         "复现偏差": -0.015400000000000063
       },
       {
-        "DATA": "prom_prom_core_all",
+        "DATA": "pd_prom_core_all",
         "Task": "Core Promoter Detection-all",
         "Metric": "mcc",
         "Train": None,
@@ -291,7 +292,7 @@ data_in_parpare_dict = [
         "复现偏差": -0.03560000000000002
       },
       {
-        "DATA": "prom_prom_core_notata",
+        "DATA": "pd_prom_core_notata",
         "Task": "Core Promoter Detection-notata",
         "Metric": "mcc",
         "Train": None,
@@ -304,7 +305,7 @@ data_in_parpare_dict = [
         "复现偏差": 0.008399999999999892
       },
       {
-        "DATA": "prom_prom_core_tata",
+        "DATA": "pd_prom_core_tata",
         "Task": "Core Promoter Detection-tata",
         "Metric": "mcc",
         "Train": 4094.0,
@@ -651,14 +652,22 @@ def generate_parallel_finetune_progress_report(tasks_dir, output_path):
     
     report_data_list = []
 
+    logger.info(f"completed_tasks: {completed_tasks}")
     
     for item in data_in_parpare_dict:
         report_data = ReportData(data=item)
         match_task = None
         for task in completed_tasks:
-            if report_data.data_name == task["task_name"]:
+            if report_data.data_name.lower() == task["task_name"].lower():
                 match_task=task
                 logger.info(f"找到匹配任务: {match_task}")
+                break
+        
+        if match_task is None:
+            logger.info(f"未找到匹配任务: {report_data.data_name}")
+            # 只在需要调试时取消注释下面的代码
+            # ipdb.set_trace()
+            
         if match_task is not None:
             report_data.eval_results = match_task.get("eval_results", {})
             report_data.accuracy = match_task.get("eval_accuracy")

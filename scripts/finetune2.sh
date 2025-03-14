@@ -41,6 +41,8 @@ TASK_EPOCHS[tf]=5
 TASK_EPOCHS[mouse]=5
 TASK_EPOCHS[pd]=10
 TASK_EPOCHS[emp]=5
+TASK_EPOCHS[virus]=5
+TASK_EPOCHS[splice]=5
 
 # 各任务数据路径
 declare -A TASK_PATHS
@@ -48,6 +50,8 @@ TASK_PATHS[tf]="tf"
 TASK_PATHS[mouse]="mouse"
 TASK_PATHS[pd]="pd"
 TASK_PATHS[emp]="emp"
+TASK_PATHS[virus]="virus"
+TASK_PATHS[splice]="splice"
 
 # 创建输出目录
 mkdir -p "$FINETUNE_OUT_DIR"
@@ -55,13 +59,16 @@ mkdir -p "$REPORT_OUT_DIR"
 
 # TF任务
 TF_SUBTASKS=("0" "1" "2" "3" "4")
-#TF_SUBTASKS=("1" "2" "3" "4")
 # Mouse任务
 MOUSE_SUBTASKS=("0" "1" "2" "3" "4")
 # PD任务
 PD_SUBTASKS=("prom_300_all" "prom_core_all")
 # EMP任务
-EMP_SUBTASKS=("H3" "H3K14ac" "H3K36me3" "H3K4me1" "H3K4me2" "H3K4me3" "H3K9ac" "H4" "H4ac")
+EMP_SUBTASKS=("H3" "H3K14ac" "H3K36me3" "H3K4me1" "H3K4me2" "H3K4me3" "H3K79me3" "H3K9ac" "H4" "H4ac")
+# Virus任务
+VIRUS_SUBTASKS=("covid")
+# Splice任务
+SPLICE_SUBTASKS=("reconstructed")
 
 ###################################################################################
 # 打印配置信息函数
@@ -251,10 +258,32 @@ task4() {
     echo "Task 4 completed"
 }
 
-task1 &
-task2 &
-task3 &
-task4 &
+task5() {
+    echo "Task 5 started"
+    # 处理Virus任务
+    for subtask in "${VIRUS_SUBTASKS[@]}"; do
+      process_task "virus" "$subtask" "${TASK_EPOCHS[virus]}"
+    done
+    sleep 3
+    echo "Task 5 completed"
+} 
+
+task6() {
+    echo "Task 6 started"
+    # 处理Splice任务
+    for subtask in "${SPLICE_SUBTASKS[@]}"; do
+      process_task "splice" "$subtask" "${TASK_EPOCHS[splice]}"
+    done
+    sleep 3
+    echo "Task 6 completed"
+}
+
+task1 
+task2 
+task3 
+task4 
+task5 
+task6 
 
 wait
 
