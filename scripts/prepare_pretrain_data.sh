@@ -5,31 +5,26 @@
 ###################################################################################
 
 # 执行控制参数
-#RUN_TOKENIZE_TRAIN=true
-#RUN_TOKENIZE_DEV=true
+RUN_TOKENIZE_TRAIN=true
+RUN_TOKENIZE_DEV=true
 RUN_PREPARE_DATASET=true
 
 # 数据路径参数
-GUE_DIR="../../GUE/"                        # 数据根目录
-PRETRAIN_CHECKPOINT="../../out/exp1_pmi2/checkpoint-198" # 预训练模型检查点
-#NGRAM_ENCODER_PATH="../../out/exp1_pmi2/" # NGram编码器路径
+EXPERIMENT_ID="exp1_pmi2"
 NGRAM_ENCODER_PATH="../../out/exp1_pmi2/ngram_encoder.json" # NGram编码器路径
-FINETUNE_OUT_DIR="../output/finetune"        # 微调输出目录
-REPORT_OUT_DIR="../output/report"            # 报告输出目录
-USE_MSPECIES="../../mspecies/dev/dev.txt"
 
-# 数据路径参数
 TRAIN_DATA="../../mspecies/train/train.txt"
 DEV_DATA="../../mspecies/dev/dev.txt"
 
+
+
 # 输出路径参数
-EXPERIMENT_ID="exp1_pmi2"
 EXPERIMENT_DIR="../../out/${EXPERIMENT_ID}"
 PRETRAIN_OUTPUT_DIR="${EXPERIMENT_DIR}/pretrain"
 
-TRAIN_OUTPUT="../../mspecies/train/train.pt"
-DEV_OUTPUT="../../mspecies/dev/dev.pt"
-PRETRAIN_TOKENIZED_DATA_DIR="../../mspecies/"
+PRETRAIN_TOKENIZED_DATA_DIR="${EXPERIMENT_DIR}/pretrain"
+TRAIN_OUTPUT="${PRETRAIN_TOKENIZED_DATA_DIR}/train/train.pt"
+DEV_OUTPUT="${PRETRAIN_TOKENIZED_DATA_DIR}/dev/dev.pt"
 
 
 # 模型参数
@@ -83,6 +78,15 @@ print_parameters
 if [[ "$RUN_TOKENIZE_TRAIN" == "true" ]]; then
   echo "===== Step2 开始为训练数据生成tokenized数据 ====="
   
+  # 检查并删除已存在的train.pt文件
+  if [[ -f "${TRAIN_OUTPUT}" ]]; then
+    echo "发现已存在的${TRAIN_OUTPUT}文件，正在删除..."
+    rm -f "${TRAIN_OUTPUT}"
+  fi
+  
+  # 确保输出目录存在
+  mkdir -p "$(dirname "${TRAIN_OUTPUT}")"
+  
   # 打印tokenize训练数据参数
   echo "Tokenize训练数据参数:"
   echo "  --data: ${TRAIN_DATA}"
@@ -112,6 +116,15 @@ fi
 if [[ "$RUN_TOKENIZE_DEV" == "true" ]]; then
   echo "===== Step3 开始为验证数据生成tokenized数据 ====="
   
+    # 检查并删除已存在的train.pt文件
+  if [[ -f "${DEV_OUTPUT}" ]]; then
+    echo "发现已存在的${DEV_OUTPUT}文件，正在删除..."
+    rm -f "${DEV_OUTPUT}"
+  fi
+  
+  # 确保输出目录存在
+  mkdir -p "$(dirname "${TRAIN_OUTPUT}")"
+
   # 打印tokenize验证数据参数
   echo "Tokenize验证数据参数:"
   echo "  --data: ${DEV_DATA}"
@@ -142,7 +155,7 @@ if [[ "$RUN_PREPARE_DATASET" == "true" ]]; then
   echo "  --data: ${PRETRAIN_TOKENIZED_DATA_DIR}"
   echo "  --tok-source: ${TOK_SOURCE}"
   echo "  --tok: ${TOKENIZER}"
-  echo "  --ngram: ${EXPERIMENT_DIR}/ngram_encoder.json"
+  echo "  --ngram: ${NGRAM_ENCODER_PATH}"
   echo "  --max-ngrams: ${MAX_NGRAMS}"
   echo "  --out: ${PRETRAIN_OUTPUT_DIR}"
   echo "  --seed: ${SEED}"
@@ -152,7 +165,7 @@ if [[ "$RUN_PREPARE_DATASET" == "true" ]]; then
     --data ${PRETRAIN_TOKENIZED_DATA_DIR} \
     --tok-source ${TOK_SOURCE} \
     --tok ${TOKENIZER} \
-    --ngram ${EXPERIMENT_DIR}/ngram_encoder.json \
+    --ngram ${NGRAM_ENCODER_PATH}  \
     --max-ngrams ${MAX_NGRAMS} \
     --out ${PRETRAIN_OUTPUT_DIR} \
     --seed ${SEED}
