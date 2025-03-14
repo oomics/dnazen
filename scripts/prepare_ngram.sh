@@ -96,7 +96,7 @@ if [[ "$RUN_NGRAM_ENCODER" == "true" ]]; then
   echo "  --min-ngram-len: 2"
   echo "  --max-ngram-len: 5"
   echo "  --max-ngrams: 30"
-  echo "  --min-pmi: 2"
+  echo "  --min-pmi: 5"
   echo "  --min-token-count: 5"
   echo "  --min-ngram-freq: 5"
   echo "  --method: pmi"
@@ -110,7 +110,7 @@ if [[ "$RUN_NGRAM_ENCODER" == "true" ]]; then
     --min-ngram-len 2 \
     --max-ngram-len 5 \
     --max-ngrams 30 \
-    --min-pmi 2 \
+    --min-pmi 5 \
     --min-token-count 5 \
     --min-ngram-freq 5 \
     --method pmi \
