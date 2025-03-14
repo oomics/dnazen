@@ -39,6 +39,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 
+
 NGRAM_ENCODER_PATH="${EXPERIMENT_DIR}/ngram_encoder.json" # NGram编码器路径
 
 TRAIN_DATA="../../mspecies/train/train.txt"
@@ -70,6 +71,12 @@ MAX_LENGTH=256
 MAX_NGRAMS=30
 SEED=42
 DATA_SOURCE="tokenized"
+
+
+
+echo "使用实验: $EXPERIMENT_NAME (ID: $EXPERIMENT_ID)"
+echo "实验目录: $EXPERIMENT_DIR"
+
 
 # 打印参数函数
 print_parameters() {

@@ -40,6 +40,8 @@ done
 # 输出路径参数
 EXPERIMENT_DIR="../../out/${EXPERIMENT_ID}"
 
+echo "使用实验: $EXPERIMENT_NAME (ID: $EXPERIMENT_ID)"
+echo "实验目录: $EXPERIMENT_DIR"
 
 
 # 数据路径参数

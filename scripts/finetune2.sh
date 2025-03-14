@@ -40,10 +40,13 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-
 # 输出路径参数
 EXPERIMENT_DIR="../../out/${EXPERIMENT_ID}"
 PRETRAIN_OUTPUT_DIR="${EXPERIMENT_DIR}/pretrain"
+
+echo "使用实验: $EXPERIMENT_NAME (ID: $EXPERIMENT_ID)"
+echo "实验目录: $EXPERIMENT_DIR"
+
 
 # 路径配置
 GUE_DIR="../../GUE/"                        # 数据根目录
