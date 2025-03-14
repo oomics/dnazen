@@ -109,30 +109,31 @@ def main(
     else:
         core_ngrams = set()
 
-    # 根据数据类型进行不同的数据加载操作
-    if data_source == "raw":
-        # 当数据源为原始文本时，从原始文本创建验证数据集
-        val_dataset = MlmDataset.from_raw_data(
-            f"{data_dir}/dev/dev.txt",
-            tokenizer=tokenizer,
-            ngram_encoder=ngram_encoder,
-            core_ngrams=core_ngrams,
-            mlm_prob=0.20,  # 设置蒙面语言模型中mask的概率为20%
-        )
-        # 保存验证数据集到指定输出目录
-        val_dataset.save(f"{output_dir}/dev")
+    # # 根据数据类型进行不同的数据加载操作
+    # if data_source == "raw":
+    #     # 当数据源为原始文本时，从原始文本创建验证数据集
+    #     val_dataset = MlmDataset.from_raw_data(
+    #         f"{data_dir}/dev/dev.txt",
+    #         tokenizer=tokenizer,
+    #         ngram_encoder=ngram_encoder,
+    #         core_ngrams=core_ngrams,
+    #         mlm_prob=0.20,  # 设置蒙面语言模型中mask的概率为20%
+    #     )
+    #     # 保存验证数据集到指定输出目录
+    #     val_dataset.save(f"{output_dir}/dev")
 
-        # 从原始文本创建训练数据集
-        train_dataset = MlmDataset.from_raw_data(
-            f"{data_dir}/train/train.txt",
-            tokenizer=tokenizer,
-            ngram_encoder=ngram_encoder,
-            core_ngrams=core_ngrams,
-            mlm_prob=0.20,
-        )
-        # 保存训练数据集到输出目录
-        train_dataset.save(f"{output_dir}/train")
-    else:
+    #     # 从原始文本创建训练数据集
+    #     train_dataset = MlmDataset.from_raw_data(
+    #         f"{data_dir}/train/train.txt",
+    #         tokenizer=tokenizer,
+    #         ngram_encoder=ngram_encoder,
+    #         core_ngrams=core_ngrams,
+    #         mlm_prob=0.20,
+    #     )
+    #     # 保存训练数据集到输出目录
+    #     train_dataset.save(f"{output_dir}/train")
+    # else:
+    if data_source == "tokenized":
         # 当数据源为预处理后的分词数据时，从tokenized数据创建验证数据集
         val_dataset = MlmDataset.from_tokenized_data(
             data_dir=f"{data_dir}/dev/dev.pt",

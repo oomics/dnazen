@@ -1,11 +1,19 @@
 #!/bin/bash
+
+###################################################################################
+# 全局参数配置
+###################################################################################
+
+# 数据路径参数
 USE_GUE="../../GUE/"        
 USE_MSPECIES="../../mspecies/dev/dev.txt"
 
+# 输出路径参数
 EXPERIMENT_DIR="../../out/exp1_pmi2/"
 COVERAGE_DIR="${EXPERIMENT_DIR}/coverage"
 NGRAM_ENCODER_PATH="${EXPERIMENT_DIR}/ngram_encoder.json"
 
+# 模型参数
 TOKENIZER="zhihan1996/DNABERT-2-117M"
 
 RUN_NGRAM_ENCODER=true
