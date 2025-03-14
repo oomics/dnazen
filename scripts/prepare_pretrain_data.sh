@@ -38,22 +38,22 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-
+echo "实验ID: ${EXPERIMENT_ID}"
+EXPERIMENT_DIR="../../out/${EXPERIMENT_ID}"
 
 NGRAM_ENCODER_PATH="${EXPERIMENT_DIR}/ngram_encoder.json" # NGram编码器路径
-
+echo "NGram编码器路径: ${NGRAM_ENCODER_PATH}"
 TRAIN_DATA="../../mspecies/train/train.txt"
 DEV_DATA="../../mspecies/dev/dev.txt"
 
 
 # 执行控制参数
-RUN_TOKENIZE_TRAIN=true
-RUN_TOKENIZE_DEV=true
+#RUN_TOKENIZE_TRAIN=true
+#RUN_TOKENIZE_DEV=true
 RUN_PREPARE_DATASET=true
 
 
 # 输出路径参数
-EXPERIMENT_DIR="../../out/${EXPERIMENT_ID}"
 PRETRAIN_OUTPUT_DIR="${EXPERIMENT_DIR}/pretrain"
 
 PRETRAIN_TOKENIZED_DATA_DIR="${EXPERIMENT_DIR}/pretrain"
