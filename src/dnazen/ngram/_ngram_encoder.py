@@ -21,6 +21,7 @@ from ._find_ngram import (
     PmiNgramFinderConfig,
     FreqNgramFinderConfig,
 )
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s  - [%(filename)s:%(lineno)d] - %(message)s",
@@ -354,7 +355,7 @@ class NgramEncoder:
         min_ngram_freq: int = 5,
         num_workers: int = 64,
         returns_freq: bool = False,
-        method: Literal["pmi", "freq"] = "pmi",
+        method: Literal["pmi", "freq", "pmi-ref"] = "pmi",
     ):
         """
         从原始token数据训练N-gram编码器。
@@ -377,7 +378,7 @@ class NgramEncoder:
             min_ngram_freq: 最小N-gram频率阈值
             num_workers: 训练使用的工作线程数，默认为64
             returns_freq: 是否返回N-gram频率信息，默认为False
-            method: 训练方法，可选 "pmi" 或 "freq"，默认为 "pmi"
+            method: 训练方法，可选 "pmi", "pmi-ref" 或 "freq"，默认为 "pmi"
 
         Returns:
             如果returns_freq为True，返回N-gram频率字典；否则返回None
@@ -386,7 +387,7 @@ class NgramEncoder:
             warnings.warn("词典非空，训练后将被覆盖。")
 
         # 根据选择的方法配置N-gram查找器
-        if method == "pmi":
+        if method in ["pmi", "pmi-ref"]:
             if min_pmi is None:
                 raise ValueError("使用PMI方法时必须设置min_pmi")
             if min_token_count is None:
@@ -402,7 +403,12 @@ class NgramEncoder:
             ngram_finder_config.num_workers = num_workers
 
             # 使用PMI方法提取N-gram
-            self._vocab = find_ngrams_by_pmi(ngram_finder_config, tokens=tokens)
+            if method == "pmi":
+                self._vocab = find_ngrams_by_pmi(ngram_finder_config, tokens=tokens)
+            elif method == "pmi-ref":
+                self._vocab = find_ngrams_by_pmi(ngram_finder_config, tokens=tokens, use_ref_impl=True)
+            else:
+                raise NotImplementedError(f"不支持的方法 {method}。")
         elif method == "freq":
             if min_pmi is not None:
                 print("[警告] 使用频率方法时，min_pmi参数不会被使用。")

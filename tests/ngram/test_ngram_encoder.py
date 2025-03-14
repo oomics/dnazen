@@ -35,13 +35,13 @@ def tokens2() -> list[list[int]]:
     return token_seq_list
 
 
-@pytest.mark.parametrize("method", ["pmi", "freq"])
+@pytest.mark.parametrize("method", ["pmi", "freq", "pmi-ref"])
 def test_train(tokens, method):
     ngram_encoder = NgramEncoder({}, min_ngram_len=2, max_ngram_len=6, max_ngrams=20)
-    if method == "pmi":
-        ngram_encoder.train(tokens, min_pmi=1, min_token_count=3, min_ngram_freq=3, method="pmi")
+    if method in ["pmi", "pmi-ref"]:
+        ngram_encoder.train(tokens, min_pmi=1, min_token_count=3, min_ngram_freq=3, method=method)
     else:
-        ngram_encoder.train(tokens, min_ngram_freq=5, method="freq")
+        ngram_encoder.train(tokens, min_ngram_freq=5, method=method)
 
     assert ngram_encoder.get_vocab().get((1, 2, 3)) is not None, (
         "Should have (1,2,3) in vocab",
