@@ -15,7 +15,7 @@ EXPERIMENT_DIR="../../out/${EXPERIMENT_ID}"
 PRETRAIN_OUTPUT_DIR="${EXPERIMENT_DIR}/pretrain"
 
 # 路径配置
-GUE_DIR="../../GUE/"                        # 数据根目录
+GUE_DIR="../../"                        # 数据根目录
 PRETRAIN_CHECKPOINT="${EXPERIMENT_DIR}/output/checkpoint-198" # 预训练模型检查点
 #NGRAM_ENCODER_PATH="../../out/exp1_pmi2/" # NGram编码器路径
 NGRAM_ENCODER_PATH="${EXPERIMENT_DIR}/ngram_encoder.json" # NGram编码器路径
