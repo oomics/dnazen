@@ -14,6 +14,7 @@ RESUME_FILE="./finetune_progress.txt"        # 存储已完成任务的文件
 # 路径配置
 GUE_DIR="../../GUE/"                        # 数据根目录
 PRETRAIN_CHECKPOINT="../../out/exp1_pmi2/checkpoint-198" # 预训练模型检查点
+#NGRAM_ENCODER_PATH="../../out/exp1_pmi2/" # NGram编码器路径
 NGRAM_ENCODER_PATH="../../out/exp1_pmi2/ngram_encoder.json" # NGram编码器路径
 FINETUNE_OUT_DIR="../output/finetune"        # 微调输出目录
 REPORT_OUT_DIR="../output/report"            # 报告输出目录
