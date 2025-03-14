@@ -11,9 +11,26 @@ TOKENIZER="zhihan1996/DNABERT-2-117M"
 RUN_NGRAM_ENCODER=true
 RUN_COVERAGE_ANALYSIS=true
 
+# 打印参数函数
+print_parameters() {
+  echo "========== 参数列表 =========="
+  echo "GUE目录: ${USE_GUE}"
+  echo "多物种数据: ${USE_MSPECIES}"
+  echo "实验目录: ${EXPERIMENT_DIR}"
+  echo "覆盖率目录: ${COVERAGE_DIR}"
+  echo "N-gram编码器路径: ${NGRAM_ENCODER_PATH}"
+  echo "分词器: ${TOKENIZER}"
+  echo "执行N-gram编码器训练: ${RUN_NGRAM_ENCODER}"
+  echo "执行覆盖率分析: ${RUN_COVERAGE_ANALYSIS}"
+  echo "============================="
+}
+
 ###################################################################################
 # 4. 数据预处理
 ###################################################################################
+# 打印所有参数
+print_parameters
+
 # Step1:提取N-gram编码
 if [[ "$RUN_NGRAM_ENCODER" == "true" ]]; then
   echo "===== Step1 开始提取N-gram编码器  ====="  
@@ -22,6 +39,21 @@ if [[ "$RUN_NGRAM_ENCODER" == "true" ]]; then
     echo "发现已存在的ngram_encoder.json文件，正在删除..."
     rm -f "${EXPERIMENT_DIR}/ngram_encoder.json"
   fi
+  
+  # 打印N-gram编码器训练参数
+  echo "N-gram编码器训练参数:"
+  echo "  --gue-dir: ${USE_GUE}"
+  echo "  --input: ${USE_MSPECIES}"
+  echo "  --output: ${EXPERIMENT_DIR}/ngram_encoder.json"
+  echo "  --tok: ${TOKENIZER}"
+  echo "  --min-ngram-len: 2"
+  echo "  --max-ngram-len: 5"
+  echo "  --max-ngrams: 30"
+  echo "  --min-pmi: 2"
+  echo "  --min-token-count: 5"
+  echo "  --min-ngram-freq: 5"
+  echo "  --method: pmi"
+  echo "  --num-workers: 4"
   
   CMD="python ../src/train/train_ngram_encoder.py \
     --gue-dir ${USE_GUE} \
@@ -56,6 +88,15 @@ if [[ "$RUN_COVERAGE_ANALYSIS" == "true" ]]; then
     rm -rf "$COVERAGE_DIR"
   fi
 
+  # 打印覆盖率分析参数
+  echo "覆盖率分析参数:"
+  echo "  --encoder: ${EXPERIMENT_DIR}/ngram_encoder.json"
+  echo "  --output-dir: ${COVERAGE_DIR}"
+  echo "  --tok: ${TOKENIZER}"
+  echo "  --gue-dir: ${USE_GUE}"
+  echo "  --mspecies-dir: ${USE_MSPECIES}"
+  echo "  --ngram-list: ${EXPERIMENT_DIR}/ngram_list.txt"
+
   # 构建命令
   CMD="python ../src/dataset/ngram_encoder_analyze.py \
     --encoder ${EXPERIMENT_DIR}/ngram_encoder.json \
@@ -78,4 +119,6 @@ if [[ "$RUN_COVERAGE_ANALYSIS" == "true" ]]; then
   echo "===== N-gram编码覆盖率分析完成 ====="
 fi
 
+echo "N-gram编码器路径: ${NGRAM_ENCODER_PATH}"
+echo "N-gram编码覆盖率分析路径: ${COVERAGE_DIR}"
 echo "所有选定的任务已完成"
