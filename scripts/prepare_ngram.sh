@@ -2,7 +2,7 @@
 USE_GUE="../../GUE/"        
 USE_MSPECIES="../../mspecies/dev/dev.txt"
 
-EXPERIMENT_DIR="../data/pretrain/exp1_pmi2"
+EXPERIMENT_DIR="../../out/exp1_pmi2/"
 COVERAGE_DIR="${EXPERIMENT_DIR}/coverage"
 NGRAM_ENCODER_PATH="${EXPERIMENT_DIR}/ngram_encoder.json"
 
