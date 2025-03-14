@@ -48,7 +48,7 @@ TASK_EPOCHS[splice]=5
 declare -A TASK_PATHS
 TASK_PATHS[tf]="tf"
 TASK_PATHS[mouse]="mouse"
-TASK_PATHS[pd]="pd"
+TASK_PATHS[pd]="prom"
 TASK_PATHS[emp]="emp"
 TASK_PATHS[virus]="virus"
 TASK_PATHS[splice]="splice"
