@@ -56,7 +56,7 @@ NGRAM_ENCODER_PATH="${EXPERIMENT_DIR}/ngram_encoder.json"
 TOKENIZER="zhihan1996/DNABERT-2-117M"
 
 RUN_NGRAM_ENCODER=true
-RUN_COVERAGE_ANALYSIS=true
+RUN_COVERAGE_ANALYSIS=false
 
 # 打印参数函数
 print_parameters() {
