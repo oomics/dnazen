@@ -3,11 +3,11 @@
 # 脚本名称: run.sh
 ###################################################################################
 #EXPERIMENT_ID="exp1_pmi2"
-EXPERIMENT_ID="exp1_pmi5"
-
+#EXPERIMENT_ID="exp1_pmi5"
+EXPERIMENT_ID="exp1_pmi10"
 
 echo "===============================run.sh step1: ngram抽取==============================================="
-#bash ./prepare_ngram.sh -e $EXPERIMENT_ID
+bash ./prepare_ngram.sh -e $EXPERIMENT_ID
 echo "===============================run.sh step1: ngram抽取完成==============================================="
 
 echo "===============================run.sh step2: 开始tokenize分词,准备数据集dataset==============================================="
