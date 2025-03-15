@@ -48,9 +48,7 @@ DEV_DATA="../../mspecies/dev/dev.txt"
 
 
 # 执行控制参数
-RUN_TOKENIZE_TRAIN=true
-RUN_TOKENIZE_DEV=true
-#RUN_PREPARE_DATASET=true
+RUN_PREPARE_DATASET=true
 
 
 # 输出路径参数
