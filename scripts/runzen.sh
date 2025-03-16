@@ -26,11 +26,21 @@ EXPERIMENT_ID="exp1_pmi5"
 # echo "===============================run.sh step4: 开始微调==============================================="
 # bash finetune2.sh -e $EXPERIMENT_ID
 # echo "===============================run.sh step4: 微调完成==============================================="
+   
+# 创建预训练数据
+# python ../src/train/create_pre_train_data_zen.py     \
+#     --train_corpus ../../mspecies/train/train.txt     \
+#     --output_dir ../data/     \
+#     --bert_model zhihan1996/DNABERT-2-117M     \
+#     --ngram_list_dir  ../../out/exp1_pmi5/  
 
-
-
-python ../src/train/create_pre_train_data_zen.py     \
-    --train_corpus ../../mspecies/train/train.txt     \
-    --output_dir ../data/     \
-    --bert_model zhihan1996/DNABERT-2-117M     \
-    --ngram_list_dir  ../../out/exp1_pmi5/  
+# 运行预训练
+python ../src/train/run_pretrain_zen.py \             
+    --data-source tokenized    \         
+    --data ../data/            \ 
+    --ngram ../../out/exp1_pmi5/ngram_encoder.json     \        
+    --out ../data/         \    
+    --lr 3e-5           \  
+    --epochs 20          \   
+    --batch-size 256      \
+    --model ~/DNABERT-2-117M 

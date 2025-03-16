@@ -2,6 +2,9 @@
 
 本脚本用于从原始文本文件或预处理后的token文件构建预训练数据集，
 并将训练集和验证集保存到指定的输出目录中。"""
+import numpy as np
+import pandas as pd
+from collections import namedtuple
 
 import random  # 用于生成随机数，确保实验可复现
 from typing import Literal  # 用于类型注解，限制变量取值
@@ -9,7 +12,7 @@ import time  # 用于计算加载和下载时间
 import os  # 操作系统相关功能，用于文件路径处理
 import datetime  # 日期时间操作，用于生成时间戳
 from pathlib import Path  # 文件路径处理，提供面向对象的文件系统路径处理
-
+import json
 import logging  # 日志记录模块，用于输出调试信息
 from tqdm import tqdm  # 进度条显示，提供训练过程可视化
 
@@ -29,13 +32,12 @@ from ZEN.modeling import ZenForPreTraining, ZenConfig
 
 # 导入自定义工具和模块
 from dnazen.ngram import NgramEncoder  # n-gram编码器模块，用于处理n-gram特征
-from dnazen.data.mlm_dataset import (
-    MlmDataset,
-    _load_core_ngrams,
-)  # 用于构建掩码语言模型数据集的工具
-
 # 导入优化器和学习率调度器
 from pytorch_pretrained_bert.optimization import BertAdam, WarmupLinearSchedule
+InputFeatures = namedtuple(
+    "InputFeatures",
+    "input_ids input_mask segment_ids lm_label_ids is_next ngram_ids ngram_masks ngram_positions ngram_starts ngram_lengths ngram_segment_ids")
+
 
 # 配置日志输出格式和级别，方便调试和记录运行信息
 logging.basicConfig(
@@ -47,151 +49,230 @@ logger = logging.getLogger(__name__)
 
 
 
+def convert_example_to_features(example, tokenizer, max_seq_length, max_ngram_in_sequence):
+    tokens = example["tokens"]
+    segment_ids = example["segment_ids"]
+    is_random_next = example["is_random_next"]
+    masked_lm_positions = example["masked_lm_positions"]
+    masked_lm_labels = example["masked_lm_labels"]
+
+    # add ngram level information
+    ngram_ids = example["ngram_ids"]
+    ngram_positions = example["ngram_positions"]
+    ngram_lengths = example["ngram_lengths"]
+    ngram_segment_ids = example["ngram_segment_ids"]
+
+    assert len(tokens) == len(segment_ids) <= max_seq_length  # The preprocessed data should be already truncated
+    input_ids = tokenizer.convert_tokens_to_ids(tokens)
+    masked_label_ids = tokenizer.convert_tokens_to_ids(masked_lm_labels)
+
+    input_array = np.zeros(max_seq_length, dtype=np.int32)
+    input_array[:len(input_ids)] = input_ids
+
+    mask_array = np.zeros(max_seq_length, dtype=bool)
+    mask_array[:len(input_ids)] = 1
+
+    segment_array = np.zeros(max_seq_length, dtype=bool)
+    segment_array[:len(segment_ids)] = segment_ids
+
+    lm_label_array = np.full(max_seq_length, dtype=np.int32, fill_value=-1)
+    lm_label_array[masked_lm_positions] = masked_label_ids
+
+    # add ngram pads
+    ngram_id_array = np.zeros(max_ngram_in_sequence, dtype=np.int32)
+    ngram_id_array[:len(ngram_ids)] = ngram_ids
+
+    # record the masked positions
+
+    # The matrix here take too much space either in disk or in memory, so the usage have to be lazily convert the
+    # the start position and length to the matrix at training time.
+
+    ngram_positions_matrix = np.zeros(shape=(max_seq_length, max_ngram_in_sequence), dtype=bool)
+    for i in range(len(ngram_ids)):
+        ngram_positions_matrix[ngram_positions[i]:ngram_positions[i]+ngram_lengths[i], i] = 1
+
+    ngram_start_array = np.zeros(max_ngram_in_sequence, dtype=np.int32)
+    ngram_start_array[:len(ngram_ids)] = ngram_positions
+
+    ngram_length_array = np.zeros(max_ngram_in_sequence, dtype=np.int32)
+    ngram_length_array[:len(ngram_ids)] = ngram_lengths
+
+    ngram_mask_array = np.zeros(max_ngram_in_sequence, dtype=bool)
+    ngram_mask_array[:len(ngram_ids)] = 1
+
+    ngram_segment_array = np.zeros(max_ngram_in_sequence, dtype=bool)
+    ngram_segment_array[:len(ngram_ids)] = ngram_segment_ids
+    features = InputFeatures(input_ids=input_array,
+                             input_mask=mask_array,
+                             segment_ids=segment_array,
+                             lm_label_ids=lm_label_array,
+                             is_next=is_random_next,
+                             ngram_ids=ngram_id_array,
+                             ngram_masks=ngram_mask_array,
+                             ngram_positions=ngram_positions_matrix,
+                             ngram_starts=ngram_start_array,
+                             ngram_lengths=ngram_length_array,
+                             ngram_segment_ids=ngram_segment_array)
+    return features
+
+
+class PregeneratedDataset(Dataset):
+    def __init__(self, training_path, epoch, tokenizer, num_data_epochs, reduce_memory=False, fp16=False):
+        self.vocab = tokenizer.vocab
+        self.tokenizer = tokenizer
+        self.epoch = epoch
+        self.data_epoch = epoch % num_data_epochs
+        
+        # 修复路径处理问题
+        data_file = os.path.join(training_path, f"epoch_{self.data_epoch}.json")
+        metrics_file = os.path.join(training_path, f"epoch_{self.data_epoch}_metrics.json")
+        
+        assert os.path.exists(data_file) and os.path.exists(metrics_file)
+        
+        # 读取metrics文件
+        with open(metrics_file, 'r') as f:
+            metrics = json.load(f)
+            
+        num_samples = metrics['num_training_examples']
+        seq_len = metrics['max_seq_len']
+        max_ngram_in_sequence = metrics['max_ngram_in_sequence']
+        self.temp_dir = None
+        self.working_dir = None
+        self.fp16 = fp16
+        
+        if reduce_memory:
+            self.temp_dir = "/tmp"
+            self.working_dir = Path(self.temp_dir)
+            input_ids = np.memmap(filename=self.working_dir / 'input_ids.memmap',
+                                  mode='w+', dtype=np.int32, shape=(num_samples, seq_len))
+            input_masks = np.memmap(filename=self.working_dir / 'input_masks.memmap',
+                                    shape=(num_samples, seq_len), mode='w+', dtype=np.bool)
+            segment_ids = np.memmap(filename=self.working_dir / 'segment_ids.memmap',
+                                    shape=(num_samples, seq_len), mode='w+', dtype=np.bool)
+            lm_label_ids = np.memmap(filename=self.working_dir / 'lm_label_ids.memmap',
+                                     shape=(num_samples, seq_len), mode='w+', dtype=np.int32)
+            lm_label_ids[:] = -1
+            is_nexts = np.memmap(filename=self.working_dir / 'is_nexts.memmap',
+                                 shape=(num_samples,), mode='w+', dtype=np.bool)
+            # add ngram level features
+            ngram_ids = np.memmap(filename=self.working_dir / 'ngram_ids.memmap',
+                                 mode='w+', dtype=np.int32, shape=(num_samples, max_ngram_in_sequence))
+
+            ngram_masks = np.memmap(filename=self.working_dir / 'ngram_masks.memmap',
+                                   mode='w+', dtype=np.bool, shape=(num_samples, max_ngram_in_sequence))
+
+            ngram_positions = np.memmap(filename=self.working_dir / 'ngram_positions.memmap',
+                                      mode='w+', dtype=np.bool, shape=(num_samples, seq_len, max_ngram_in_sequence))
+
+            ngram_starts = np.memmap(filename=self.working_dir / 'ngram_starts.memmap',
+                                    mode='w+', dtype=np.int32, shape=(num_samples, max_ngram_in_sequence))
+
+            ngram_lengths = np.memmap(filename=self.working_dir / 'ngram_lengths.memmap',
+                                     mode='w+', dtype=np.int32, shape=(num_samples, max_ngram_in_sequence))
+
+            ngram_segment_ids = np.memmap(filename=self.working_dir / 'ngram_segment_ids.memmap',
+                                         mode='w+', dtype=np.bool, shape=(num_samples, max_ngram_in_sequence))
+
+        else:
+            input_ids = np.zeros(shape=(num_samples, seq_len), dtype=np.int32)
+            input_masks = np.zeros(shape=(num_samples, seq_len), dtype=np.bool)
+            segment_ids = np.zeros(shape=(num_samples, seq_len), dtype=np.bool)
+            lm_label_ids = np.full(shape=(num_samples, seq_len), dtype=np.int32, fill_value=-1)
+            is_nexts = np.zeros(shape=(num_samples,), dtype=np.bool)
+            # add ngram level features
+
+            ngram_ids = np.zeros(shape=(num_samples, max_ngram_in_sequence), dtype=np.int32)
+            ngram_masks = np.zeros(shape=(num_samples, max_ngram_in_sequence), dtype=np.bool)
+
+            ngram_positions = np.zeros(shape=(num_samples, seq_len, max_ngram_in_sequence), dtype=np.bool)
+            ngram_starts = np.zeros(shape=(num_samples, max_ngram_in_sequence), dtype=np.int32)
+            ngram_lengths = np.zeros(shape=(num_samples, max_ngram_in_sequence), dtype=np.int32)
+
+            ngram_segment_ids = np.zeros(shape=(num_samples, max_ngram_in_sequence), dtype=np.bool)
+
+        logging.info(f"Loading training examples for epoch {epoch}")
+        with open(data_file, 'r') as f:
+            for i, line in enumerate(tqdm(f, total=num_samples, desc="Training examples")):
+                line = line.strip()
+                example = json.loads(line)
+                features = convert_example_to_features(example, tokenizer, seq_len, max_ngram_in_sequence)
+                input_ids[i] = features.input_ids
+                segment_ids[i] = features.segment_ids
+                input_masks[i] = features.input_mask
+                lm_label_ids[i] = features.lm_label_ids
+                is_nexts[i] = features.is_next
+                # add ngram related ids
+                ngram_ids[i] = features.ngram_ids
+                ngram_masks[i] = features.ngram_masks
+                ngram_positions[i] = features.ngram_positions
+                ngram_starts[i] = features.ngram_starts
+                ngram_lengths[i] = features.ngram_lengths
+                ngram_segment_ids[i] = features.ngram_segment_ids
+
+        assert i == num_samples - 1  # Assert that the sample count metric was true
+        logging.info("Loading complete!")
+        self.num_samples = num_samples
+        self.seq_len = seq_len
+        self.input_ids = input_ids
+        self.input_masks = input_masks
+        self.segment_ids = segment_ids
+        self.lm_label_ids = lm_label_ids
+        self.is_nexts = is_nexts
+        self.ngram_ids = ngram_ids
+        self.ngram_masks = ngram_masks
+        self.ngram_positions = ngram_positions
+        self.ngram_segment_ids = ngram_segment_ids
+        self.ngram_starts = ngram_starts
+        self.ngram_lengths = ngram_lengths
+
+    def __len__(self):
+        return self.num_samples
+
+    def __getitem__(self, item):
+
+        position = torch.tensor(self.ngram_positions[item].astype(np.double))
+        if self.fp16:
+            position = position.half()
+        else:
+            position = position.float()
+
+        return (torch.tensor(self.input_ids[item].astype(np.int64)),
+                torch.tensor(self.input_masks[item].astype(np.int64)),
+                torch.tensor(self.segment_ids[item].astype(np.int64)),
+                torch.tensor(self.lm_label_ids[item].astype(np.int64)),
+                torch.tensor(self.is_nexts[item].astype(np.int64)),
+                torch.tensor(self.ngram_ids[item].astype(np.int64)),
+                torch.tensor(self.ngram_masks[item].astype(np.int64)),
+                position,
+                torch.tensor(self.ngram_starts[item].astype(np.int64)),
+                torch.tensor(self.ngram_lengths[item].astype(np.int64)),
+                torch.tensor(self.ngram_segment_ids[item].astype(np.int64)))
+
+
+
 @click.command()
-@click.option(
-    "--data-source",
-    type=click.Choice(["raw", "tokenized"]),
-    default="raw",
-    help="数据类型：原始数据(raw)或已分词数据(tokenized)",
-)
-@click.option(
-    "-d",
-    "--data",
-    "data_dir",
-    type=str,
-    default="/data2/peter/dnazen_pretrain_v3",
-    help="数据文件的路径目录",
-)
-@click.option(
-    "--tok-source",
-    "tokenizer_source",
-    type=click.Choice(["file", "huggingface"]),
-    default="huggingface",
-    help="Tokenizer的加载方式：文件或Huggingface模型",
-)
-@click.option(
-    "--tok",
-    "tokenizer_cfg",
-    type=str,
-    default="zhihan1996/DNABERT-2-117M",
-    help="Tokenizer的配置，支持模型名称或路径",
-)
-@click.option(
-    "--ngram", 
-    "ngram_file", 
-    type=str, 
-    required=True,
-    help="n-gram解码器的配置文件路径"
-)
-@click.option(
-    "--core-ngram", 
-    type=str, 
-    default=None, 
-    help="核心n-gram文件路径，可选"
-)
-@click.option(
-    "--max-ngrams", 
-    default=30, 
-    type=int, 
-    help="最大允许匹配的n-gram数量"
-)
-@click.option(
-    "--out", 
-    "output_dir", 
-    type=str, 
-    required=True,
-    help="保存数据集输出目录的路径"
-)
-@click.option(
-    "--seed", 
-    type=int, 
-    default=42, 
-    help="随机种子，用于确保实验可重复"
-)
-# 添加新的训练相关选项
-@click.option(
-    "--model",
-    "bert_model",
-    type=str,
-    default="zhihan1996/DNABERT-2-117M",
-    help="预训练模型路径或名称",
-)
-@click.option(
-    "--lr",
-    "learning_rate",
-    type=float,
-    default=2e-5,
-    help="学习率，默认2e-5",
-)
-@click.option(
-    "--loss-scale",
-    type=float,
-    default=0,
-    help="FP16训练的损失缩放系数，0表示动态缩放",
-)
-@click.option(
-    "--warmup",
-    "warmup_proportion",
-    type=float,
-    default=0.1,
-    help="学习率预热比例，默认0.1",
-)
-@click.option(
-    "--data-epochs",
-    "num_data_epochs",
-    type=int,
-    default=1,
-    help="数据训练轮数",
-)
-@click.option(
-    "--reduce-mem/--no-reduce-mem",
-    "reduce_memory",
-    default=True,
-    help="是否启用内存优化",
-)
-@click.option(
-    "--epochs",
-    type=int,
-    default=10,
-    help="训练总轮数",
-)
-@click.option(
-    "--batch-size",
-    "train_batch_size",
-    type=int,
-    default=128,
-    help="训练批次大小",
-)
-@click.option(
-    "--grad-accum",
-    "gradient_accumulation_steps",
-    type=int,
-    default=16,
-    help="梯度累积步数",
-)
-@click.option(
-    "--local-rank",
-    type=int,
-    default=-1,
-    help="分布式训练的本地排名，-1表示单机训练",
-)
-@click.option(
-    "--fp16/--no-fp16",
-    default=False,
-    help="是否使用半精度(FP16)训练",
-)
-@click.option(
-    "--scratch/--no-scratch",
-    default=False,
-    help="是否从零开始训练，不使用预训练模型",
-)
-@click.option(
-    "--save-prefix",
-    "save_name",
-    type=str,
-    default="dnazen_",
-    help="保存模型的名称前缀",
-)
+@click.option("--data-source", type=click.Choice(["raw", "tokenized"]), default="raw", help="数据类型：原始数据(raw)或已分词数据(tokenized)")
+@click.option("-d", "--data", "data_dir", type=str, default="/data2/peter/dnazen_pretrain_v3", help="数据文件的路径目录")
+@click.option("--tok-source", "tokenizer_source", type=click.Choice(["file", "huggingface"]), default="huggingface", help="Tokenizer的加载方式：文件或Huggingface模型")
+@click.option("--tok", "tokenizer_cfg", type=str, default="zhihan1996/DNABERT-2-117M", help="Tokenizer的配置，支持模型名称或路径")
+@click.option("--ngram", "ngram_file", type=str, required=True, help="n-gram解码器的配置文件路径")
+@click.option("--core-ngram", type=str, default=None, help="核心n-gram文件路径，可选")
+@click.option("--max-ngrams", default=30, type=int, help="最大允许匹配的n-gram数量")
+@click.option("--out", "output_dir", type=str, required=True, help="保存数据集输出目录的路径")
+@click.option("--seed", type=int, default=42, help="随机种子，用于确保实验可重复")
+@click.option("--model", "bert_model", type=str, default="zhihan1996/DNABERT-2-117M", help="预训练模型路径或名称")
+@click.option("--lr", "learning_rate", type=float, default=2e-5, help="学习率，默认2e-5")
+@click.option("--loss-scale", type=float, default=0, help="FP16训练的损失缩放系数，0表示动态缩放")
+@click.option("--warmup", "warmup_proportion", type=float, default=0.1, help="学习率预热比例，默认0.1")
+@click.option("--data-epochs", "num_data_epochs", type=int, default=1, help="数据训练轮数")
+@click.option("--reduce-mem/--no-reduce-mem", "reduce_memory", default=True, help="是否启用内存优化")
+@click.option("--epochs", type=int, default=10, help="训练总轮数")
+@click.option("--batch-size", "train_batch_size", type=int, default=128, help="训练批次大小")
+@click.option("--grad-accum", "gradient_accumulation_steps", type=int, default=16, help="梯度累积步数")
+@click.option("--local-rank", type=int, default=-1, help="分布式训练的本地排名，-1表示单机训练")
+@click.option("--fp16/--no-fp16", default=False, help="是否使用半精度(FP16)训练")
+@click.option("--scratch/--no-scratch", default=False, help="是否从零开始训练，不使用预训练模型")
+@click.option("--save-prefix", "save_name", type=str, default="dnazen_", help="保存模型的名称前缀")
 def main(
     data_source: Literal["raw", "tokenized"],
     data_dir: str,
@@ -312,6 +393,7 @@ def get_samples_per_epoch(pregenerated_data, num_data_epochs):
     for i in range(num_data_epochs):
         epoch_file = os.path.join(pregenerated_data, f"epoch_{i}.json")
         metrics_file = os.path.join(pregenerated_data, f"epoch_{i}_metrics.json")
+        logger.info(f"检查文件: {epoch_file} 和 {metrics_file}")
         if os.path.isfile(epoch_file) and os.path.isfile(metrics_file):
             with open(metrics_file, "r") as f:
                 metrics = json.load(f)
@@ -430,8 +512,8 @@ def prepare_pretrain_data(
     logger.info(f"Tokenizer加载完成，耗时: {time.time() - start_time:.2f}秒")
     
     # 获取每个epoch的样本数，用于计算优化步数
-    #samples_per_epoch = get_samples_per_epoch(pregenerated_data, num_data_epochs)
-    
+    samples_per_epoch = get_samples_per_epoch(pregenerated_data, num_data_epochs)
+    logger.info(f"每个epoch的样本数: {samples_per_epoch}")
     # 检查是否成功获取样本数，如果没有则需要先生成预训练数据
     if not samples_per_epoch:
         logger.error(f"未在路径 {pregenerated_data} 找到预生成的训练数据")
@@ -467,10 +549,12 @@ def prepare_pretrain_data(
 
     # 模型初始化：从零开始或加载预训练模型
     if scratch:
+        logger.info(f"从零开始训练，创建新的ZEN模型配置和模型实例")
         # 从零开始训练，创建新的ZEN模型配置和模型实例
         config = ZenConfig(21128, 104089)  # 词汇表大小和n-gram大小
         model = ZenForPreTraining(config)
     else:
+        logger.info(f"加载预训练模型，复用已有参数")
         # 加载预训练模型，复用已有参数
         model = ZenForPreTraining.from_pretrained(bert_model)
 
@@ -553,7 +637,7 @@ def prepare_pretrain_data(
     model.train()
     
     # 导入预生成数据集类
-    from dnazen.data.pregenerated_dataset import PregeneratedDataset
+#    from dnazen.data.pregenerated_dataset import PregeneratedDataset
     
     # 开始训练循环，共训练epochs轮
     for epoch in range(epochs):
