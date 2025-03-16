@@ -438,15 +438,20 @@ def tokenize_text(train_corpus,bert_model,output_dir, tokenizer,docs):
     temp_dir.mkdir(exist_ok=True)
     temp_file = temp_dir / "tokenized_data.pt"
     
-    # 使用tokenize_batch_text处理文本
-    tokenize_batch_text(
-        data=train_corpus,
-        tok=bert_model,
-        out=str(temp_file),
-        batch_size=1000000,  # 可以根据需要调整批处理大小
-        resume=True,
-        max_length=256
-    )
+    if os.path.exists(temp_file):
+        logger.info("{}已经存在，不需要重现tokenize，直接加载处理后的数据...".format(temp_file))
+        tokenized_data = torch.load(temp_file)
+    else:
+        # 使用tokenize_batch_text处理文本
+        logger.info("使用tokenize_batch_text，用模型{}处理文本...".format(bert_model))
+        tokenize_batch_text(
+            data=train_corpus,
+            tok=bert_model,
+            out=str(temp_file),
+            batch_size=1000000,  # 可以根据需要调整批处理大小
+            resume=True,
+            max_length=256
+        )
     
     # 加载处理后的数据
     logger.info("加载处理后的数据...")
@@ -468,6 +473,7 @@ def tokenize_text(train_corpus,bert_model,output_dir, tokenizer,docs):
         # 每1000个序列作为一个文档
         if len(current_doc) >= 1000:
             docs.add_document(current_doc)
+            logger.info(f"当前文档长度: {len(current_doc)},当前文档数量: {len(docs)}")
             current_doc = []
     
     # 添加最后一个文档
