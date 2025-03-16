@@ -46,5 +46,4 @@ python ../src/train/run_pretrain_zen.py \
     --batch-size 256 \
     --grad-accum 16 \
     --warmup 0.1 \
-    --fp16 \
     --reduce-mem
