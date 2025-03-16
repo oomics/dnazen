@@ -1,11 +1,20 @@
 """Make pretrained dataset from .txt/.fa files.
 
 本脚本用于从原始文本文件或预处理后的token文件构建预训练数据集，
-并将训练集和验证集保存到指定的输出目录中。"""
+并将训练集和验证集保存到指定的输出目录中。
+
+执行步骤：
+1. 初始化配置和参数
+2. 加载tokenizer和n-gram编码器
+3. 准备预训练数据
+4. 初始化模型和优化器
+5. 执行训练循环
+6. 保存训练结果
+"""
 import numpy as np
 import pandas as pd
 from collections import namedtuple
-
+import ipdb
 import random  # 用于生成随机数，确保实验可复现
 from typing import Literal  # 用于类型注解，限制变量取值
 import time  # 用于计算加载和下载时间
@@ -126,6 +135,7 @@ class PregeneratedDataset(Dataset):
         # 修复路径处理问题
         data_file = os.path.join(training_path, f"epoch_{self.data_epoch}.json")
         metrics_file = os.path.join(training_path, f"epoch_{self.data_epoch}_metrics.json")
+        cache_file = os.path.join(training_path, f"epoch_{self.data_epoch}_cache.pt")
         
         assert os.path.exists(data_file) and os.path.exists(metrics_file)
         
@@ -491,6 +501,7 @@ def prepare_pretrain_data(
     logger.info(f"已训练轮数: {already_trained_epoch}")
     logger.info("="*50)
     
+    logger.info("步骤2: 设置计算设备和硬件配置")
     # 设置计算设备，优先使用GPU加速训练
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # 获取可用的GPU数量，用于多GPU并行训练
@@ -505,12 +516,14 @@ def prepare_pretrain_data(
             logger.info(f"GPU {i}: {torch.cuda.get_device_name(i)}")
     logger.info("="*50)
     
+    logger.info("步骤3: 加载tokenizer和n-gram编码器")
     # 从Huggingface加载预训练的tokenizer
     logger.info(f"加载tokenizer: {tokenizer_cfg}")
     start_time = time.time()
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_cfg)
     logger.info(f"Tokenizer加载完成，耗时: {time.time() - start_time:.2f}秒")
     
+    logger.info("步骤4: 准备预训练数据")
     # 获取每个epoch的样本数，用于计算优化步数
     samples_per_epoch = get_samples_per_epoch(pregenerated_data, num_data_epochs)
     logger.info(f"每个epoch的样本数: {samples_per_epoch}")
@@ -547,16 +560,22 @@ def prepare_pretrain_data(
     if local_rank != -1:
         num_train_optimization_steps = num_train_optimization_steps // torch.distributed.get_world_size()
 
+    logger.info("步骤5: 初始化模型")
     # 模型初始化：从零开始或加载预训练模型
     if scratch:
         logger.info(f"从零开始训练，创建新的ZEN模型配置和模型实例")
-        # 从零开始训练，创建新的ZEN模型配置和模型实例
         config = ZenConfig(21128, 104089)  # 词汇表大小和n-gram大小
         model = ZenForPreTraining(config)
+        # 检查模型是否有参数
+        if not list(model.parameters()):
+            raise ValueError("模型初始化后没有参数，请检查模型结构")
     else:
         logger.info(f"加载预训练模型，复用已有参数")
         # 加载预训练模型，复用已有参数
         model = ZenForPreTraining.from_pretrained(bert_model)
+        # 检查预训练模型是否正确加载
+        if not list(model.parameters()):
+            raise ValueError("预训练模型加载失败，没有参数")
 
     # 启用半精度训练（如果指定）
     if fp16:
@@ -575,9 +594,19 @@ def prepare_pretrain_data(
                 "请从https://www.github.com/nvidia/apex安装apex库以使用分布式和FP16训练。")
         model = DDP(model)
     elif n_gpu > 1:
-        # 多GPU数据并行训练
+        # 确保模型有参数
+        if not list(model.parameters()):
+            raise ValueError("在使用DataParallel之前，模型没有参数")
+        logger.info("模型结构:")
+        logger.info(model)
         model = torch.nn.DataParallel(model)
 
+    # 在开始训练前检查模型状态
+    logger.info("检查模型状态...")
+    logger.info(f"模型是否处于训练模式: {model.training}")
+    logger.info(f"模型参数数量: {sum(p.numel() for p in model.parameters())}")
+
+    logger.info("步骤6: 配置优化器和学习率调度器")
     # 准备优化器参数组，针对不同参数设置不同的权重衰减
     param_optimizer = list(model.named_parameters())
     # LayerNorm和偏置项不应用权重衰减
@@ -636,9 +665,7 @@ def prepare_pretrain_data(
     # 将模型设置为训练模式
     model.train()
     
-    # 导入预生成数据集类
-#    from dnazen.data.pregenerated_dataset import PregeneratedDataset
-    
+    logger.info("步骤7: 开始训练循环")
     # 开始训练循环，共训练epochs轮
     for epoch in range(epochs):
         epoch_start_time = time.time()
@@ -665,9 +692,11 @@ def prepare_pretrain_data(
         # 根据训练模式选择不同的采样器
         if local_rank == -1:
             # 单机训练使用随机采样器
+            logger.info("单机训练使用随机采样器")
             train_sampler = RandomSampler(epoch_dataset)
         else:
             # 分布式训练使用分布式采样器
+            logger.info("分布式训练使用分布式采样器")
             train_sampler = DistributedSampler(epoch_dataset)
         
         # 创建数据加载器，用于批量加载训练数据
@@ -682,7 +711,9 @@ def prepare_pretrain_data(
         nb_tr_examples, nb_tr_steps = 0, 0  # 训练样本数和步数
         
         # 使用tqdm创建进度条，用于可视化训练进度
-        with tqdm(total=len(train_dataloader), desc=f"Epoch {epoch}") as pbar:
+        logger.info("开始训练...")
+        with tqdm(total=len(train_dataloader), desc=f"继续预训练Epoch {epoch}") as pbar:
+            ipdb.set_trace()
             # 遍历每个批次的数据
             for step, batch in enumerate(train_dataloader):
                 batch_start_time = time.time()
@@ -777,6 +808,7 @@ def prepare_pretrain_data(
         logger.info(f"  最终损失值: {mean_loss:.5f}")
         logger.info(f"  处理样本数: {nb_tr_examples}")
         
+        logger.info("步骤8: 保存模型")
         # 保存模型相关日志
         logger.info("\n开始保存模型...")
         save_start_time = time.time()
@@ -820,6 +852,10 @@ def prepare_pretrain_data(
         logger.info(f"模型保存完成，耗时: {save_time:.2f}秒")
         logger.info(f"保存路径: {model_save_dir}")
         logger.info("="*50)
+
+    logger.info("="*50)
+    logger.info("训练完成！")
+    logger.info("="*50)
 
 if __name__ == "__main__":
     # 当脚本作为主程序执行时，调用main函数
