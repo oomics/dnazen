@@ -29,7 +29,7 @@ EXPERIMENT_ID="exp1_pmi5"
 
 
 
-python src/train/create_pre_train_data.py     \
+python ../src/train/create_pre_train_data_zen.py     \
     --train_corpus ../mspecies/train/train.txt     \
     --output_dir ./data/     \
     --bert_model zhihan1996/DNABERT-2-117M     \
