@@ -88,6 +88,7 @@ def convert_example_to_features(example, tokenizer, max_seq_length, max_ngram_in
     lm_label_array[masked_lm_positions] = masked_label_ids
 
     # add ngram pads
+    #ipdb.set_trace()
     ngram_id_array = np.zeros(max_ngram_in_sequence, dtype=np.int32)
     ngram_id_array[:len(ngram_ids)] = ngram_ids
 
@@ -211,7 +212,6 @@ class PregeneratedDataset(Dataset):
                 input_masks[i] = features.input_mask
                 lm_label_ids[i] = features.lm_label_ids
                 is_nexts[i] = features.is_next
-                # add ngram related ids
                 ngram_ids[i] = features.ngram_ids
                 ngram_masks[i] = features.ngram_masks
                 ngram_positions[i] = features.ngram_positions
@@ -516,7 +516,7 @@ def prepare_pretrain_data(
             logger.info(f"GPU {i}: {torch.cuda.get_device_name(i)}")
     logger.info("="*50)
     
-    logger.info("步骤3: 加载tokenizer和n-gram编码器")
+    logger.info("步骤3: 加载tokenizer")
     # 从Huggingface加载预训练的tokenizer
     logger.info(f"加载tokenizer: {tokenizer_cfg}")
     start_time = time.time()

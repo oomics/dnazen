@@ -30,6 +30,7 @@ import shelve
 import logging
 import time
 import os
+import ipdb
 from random import random, randrange, randint, shuffle, choice
 from ZEN import BertTokenizer, ZenNgramDict
 import numpy as np
@@ -97,13 +98,15 @@ class ZenDNANgramDict(object):
             i = 0
             for _, row in ngram_df.iterrows():
                 if "N-gram" in row and "频率" in row:
-                    ngram = row["N-gram"]  # noqa: F841
                     freq = row["频率"]
                     #tokens = tuple(tokenizer.tokenize(ngram))
-                    tokens = row["token_ids"]
+                    ngram = row["token_ids"]
+                    tokens = row["N-gram"]
+                    tok = tuple(tokens.split(" ")) # 将ngram的'GA CTCATT'转换为('GA', 'CTCATT')
+                    #ipdb.set_trace()
                     self.ngram_to_freq_dict[ngram] = freq
-                    self.id_to_ngram_list.append(tokens)
-                    self.ngram_to_id_dict[tokens] = i + 1
+                    self.id_to_ngram_list.append(tok)
+                    self.ngram_to_id_dict[tok] = i + 1
 
             logger.info(
                 f"创建了 {len(self.id_to_ngram_list)} 个token ID映射（总N-gram数: {len(self.ngram_to_freq_dict)}）"
@@ -399,13 +402,17 @@ def create_instances_from_document(
                         # j is the starting position of the ngram
                         # i is the length of the current ngram
                         character_segment = tuple(character_segment)
+                        #ipdb.set_trace()
                         if character_segment in ngram_dict.ngram_to_id_dict:
                             ngram_index = ngram_dict.ngram_to_id_dict[character_segment]
+                            #logger.info(f"ngram_index: {ngram_index}, q: {q}, p: {p}, character_segment match: {character_segment}")
                             ngram_matches.append([ngram_index, q, p, character_segment])
+                logger.info(f"ngram_matches 个数: {len(ngram_matches)}")
 
                 shuffle(ngram_matches)
                 if len(ngram_matches) > ngram_dict.max_ngram_in_seq:
                     ngram_matches = ngram_matches[:ngram_dict.max_ngram_in_seq]
+                #ipdb.set_trace()
                 ngram_ids = [ngram[0] for ngram in ngram_matches]
                 ngram_positions = [ngram[1] for ngram in ngram_matches]
                 ngram_lengths = [ngram[2] for ngram in ngram_matches]
@@ -513,7 +520,7 @@ def main():
                        help="每个序列最大掩码标记数")
     parser.add_argument("--ngram_list_dir", type=str, default="./",
                        help="n-gram列表文件路径")
-    parser.add_argument("--max_ngram_in_sequence", type=int, default=20,
+    parser.add_argument("--max_ngram_in_sequence", type=int, default=40,
                        help="每个序列最大n-gram数量")
 
     args = parser.parse_args()
@@ -544,6 +551,7 @@ def main():
     logger.info("开始加载n-gram字典...")
     start_time = time.time()
     #ngram_dict = ZenNgramDict(args.bert_model, tokenizer=tokenizer)
+    #ipdb.set_trace()
     ngram_dict = ZenDNANgramDict(args.ngram_list_dir, tokenizer=tokenizer)
     logger.info(f"N-gram字典加载完成，耗时: {time.time() - start_time:.2f}秒")
 
