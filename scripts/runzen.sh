@@ -35,12 +35,16 @@ EXPERIMENT_ID="exp1_pmi5"
 #     --ngram_list_dir  ../../out/exp1_pmi5/  
 
 # 运行预训练
-python ../src/train/run_pretrain_zen.py \             
-    --data-source tokenized    \         
-    --data ../data/            \ 
-    --ngram ../../out/exp1_pmi5/ngram_encoder.json     \        
-    --out ../data/         \    
-    --lr 3e-5           \  
-    --epochs 20          \   
-    --batch-size 256      \
-    --model ~/DNABERT-2-117M 
+python ../src/train/run_pretrain_zen.py \
+    --data-source tokenized \
+    --data ../data/ \
+    --ngram ../../out/exp1_pmi5/ngram_encoder.json \
+    --out ../data/ \
+    --model ~/DNABERT-2-117M \
+    --lr 3e-5 \
+    --epochs 20 \
+    --batch-size 256 \
+    --grad-accum 16 \
+    --warmup 0.1 \
+    --fp16 \
+    --reduce-mem
