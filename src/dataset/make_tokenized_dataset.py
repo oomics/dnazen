@@ -316,7 +316,12 @@ def merge_batch_files(temp_files, out_path):
 @click.option("--batch-size", type=int, default=10000, help="每批处理的序列数")
 @click.option("--resume", is_flag=True, help="是否从上次中断处继续处理")
 @click.option("--max-length", type=int, default=None, help="手动指定最大序列长度")
+
 def main(data, tok, out, batch_size, resume, max_length):
+    tokenize_batch_text(data, tok, out, batch_size, resume, max_length)
+
+
+def tokenize_batch_text(data, tok, out, batch_size, resume, max_length):
     """
     将原始文本数据使用指定分词器进行分词处理，并保存为PyTorch格式。
 
