@@ -343,6 +343,7 @@ def create_instances_from_document(
     current_chunk = []
     current_length = 0
     i = 0
+    max_match_num_list = []
     while i < len(document):
         segment = document[i]
         current_chunk.append(segment)
@@ -407,7 +408,9 @@ def create_instances_from_document(
                             ngram_index = ngram_dict.ngram_to_id_dict[character_segment]
                             #logger.info(f"ngram_index: {ngram_index}, q: {q}, p: {p}, character_segment match: {character_segment}")
                             ngram_matches.append([ngram_index, q, p, character_segment])
-                logger.info(f"ngram_matches 个数: {len(ngram_matches)}")
+                max_match_num = len(ngram_matches)
+                max_match_num_list.append(max_match_num)
+                logger.debug(f"ngram_matches 个数: {len(ngram_matches)}")
 
                 shuffle(ngram_matches)
                 if len(ngram_matches) > ngram_dict.max_ngram_in_seq:
@@ -435,7 +438,7 @@ def create_instances_from_document(
             current_length = 0
         i += 1
 
-    return instances
+    return instances, max_match_num_list
 
 
 def tokenize_text(train_corpus,bert_model,output_dir, tokenizer,docs):
@@ -520,7 +523,7 @@ def main():
                        help="每个序列最大掩码标记数")
     parser.add_argument("--ngram_list_dir", type=str, default="./",
                        help="n-gram列表文件路径")
-    parser.add_argument("--max_ngram_in_sequence", type=int, default=40,
+    parser.add_argument("--max_ngram_in_sequence", type=int, default=100,
                        help="每个序列最大n-gram数量")
 
     args = parser.parse_args()
@@ -596,7 +599,7 @@ def main():
             
             with epoch_filename.open('w') as epoch_file:
                 for doc_idx in trange(len(docs), desc="处理文档"):
-                    doc_instances = create_instances_from_document(
+                    doc_instances, max_match_num_list = create_instances_from_document(
                         docs, doc_idx, max_seq_length=args.max_seq_len,
                         short_seq_prob=args.short_seq_prob,
                         masked_lm_prob=args.masked_lm_prob,
@@ -617,6 +620,8 @@ def main():
             
             # 保存本轮数据的统计信息
             metrics_file = args.output_dir / f"epoch_{epoch}_metrics.json"
+            max_ngram_in_sequence = max(max_match_num_list) # 本轮数据中最大的ngram数量
+            logger.info(f"第{epoch+1}轮数据中，所有个序列中，单个序列匹配ngram的最多个数量: {max_ngram_in_sequence},系统设置：{args.max_ngram_in_sequence}")
             with metrics_file.open('w') as metrics_file:
                 metrics = {
                     "num_training_examples": num_instances,

@@ -89,29 +89,52 @@ def convert_example_to_features(example, tokenizer, max_seq_length, max_ngram_in
 
     # add ngram pads
     #ipdb.set_trace()
+    #DNA某些数据会出现大量的重复序列，从而导致ngram_ids 数量超过 max_ngram_in_sequence
     ngram_id_array = np.zeros(max_ngram_in_sequence, dtype=np.int32)
-    ngram_id_array[:len(ngram_ids)] = ngram_ids
-
+    if len(ngram_ids) > max_ngram_in_sequence:
+        #ipdb.set_trace()
+        logger.warning(f"ngram_ids 数量超过 max_ngram_in_sequence: {len(ngram_ids)} > {max_ngram_in_sequence}; 数据：example  {example}")
+        ngram_id_array[:max_ngram_in_sequence] = ngram_ids[:max_ngram_in_sequence]
+    else:
+        ngram_id_array[:len(ngram_ids)] = ngram_ids
     # record the masked positions
 
     # The matrix here take too much space either in disk or in memory, so the usage have to be lazily convert the
     # the start position and length to the matrix at training time.
 
     ngram_positions_matrix = np.zeros(shape=(max_seq_length, max_ngram_in_sequence), dtype=bool)
-    for i in range(len(ngram_ids)):
-        ngram_positions_matrix[ngram_positions[i]:ngram_positions[i]+ngram_lengths[i], i] = 1
+    #for i in range(len(ngram_ids)):
+    #    ngram_positions_matrix[ngram_positions[i]:ngram_positions[i]+ngram_lengths[i], i] = 1
+    #使用min(len(ngram_ids), max_ngram_in_sequence)来确保不会超出ngram的最大限制，添加了边界检查，确保ngram位置和长度不会超出序列最大长度
+    for i in range(min(len(ngram_ids), max_ngram_in_sequence)):
+        start_pos = ngram_positions[i]
+        length = ngram_lengths[i]
+        if start_pos + length <= max_seq_length:
+            ngram_positions_matrix[start_pos:start_pos+length, i] = 1
+        else:
+            logger.warning(f"ngram位置超出序列长度限制: 起始位置={start_pos}, 长度={length}, 最大序列长度={max_seq_length}")
 
     ngram_start_array = np.zeros(max_ngram_in_sequence, dtype=np.int32)
-    ngram_start_array[:len(ngram_ids)] = ngram_positions
+    if len(ngram_ids) > max_ngram_in_sequence:
+        ngram_start_array[:max_ngram_in_sequence] = ngram_positions[:max_ngram_in_sequence]
+    else:
+        ngram_start_array[:len(ngram_ids)] = ngram_positions
 
     ngram_length_array = np.zeros(max_ngram_in_sequence, dtype=np.int32)
-    ngram_length_array[:len(ngram_ids)] = ngram_lengths
+    if len(ngram_ids) > max_ngram_in_sequence:
+        ngram_length_array[:max_ngram_in_sequence] = ngram_lengths[:max_ngram_in_sequence]
+    else:
+        ngram_length_array[:len(ngram_ids)] = ngram_lengths
 
     ngram_mask_array = np.zeros(max_ngram_in_sequence, dtype=bool)
     ngram_mask_array[:len(ngram_ids)] = 1
 
     ngram_segment_array = np.zeros(max_ngram_in_sequence, dtype=bool)
-    ngram_segment_array[:len(ngram_ids)] = ngram_segment_ids
+    if len(ngram_ids) > max_ngram_in_sequence:
+        ngram_segment_array[:max_ngram_in_sequence] = ngram_segment_ids[:max_ngram_in_sequence]
+    else:
+        ngram_segment_array[:len(ngram_ids)] = ngram_segment_ids
+    
     features = InputFeatures(input_ids=input_array,
                              input_mask=mask_array,
                              segment_ids=segment_array,
@@ -201,7 +224,7 @@ class PregeneratedDataset(Dataset):
 
             ngram_segment_ids = np.zeros(shape=(num_samples, max_ngram_in_sequence), dtype=np.bool)
 
-        logging.info(f"Loading training examples for epoch {epoch}")
+        logging.info(f"Loading training examples form {data_file} for epoch {epoch}")
         with open(data_file, 'r') as f:
             for i, line in enumerate(tqdm(f, total=num_samples, desc="Training examples")):
                 line = line.strip()
@@ -315,21 +338,7 @@ def main(
     3. 支持n-gram特征的提取和使用
     4. 支持多GPU训练和混合精度训练
     5. 提供完整的训练参数配置选项
-    
-    示例：
-        # 使用默认配置进行训练
-        python src/train/run_pretrain_zen.py --ngram ../out/exp1_pmi5/ngram_encoder.json --out ./data/
-        
-        # 使用自定义配置进行训练
-        python src/train/run_pretrain_zen.py  \\
-            --data-source tokenized \\
-            --data ../mspecies/train/train.txt \\
-            --ngram ../out/exp1_pmi5/ngram_encoder.json \\
-            --out ./data/ \\
-            --lr 3e-5 \\
-            --epochs 20 \\
-            --batch-size 256 \\
-            --fp16
+
     """
     random.seed(seed)  # 设置随机种子，保证实验结果可复现
 
@@ -567,15 +576,20 @@ def prepare_pretrain_data(
         config = ZenConfig(21128, 104089)  # 词汇表大小和n-gram大小
         model = ZenForPreTraining(config)
         # 检查模型是否有参数
-        if not list(model.parameters()):
-            raise ValueError("模型初始化后没有参数，请检查模型结构")
+        if not any(p.requires_grad for p in model.parameters()):
+            raise ValueError("模型初始化后没有可训练的参数，请检查模型结构")
     else:
-        logger.info(f"加载预训练模型，复用已有参数")
-        # 加载预训练模型，复用已有参数
+        logger.info(f"加载预训练模型，复用已有参数: {bert_model}")
         model = ZenForPreTraining.from_pretrained(bert_model)
         # 检查预训练模型是否正确加载
-        if not list(model.parameters()):
-            raise ValueError("预训练模型加载失败，没有参数")
+        if not any(p.requires_grad for p in model.parameters()):
+            raise ValueError("预训练模型加载失败，没有可训练的参数")
+
+    # 打印模型参数统计信息
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    logger.info(f"模型总参数量: {total_params:,}")
+    logger.info(f"可训练参数量: {trainable_params:,}")
 
     # 启用半精度训练（如果指定）
     if fp16:
@@ -713,7 +727,7 @@ def prepare_pretrain_data(
         # 使用tqdm创建进度条，用于可视化训练进度
         logger.info("开始训练...")
         with tqdm(total=len(train_dataloader), desc=f"继续预训练Epoch {epoch}") as pbar:
-            ipdb.set_trace()
+            #ipdb.set_trace()
             # 遍历每个批次的数据
             for step, batch in enumerate(train_dataloader):
                 batch_start_time = time.time()
