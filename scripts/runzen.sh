@@ -49,7 +49,7 @@ python ../src/train/run_pretrain_zen.py \
     --model ~/DNABERT-2-117M \
     --lr 3e-5 \
     --epochs 20 \
-    --batch-size 256 \
+    --batch-size 128 \
     --grad-accum 16 \
     --warmup 0.1 \
     --reduce-mem
