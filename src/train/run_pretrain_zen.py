@@ -93,7 +93,9 @@ def convert_example_to_features(example, tokenizer, max_seq_length, max_ngram_in
     ngram_id_array = np.zeros(max_ngram_in_sequence, dtype=np.int32)
     if len(ngram_ids) > max_ngram_in_sequence:
         #ipdb.set_trace()
-        logger.warning(f"ngram_ids 数量超过 max_ngram_in_sequence: {len(ngram_ids)} > {max_ngram_in_sequence}; 数据：example  {example}")
+        logger.debug(f"ngram_ids 数量超过 max_ngram_in_sequence: {len(ngram_ids)} > {max_ngram_in_sequence}; 数据：example  {example}")
+        logger.info(f"ngram_ids 数量超过 max_ngram_in_sequence: {len(ngram_ids)} > {max_ngram_in_sequence}; ")
+
         ngram_id_array[:max_ngram_in_sequence] = ngram_ids[:max_ngram_in_sequence]
     else:
         ngram_id_array[:len(ngram_ids)] = ngram_ids
@@ -581,9 +583,12 @@ def prepare_pretrain_data(
     else:
         logger.info(f"加载预训练模型，复用已有参数: {bert_model}")
         model = ZenForPreTraining.from_pretrained(bert_model)
+        #model = ZenForPreTraining.from_pretrained("/home/zeq/bert-base-uncased")
         # 检查预训练模型是否正确加载
         if not any(p.requires_grad for p in model.parameters()):
             raise ValueError("预训练模型加载失败，没有可训练的参数")
+        logger.info(f"Total parameters: {sum(p.numel() for p in model.parameters())}")
+      
 
     # 打印模型参数统计信息
     total_params = sum(p.numel() for p in model.parameters())
@@ -599,21 +604,13 @@ def prepare_pretrain_data(
     model.to(device)
     
     # 设置分布式训练或多GPU训练
-    if local_rank != -1:
-        # 分布式训练配置
-        try:
-            from apex.parallel import DistributedDataParallel as DDP
-        except ImportError:
-            raise ImportError(
-                "请从https://www.github.com/nvidia/apex安装apex库以使用分布式和FP16训练。")
-        model = DDP(model)
-    elif n_gpu > 1:
+    if n_gpu > 1:
         # 确保模型有参数
         if not list(model.parameters()):
             raise ValueError("在使用DataParallel之前，模型没有参数")
-        logger.info("模型结构:")
+        logger.info("n_gpu > 1 模型结构:")
         logger.info(model)
-        model = torch.nn.DataParallel(model)
+        #model = torch.nn.DataParallel(model)
 
     # 在开始训练前检查模型状态
     logger.info("检查模型状态...")
@@ -666,6 +663,7 @@ def prepare_pretrain_data(
                              lr=learning_rate,
                              warmup=warmup_proportion,
                              t_total=num_train_optimization_steps)
+        logger.info("BertAdam优化器初始化完成，学习率: " + str(learning_rate) + "，预热比例: " + str(warmup_proportion) + "，优化步数: " + str(num_train_optimization_steps))
 
     # 初始化全局步数计数器
     global_step = 0
@@ -679,7 +677,7 @@ def prepare_pretrain_data(
     # 将模型设置为训练模式
     model.train()
     
-    logger.info("步骤7: 开始训练循环")
+    logger.info("=======================步骤7: 开始训练循环=======================")
     # 开始训练循环，共训练epochs轮
     for epoch in range(epochs):
         epoch_start_time = time.time()
@@ -739,7 +737,8 @@ def prepare_pretrain_data(
                 input_ids, input_mask, segment_ids, lm_label_ids, is_next, ngram_ids, ngram_masks, ngram_positions, \
                 ngram_starts, \
                 ngram_lengths, ngram_segment_ids = batch
-
+                
+                
                 # 前向传播，计算损失值
                 forward_start_time = time.time()
                 loss = model(
@@ -753,6 +752,7 @@ def prepare_pretrain_data(
                     lm_label_ids,  # 语言模型标签IDs
                     is_next  # 下一句预测标签
                 )
+                logger.info("loss: " + str(loss))
                 forward_time = time.time() - forward_start_time
 
                 # 多GPU训练时，需要对损失取平均
@@ -856,10 +856,13 @@ def prepare_pretrain_data(
 
         # 保存模型状态字典
         torch.save(model_to_save.state_dict(), output_model_file)
+        logger.info("模型状态字典保存完成，output_model_file: " + output_model_file)
         # 保存模型配置
         model_to_save.config.to_json_file(output_config_file)
+        logger.info("模型配置保存完成，output_config_file: " + output_config_file)
         # 保存tokenizer词汇表
-        tokenizer.save_vocabulary(model_save_dir)
+        tokenizer.save_pretrained(model_save_dir)
+        logger.info("tokenizer保存完成，model_save_dir: " + str(model_save_dir))
 
         # 保存完成后记录信息
         save_time = time.time() - save_start_time
