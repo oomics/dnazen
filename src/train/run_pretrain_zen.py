@@ -215,6 +215,7 @@ class PregeneratedDataset(Dataset):
         self.fp16 = fp16
         
         if reduce_memory:
+            
             self.temp_dir = "./tmp"
             self.working_dir = Path(self.temp_dir)
             
@@ -346,7 +347,7 @@ class PregeneratedDataset(Dataset):
 @click.option("--loss-scale", type=float, default=0, help="FP16训练的损失缩放系数，0表示动态缩放")
 @click.option("--warmup", "warmup_proportion", type=float, default=0.1, help="学习率预热比例，默认0.1")
 @click.option("--data-epochs", "num_data_epochs", type=int, default=1, help="数据训练轮数")
-@click.option("--reduce-mem/--no-reduce-mem", "reduce_memory", default=True, help="是否启用内存优化")
+@click.option("--reduce-mem/--no-reduce-mem", "reduce_memory", default=False, help="是否启用内存优化")
 @click.option("--epochs", type=int, default=10, help="训练总轮数")
 @click.option("--batch-size", "train_batch_size", type=int, default=128, help="训练批次大小")
 @click.option("--grad-accum", "gradient_accumulation_steps", type=int, default=16, help="梯度累积步数")
