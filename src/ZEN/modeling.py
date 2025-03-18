@@ -841,6 +841,13 @@ class ZenPreTrainedModel(nn.Module):
         if len(error_msgs) > 0:
             raise RuntimeError('Error(s) in loading state_dict for {}:\n\t{}'.format(
                 model.__class__.__name__, "\n\t".join(error_msgs)))
+        # Check model parameters
+        param_count = sum(p.numel() for p in model.parameters())
+        trainable_param_count = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        logger.info(f"Model total parameters: {param_count:,}")
+        logger.info(f"Trainable parameters: {trainable_param_count:,}")
+        if trainable_param_count == 0:
+            raise ValueError("Model has no trainable parameters")
         return model
 
 
@@ -940,10 +947,12 @@ class ZenModel(ZenPreTrainedModel):
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-        extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
+        device = next(self.parameters()).device if any(self.parameters()) else input_ids.device
+        dtype = next(self.parameters()).dtype if any(self.parameters()) else torch.float32
+        extended_attention_mask = extended_attention_mask.to(device=device, dtype=dtype)
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
-        extended_ngram_attention_mask = extended_ngram_attention_mask.to(dtype=next(self.parameters()).dtype)
+        extended_ngram_attention_mask = extended_ngram_attention_mask.to(device=device, dtype=dtype)
         extended_ngram_attention_mask = (1.0 - extended_ngram_attention_mask) * -10000.0
 
         # Prepare head mask if needed
@@ -1131,11 +1140,18 @@ class ZenForMaskedLM(ZenPreTrainedModel):
 
         if masked_lm_labels is not None:
             loss_fct = CrossEntropyLoss(ignore_index=-1)
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
-            return masked_lm_loss
-        elif self.output_attentions:
-            return all_attentions, prediction_scores
-        return prediction_scores
+            # Only keep active parts of the loss
+            attention_mask_label = None
+            if attention_mask_label is not None:
+                active_loss = attention_mask_label.view(-1) == 1
+                active_logits = prediction_scores.view(-1, self.config.vocab_size)[active_loss]
+                active_labels = masked_lm_labels.view(-1)[active_loss]
+                loss = loss_fct(active_logits, active_labels)
+            else:
+                loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
+            return loss
+        else:
+            return prediction_scores
 
 
 class ZenForNextSentencePrediction(ZenPreTrainedModel):

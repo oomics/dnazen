@@ -179,6 +179,9 @@ class PregeneratedDataset(Dataset):
         if reduce_memory:
             self.temp_dir = "/tmp"
             self.working_dir = Path(self.temp_dir)
+            
+            logger.info("启用内存优化: 使用内存映射文件来存储数据,{}".format(self.working_dir))
+            #input_ids, input_mask, segment_ids, lm_label_ids, is_next, ngram_ids, ngram_masks, ngram_positions, ngram_segment_ids = batch
             input_ids = np.memmap(filename=self.working_dir / 'input_ids.memmap',
                                   mode='w+', dtype=np.int32, shape=(num_samples, seq_len))
             input_masks = np.memmap(filename=self.working_dir / 'input_masks.memmap',
@@ -200,6 +203,7 @@ class PregeneratedDataset(Dataset):
             ngram_positions = np.memmap(filename=self.working_dir / 'ngram_positions.memmap',
                                       mode='w+', dtype=np.bool, shape=(num_samples, seq_len, max_ngram_in_sequence))
 
+            # 暂时不需要ngram_starts和ngram_lengths
             ngram_starts = np.memmap(filename=self.working_dir / 'ngram_starts.memmap',
                                     mode='w+', dtype=np.int32, shape=(num_samples, max_ngram_in_sequence))
 
@@ -610,7 +614,7 @@ def prepare_pretrain_data(
             raise ValueError("在使用DataParallel之前，模型没有参数")
         logger.info("n_gpu > 1 模型结构:")
         logger.info(model)
-        #model = torch.nn.DataParallel(model)
+        model = torch.nn.DataParallel(model,device_ids=[i for i in range(n_gpu)])
 
     # 在开始训练前检查模型状态
     logger.info("检查模型状态...")
