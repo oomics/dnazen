@@ -57,6 +57,44 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def get_memory():
+    try:
+        import psutil
+        process = psutil.Process()
+        memory_info = process.memory_info()
+        memory_usage_mb = memory_info.rss / 1024 / 1024  # 转换为MB
+        return memory_usage_mb
+    except Exception as e:
+        logger.warning(f"获取内存使用情况时发生错误: {str(e)}")
+
+def get_gpu_memory():
+    if torch.cuda.is_available():
+        gpu_memory_allocated = torch.cuda.memory_allocated() / 1024 / 1024  # 转换为MB
+        gpu_memory_reserved = torch.cuda.memory_reserved() / 1024 / 1024  # 转换为MB
+        return gpu_memory_allocated, gpu_memory_reserved
+    else:
+        return 0, 0
+
+def get_memory_usage():
+     # 获取GPU/CPU内存使用情况
+    try:
+        memory_usage_mb = get_memory()
+        logger.info(f"CPU内存使用: {memory_usage_mb:.2f} MB")
+        
+        # 如果有GPU，获取GPU内存使用情况
+        if torch.cuda.is_available():
+            gpu_memory_allocated = torch.cuda.memory_allocated() / 1024 / 1024  # 转换为MB
+            gpu_memory_reserved = torch.cuda.memory_reserved() / 1024 / 1024  # 转换为MB
+            for i in range(torch.cuda.device_count()):
+                gpu_memory_allocated_device = torch.cuda.memory_allocated(i) / 1024 / 1024
+                gpu_memory_reserved_device = torch.cuda.memory_reserved(i) / 1024 / 1024
+                logger.info(f"GPU {i} 已分配内存: {gpu_memory_allocated_device:.2f} MB, 已缓存内存: {gpu_memory_reserved_device:.2f} MB")
+            logger.info(f"总GPU已分配内存: {gpu_memory_allocated:.2f} MB , 总GPU已缓存内存: {gpu_memory_reserved:.2f} MB")
+    except ImportError:
+        logger.warning("未安装psutil模块，无法获取CPU内存使用情况")
+    except Exception as e:
+        logger.warning(f"获取内存使用情况时发生错误: {str(e)}")
+
 
 def convert_example_to_features(example, tokenizer, max_seq_length, max_ngram_in_sequence):
     tokens = example["tokens"]
@@ -231,8 +269,10 @@ class PregeneratedDataset(Dataset):
             ngram_segment_ids = np.zeros(shape=(num_samples, max_ngram_in_sequence), dtype=np.bool)
 
         logging.info(f"Loading training examples form {data_file} for epoch {epoch}")
+       
+
         with open(data_file, 'r') as f:
-            for i, line in enumerate(tqdm(f, total=num_samples, desc="Training examples")):
+            for i, line in enumerate(tqdm(f, total=num_samples, desc="Training examples, CPU内存: {} MB，GPU内存: {} MB".format(get_memory(), get_gpu_memory()))):
                 line = line.strip()
                 example = json.loads(line)
                 features = convert_example_to_features(example, tokenizer, seq_len, max_ngram_in_sequence)
@@ -247,6 +287,8 @@ class PregeneratedDataset(Dataset):
                 ngram_starts[i] = features.ngram_starts
                 ngram_lengths[i] = features.ngram_lengths
                 ngram_segment_ids[i] = features.ngram_segment_ids
+
+                #get_memory_usage()
 
         assert i == num_samples - 1  # Assert that the sample count metric was true
         logging.info("Loading complete!")
