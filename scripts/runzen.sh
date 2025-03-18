@@ -51,6 +51,5 @@ python ../src/train/run_pretrain_zen.py \
     --epochs 20 \
     --batch-size 128 \
     --grad-accum 16 \
-    --warmup 0.1 \
-    --reduce-mem
+    --warmup 0.1 
     
