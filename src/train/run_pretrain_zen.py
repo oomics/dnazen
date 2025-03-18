@@ -215,7 +215,7 @@ class PregeneratedDataset(Dataset):
         self.fp16 = fp16
         
         if reduce_memory:
-            self.temp_dir = "/tmp"
+            self.temp_dir = "./tmp"
             self.working_dir = Path(self.temp_dir)
             
             logger.info("启用内存优化: 使用内存映射文件来存储数据,{}".format(self.working_dir))
