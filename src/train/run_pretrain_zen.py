@@ -355,6 +355,9 @@ class PregeneratedDataset(Dataset):
 @click.option("--fp16/--no-fp16", default=False, help="是否使用半精度(FP16)训练")
 @click.option("--scratch/--no-scratch", default=False, help="是否从零开始训练，不使用预训练模型")
 @click.option("--save-prefix", "save_name", type=str, default="dnazen_", help="保存模型的名称前缀")
+@click.option("--num-workers", type=int, default=4, help="数据加载的工作进程数")
+@click.option("--pin-memory", type=bool, default=True, help="是否使用固定内存")
+@click.option("--prefetch-factor", type=int, default=2, help="数据预加载因子")
 def main(
     data_source: Literal["raw", "tokenized"],
     data_dir: str,
@@ -378,6 +381,9 @@ def main(
     fp16: bool,
     scratch: bool,
     save_name: str,
+    num_workers: int,
+    pin_memory: bool,
+    prefetch_factor: int
 ):
     """DNA序列预训练主程序
     
@@ -443,6 +449,9 @@ def main(
             save_name=save_name,
             already_trained_epoch=0,
             pregenerated_data=None,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+            prefetch_factor=prefetch_factor
         )
 
 
@@ -498,6 +507,9 @@ def prepare_pretrain_data(
     save_name: str,  # 保存模型的名称前缀
     already_trained_epoch: int,  # 已经训练的轮数，用于继续训练
     pregenerated_data: str | None,  # 预生成数据的路径，如果为None则使用data_dir
+    num_workers: int,
+    pin_memory: bool,
+    prefetch_factor: int
 ):
     """准备预训练数据并训练模型
     
@@ -531,6 +543,9 @@ def prepare_pretrain_data(
         save_name: 保存模型的名称前缀
         already_trained_epoch: 已训练的轮数，用于继续训练
         pregenerated_data: 预生成数据的路径
+        num_workers: 数据加载的工作进程数
+        pin_memory: 是否使用固定内存
+        prefetch_factor: 数据预加载因子
     """
 
     
@@ -762,7 +777,10 @@ def prepare_pretrain_data(
         train_dataloader = DataLoader(
             epoch_dataset, 
             sampler=train_sampler, 
-            batch_size=train_batch_size
+            batch_size=train_batch_size,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+            prefetch_factor=prefetch_factor
         )
         
         # 初始化当前epoch的训练损失和样本计数

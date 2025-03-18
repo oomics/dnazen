@@ -47,9 +47,12 @@ python ../src/train/run_pretrain_zen.py \
     --ngram ../../out/exp1_pmi5/ngram_encoder.json \
     --out ../data/ \
     --model ~/DNABERT-2-117M \
-    --lr 3e-5 \
-    --epochs 20 \
-    --batch-size 128 \
-    --grad-accum 16 \
-    --warmup 0.1 
+    --lr 5e-5 \
+    --epochs 5 \
+    --batch-size 1024 \
+    --grad-accum 2 \
+    --warmup 0.1 \
+    --num-workers 8 \
+    --pin-memory True \
+    --prefetch-factor 2 
     
