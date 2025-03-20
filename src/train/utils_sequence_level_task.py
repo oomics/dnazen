@@ -621,7 +621,7 @@ class WnliProcessor(DataProcessor):
 
 
 
-class Prom300AllProcessor(DataProcessor):
+class DNAZENProcessor(DataProcessor):
     """Processor for the WNLI data set (GLUE version)."""
 
     def get_train_examples(self, data_dir):
@@ -629,6 +629,10 @@ class Prom300AllProcessor(DataProcessor):
         return self._create_examples(
             self._read_tsv(os.path.join(data_dir, "train.csv")), "train")
     
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "test.csv")), "test")
 
     def get_dev_examples(self, data_dir):
         """See base class."""
@@ -880,11 +884,11 @@ processors = {
     # "thucnews": ThucnewsProcessor,
     # "chnsenticorp": ChnsenticorpProcessor,
     # "lcqmc": LcqmcProcessor,
-    "prom_300_all": Prom300AllProcessor,
+    "DNAZEN": DNAZENProcessor,
 }
 
 output_modes = {
-    "prom_300_all": "classification",
+    "DNAZEN": "classification",
     # "cola": "classification",
     # "mnli": "classification",
     # "mrpc": "classification",

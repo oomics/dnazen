@@ -39,6 +39,9 @@ from transformers import AutoTokenizer
 # 导入自定义工具和模块
 from dnazen.ngram import NgramEncoder  # n-gram编码器模块，用于处理n-gram特征
 
+ # 计算Matthews相关系数(MCC)
+from sklearn.metrics import matthews_corrcoef
+
 logger = logging.getLogger(__name__)
 
 if sys.version_info[0] == 2:
@@ -126,32 +129,75 @@ def evaluate(args, model, tokenizer, ngram_dict, processor, label_list):
     logger.info(f"  评估批次大小: {args.eval_batch_size}")
 
     model.eval()
-    preds = []
-    out_label_ids = None
-    total_eval_loss = 0
-    nb_eval_steps = 0
+    preds = []  # 存储模型预测结果
+    out_label_ids = None  # 存储真实标签
+    total_eval_loss = 0  # 总评估损失
+    nb_eval_steps = 0  # 评估步数
 
     logger.info("开始模型推理...")
     for batch in tqdm(eval_dataloader, desc="Evaluating"):
+        # 将数据移动到指定设备（CPU/GPU）
         batch = tuple(t.to(args.device) for t in batch)
         input_ids, input_mask, segment_ids, label_ids, input_ngram_ids, ngram_position_matrix, \
         ngram_lengths, ngram_seg_ids, ngram_masks = batch
-
+        # 在评估模式下进行前向传播，不计算梯度
         with torch.no_grad():
-            logits = model(input_ids=input_ids,
-                           input_ngram_ids=input_ngram_ids,
-                           ngram_position_matrix=ngram_position_matrix,
-                           labels=None, head_mask=None)
+            # 使用关键字参数调用模型
+            logits = model(
+                input_ids=input_ids,
+                input_ngram_ids=input_ngram_ids,
+                ngram_position_matrix=ngram_position_matrix,
+                labels=None, 
+                head_mask=None
+                )
+            
+            # 计算损失
+            loss_fct = torch.nn.CrossEntropyLoss()
+            loss = loss_fct(logits, label_ids.view(-1))
+            
+            # 累加评估损失和步数
+            total_eval_loss += loss.item()
+            nb_eval_steps += 1
 
         if len(preds) == 0:
             preds.append(logits.detach().cpu().numpy())
             out_label_ids = label_ids.detach().cpu().numpy()
         else:
+            #import pdb; pdb.set_trace()
             preds[0] = np.append(preds[0], logits.detach().cpu().numpy(), axis=0)
             out_label_ids = np.append(out_label_ids, label_ids.detach().cpu().numpy(), axis=0)
+            
+            # 将logits转换为预测标签（取最大概率的类别）
+            #predsx = np.argmax(preds[0], axis=1)
+            
+            # 计算平均评估损失
+            avg_eval_loss = total_eval_loss / nb_eval_steps if nb_eval_steps > 0 else 0
+            logger.info(f"当前评估平均损失: {avg_eval_loss:.4f}")
+    
 
+    # 将logits转换为预测标签（取最大概率的类别）
     preds = np.argmax(preds[0], axis=1)
-    return compute_metrics(args.task_name, preds, out_label_ids)
+    
+    # 计算平均评估损失
+    avg_eval_loss = total_eval_loss / nb_eval_steps if nb_eval_steps > 0 else 0
+    logger.info(f"评估完成，平均损失: {avg_eval_loss:.4f}")
+    
+
+    # MCC计算公式：MCC = (TP*TN - FP*FN) / sqrt((TP+FP)(TP+FN)(TN+FP)(TN+FN))
+    # 其中：TP(真阳性), TN(真阴性), FP(假阳性), FN(假阴性)
+    mcc = matthews_corrcoef(out_label_ids, preds)
+    logger.info(f"Matthews相关系数 (MCC): {mcc:.4f}")
+    
+    # 计算其他评估指标（如准确率、精确率、召回率等）
+    result = compute_metrics(args.task_name, preds, out_label_ids)
+    logger.info("评估指标:")
+    for key in sorted(result.keys()):
+        logger.info(f"  {key} = {result[key]}")
+    
+    # 将MCC添加到评估结果字典中
+    result['mcc'] = mcc
+    
+    return result
 
 def train(args, model, tokenizer, ngram_dict, processor, label_list):
     global_step = 0
@@ -208,7 +254,7 @@ def train(args, model, tokenizer, ngram_dict, processor, label_list):
                          ngram_ids,
                          ngram_positions,
                          labels=label_ids)
-
+            logger.info("loss: " + str(loss))
             if args.n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu.
             if args.gradient_accumulation_steps > 1:
@@ -465,12 +511,8 @@ def main():
         os.makedirs(args.output_dir)
         logger.info(f"创建输出目录: {args.output_dir}")
 
-    task_name = args.task_name.lower()
-    if task_name not in processors:
-        raise ValueError("Task not found: %s" % (task_name))
-    logger.info(f"使用任务处理器: {task_name}")
 
-    processor = processors[task_name]()
+    processor = processors["DNAZEN"]() 
     label_list = processor.get_labels()
     num_labels = len(label_list)
     logger.info(f"标签列表: {label_list}, 标签数量: {num_labels}")
@@ -487,7 +529,12 @@ def main():
     logger.info(f"N-gram字典加载完成，包含 {len(ngram_dict.ngram_to_id_dict)} 个N-gram")
 
     logger.info("加载分类模型...")
-    model = ZenForSequenceClassification.from_pretrained(args.bert_model, num_labels=num_labels, multift=args.multift, from_tf=True)
+    model = ZenForSequenceClassification.from_pretrained(
+        args.bert_model,
+        num_labels=num_labels,
+        multift=args.multift,
+        from_tf=True
+    )
     logger.info("分类模型加载完成")
 
     if args.local_rank == 0:

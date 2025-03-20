@@ -404,13 +404,11 @@ class BertSelfAttention(nn.Module):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        # self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        # self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        # self.value = nn.Linear(config.hidden_size, self.all_head_size)
+        self.query = nn.Linear(config.hidden_size, self.all_head_size)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
-        self.Wqkv = nn.Linear(config.hidden_size, 3 * config.hidden_size)
-        self.p_dropout = config.attention_probs_dropout_prob
-        # self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -418,22 +416,42 @@ class BertSelfAttention(nn.Module):
         return x.permute(0, 2, 1, 3)
 
     def forward(self, hidden_states, attention_mask, head_mask=None):
-        qkv = self.Wqkv(hidden_states)
-        qkv = rearrange(qkv, "b s (t h d) -> b s t h d", t=3, h=self.num_attention_heads)
+        mixed_query_layer = self.query(hidden_states)
+        mixed_key_layer = self.key(hidden_states)
+        mixed_value_layer = self.value(hidden_states)
 
-        q = qkv[:, :, 0, :, :].permute(0, 2, 1, 3)  # b h s d
-        k = qkv[:, :, 1, :, :].permute(0, 2, 1, 3)  # b h s d
-        v = qkv[:, :, 2, :, :].permute(0, 2, 1, 3)  # b h s d
-        
-        attention = scaled_dot_product_attention(
-            q,
-            k,
-            v,
-            attn_mask=attention_mask,
-            dropout_p=self.p_dropout,
-        ).permute(0, 2, 1, 3)
+        query_layer = self.transpose_for_scores(mixed_query_layer)
+        key_layer = self.transpose_for_scores(mixed_key_layer)
+        value_layer = self.transpose_for_scores(mixed_value_layer)
 
-        return rearrange(attention, "b s h d -> b s (h d)")
+        # Take the dot product between "query" and "key" to get the raw attention scores.
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
+        attention_scores = attention_scores + attention_mask
+
+        # Normalize the attention scores to probabilities.
+        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.dropout(attention_probs)
+
+        # Mask heads if we want to
+        if head_mask is not None:
+            attention_probs = attention_probs * head_mask
+
+        context_layer = torch.matmul(attention_probs, value_layer)
+        if self.keep_multihead_output:
+            self.multihead_output = context_layer
+            self.multihead_output.retain_grad()
+
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.view(*new_context_layer_shape)
+        if self.output_attentions:
+            return attention_probs, context_layer
+        return context_layer
 
 
 class BertSelfOutput(nn.Module):
@@ -721,7 +739,7 @@ class ZenPreTrainedModel(nn.Module):
         kwargs.pop('from_tf', None)
         multift = kwargs.get("multift", False)
         kwargs.pop('multift', None)
-        #import ipdb; ipdb.set_trace()
+
         if pretrained_model_name_or_path in PRETRAINED_MODEL_ARCHIVE_MAP:
             archive_file = PRETRAINED_MODEL_ARCHIVE_MAP[pretrained_model_name_or_path]
             config_file = PRETRAINED_CONFIG_ARCHIVE_MAP[pretrained_model_name_or_path]
@@ -783,16 +801,9 @@ class ZenPreTrainedModel(nn.Module):
         #if state_dict is None and not from_tf:
         if state_dict is None:
             state_dict = torch.load(resolved_archive_file, map_location='cpu')
-        elif "DNABERT-2-117M" in pretrained_model_name_or_path:
-            # if we want to load DNABERT-2-117M, we need to convert the state_dict to ZEN's state_dict
-            # their model is slightly different from standard BERT
-            from ZEN.utils import convert_dnabert2_to_zen
-            state_dict = torch.load(resolved_archive_file, map_location='cpu')
-            state_dict = convert_dnabert2_to_zen(state_dict)
         # Load from a PyTorch state_dict
         old_keys = []
         new_keys = []
-        #import ipdb; ipdb.set_trace()
         for key in state_dict.keys():
             new_key = None
             if 'gamma' in key:
@@ -944,8 +955,8 @@ class ZenModel(ZenPreTrainedModel):
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-        device = next(self.parameters()).device if any(self.parameters()) else input_ids.device
-        dtype = next(self.parameters()).dtype if any(self.parameters()) else torch.float32
+        device = next(self.parameters()).device if list(self.parameters()) else input_ids.device
+        dtype = next(self.parameters()).dtype if list(self.parameters()) else torch.float32
         extended_attention_mask = extended_attention_mask.to(device=device, dtype=dtype)
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
