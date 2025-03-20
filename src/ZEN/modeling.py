@@ -1261,7 +1261,11 @@ class ZenForSequenceClassification(ZenPreTrainedModel):
         self.apply(self.init_bert_weights)
 
     def forward(self, input_ids, input_ngram_ids, ngram_position_matrix, token_type_ids=None, attention_mask=None, labels=None, head_mask=None):
-        outputs = self.bert(input_ids, input_ngram_ids, ngram_position_matrix, token_type_ids, attention_mask,
+        outputs = self.bert(input_ids, 
+                            input_ngram_ids=input_ngram_ids,
+                            ngram_position_matrix=ngram_position_matrix,
+                            token_type_ids=token_type_ids,
+                            attention_mask=attention_mask, # bugfix: 之前attention_mask传到了ngram_token_type_ids
                             output_all_encoded_layers=False,
                             head_mask=head_mask)
         if self.output_attentions:
