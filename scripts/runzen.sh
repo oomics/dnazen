@@ -40,19 +40,56 @@ EXPERIMENT_ID="exp1_pmi5"
 #     --bert_model zhihan1996/DNABERT-2-117M     \
 #     --ngram_list_dir  ../../out/exp1_pmi5/  
 
+# # 运行预训练
+# python ../src/train/run_pretrain_zen.py \
+#     --data-source tokenized \
+#     --data ../data/ \
+#     --ngram ../../out/exp1_pmi5/ngram_encoder.json \
+#     --out ../data/ \
+#     --model ~/DNABERT-2-117M \
+#     --lr 5e-5 \
+#     --epochs 5 \
+#     --batch-size 1024 \
+#     --grad-accum 2 \
+#     --warmup 0.1 \
+#     --num-workers 8 \
+#     --pin-memory True \
+#     --prefetch-factor 2 
+
+
+#MODEL_PATH=../../zen_train/data/dnazen_0319194420_epoch_0/
+MODEL_PATH=~/zen-model/
+#MODEL_PATH=~/DNABERT-2-117M
+NGRAM_ENCODER_PATH=~/zen-model/ngram_encoder.json
+
+TASK_NAME=prom_300_all
 # 运行预训练
-python ../src/train/run_pretrain_zen.py \
-    --data-source tokenized \
-    --data ../data/ \
-    --ngram ../../out/exp1_pmi5/ngram_encoder.json \
-    --out ../data/ \
-    --model ~/DNABERT-2-117M \
-    --lr 5e-5 \
-    --epochs 5 \
-    --batch-size 1024 \
-    --grad-accum 2 \
-    --warmup 0.1 \
-    --num-workers 8 \
-    --pin-memory True \
-    --prefetch-factor 2 
-    
+python ../src/train/run_sequence_level_classification.py \
+     --data_dir ../../GUE/prom/$TASK_NAME \
+     --bert_model $MODEL_PATH \
+     --task_name $TASK_NAME \
+     --do_train \
+     --do_eval \
+     --max_seq_length 128 \
+     --train_batch_size 128  \
+    --num_train_epochs 10 \
+     --gradient_accumulation_steps 2 \
+     --learning_rate 5e-5 \
+     --output_dir ../output/finetune/pd/$TASK_NAME \
+     --save_steps 1000 \
+     --seed 42 \
+     --warmup_proportion 0.1 \
+     --ngram_list_dir ../../out/exp1_pmi5/
+
+
+
+    #  --data_path ../../GUE//prom/prom_300_all \
+    #  --checkpoint $MODEL_PATH \
+    #  --ngram_encoder_dir $NGRAM_ENCODER_PATH \
+    #  --per_device_train_batch_size 32 \
+    #  --per_device_eval_batch_size 32 \
+    #  --gradient_accumulation_steps 1 \
+    #  --lr 5e-5 \
+    #  --num_train_epochs 10 \
+    #  --out ../output/finetune/pd/prom_300_all 
+

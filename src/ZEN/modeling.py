@@ -68,6 +68,7 @@ PRETRAINED_MODEL_ARCHIVE_MAP = {
     'bert-large-cased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-finetuned-squad-pytorch_model.bin",
     'bert-base-cased-finetuned-mrpc': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-pytorch_model.bin",
     'zhihan1996/DNABERT-2-117M': "https://huggingface.co/zhihan1996/DNABERT-2-117M/resolve/main/pytorch_model.bin",
+    'zhihan1996/zen-model': "https://huggingface.co/zhihan1996/zen-model/resolve/main/pytorch_model.bin",
 }
 PRETRAINED_CONFIG_ARCHIVE_MAP = {
     # 'bert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-config.json",
@@ -85,9 +86,13 @@ PRETRAINED_CONFIG_ARCHIVE_MAP = {
     'bert-large-cased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-finetuned-squad-config.json",
     'bert-base-cased-finetuned-mrpc': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-config.json",
     'zhihan1996/DNABERT-2-117M': "https://huggingface.co/zhihan1996/DNABERT-2-117M/resolve/main/config.json",
+    'zhihan1996/zen-model': "https://huggingface.co/zhihan1996/zen-model/resolve/main/config.json",
 }
-BERT_CONFIG_NAME = 'bert_config.json'
-TF_WEIGHTS_NAME = 'model.ckpt'
+# BERT_CONFIG_NAME = 'bert_config.json'
+# TF_WEIGHTS_NAME = 'model.ckpt'
+
+BERT_CONFIG_NAME = 'config.json'
+TF_WEIGHTS_NAME = 'pytorch_model.bin'
 
 
 def prune_linear_layer(layer, index, dim=0):
@@ -733,7 +738,7 @@ class ZenPreTrainedModel(nn.Module):
         kwargs.pop('from_tf', None)
         multift = kwargs.get("multift", False)
         kwargs.pop('multift', None)
-
+        #import ipdb; ipdb.set_trace()
         if pretrained_model_name_or_path in PRETRAINED_MODEL_ARCHIVE_MAP:
             archive_file = PRETRAINED_MODEL_ARCHIVE_MAP[pretrained_model_name_or_path]
             config_file = PRETRAINED_CONFIG_ARCHIVE_MAP[pretrained_model_name_or_path]
@@ -791,11 +796,13 @@ class ZenPreTrainedModel(nn.Module):
         logger.info("Model config {}".format(config))
         # Instantiate model.
         model = cls(config, *inputs, **kwargs)
-        if state_dict is None and not from_tf:
+        #if state_dict is None and not from_tf:
+        if state_dict is None:
             state_dict = torch.load(resolved_archive_file, map_location='cpu')
         # Load from a PyTorch state_dict
         old_keys = []
         new_keys = []
+        #import ipdb; ipdb.set_trace()
         for key in state_dict.keys():
             new_key = None
             if 'gamma' in key:

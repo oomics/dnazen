@@ -26,6 +26,7 @@ import logging
 import os
 import unicodedata
 from io import open
+import json
 
 from .file_utils import cached_path
 
@@ -45,6 +46,8 @@ PRETRAINED_VOCAB_ARCHIVE_MAP = {
     'bert-large-uncased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-finetuned-squad-vocab.txt",
     'bert-large-cased-whole-word-masking-finetuned-squad': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-finetuned-squad-vocab.txt",
     'bert-base-cased-finetuned-mrpc': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-vocab.txt",
+    'zen-model': "https://huggingface.co/zhihan1996/zen-model/resolve/main/pytorch_model.bin",
+
 }
 PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP = {
     'bert-base-uncased': 512,
@@ -60,8 +63,36 @@ PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP = {
     'bert-large-uncased-whole-word-masking-finetuned-squad': 512,
     'bert-large-cased-whole-word-masking-finetuned-squad': 512,
     'bert-base-cased-finetuned-mrpc': 512,
+    'zen-model': 512,
 }
 VOCAB_NAME = 'vocab.txt'
+TOKENIZER_NAME = 'tokenizer.json'
+
+def transform_tokenizer_json_to_vocab(tokenizer_json_path):
+    """
+    将tokenizer.json文件转换为vocab.txt格式
+    Args: tokenizer_json_path: tokenizer.json文件的路径
+    Returns: str: 生成的vocab.txt文件路径
+    """
+    # 读取tokenizer.json文件
+    with open(tokenizer_json_path, 'r', encoding='utf-8') as f:
+        tokenizer_data = json.load(f)
+    
+    # 获取词汇表
+    vocab = tokenizer_data.get('model', {}).get('vocab', {})
+    
+    # 按token排序
+    sorted_tokens = sorted(vocab.items(), key=lambda x: x[1])
+    
+    # 生成vocab.txt文件路径
+    vocab_file = os.path.join(os.path.dirname(tokenizer_json_path), 'vocab.txt')
+    
+    # 写入vocab.txt文件
+    with open(vocab_file, 'w', encoding='utf-8') as f:
+        for token, _ in sorted_tokens:
+            f.write(token + '\n')
+            
+    return vocab_file
 
 
 def load_vocab(vocab_file):
@@ -108,6 +139,7 @@ class BertTokenizer(object):
                          Only has an effect when do_wordpiece_only=False
         """
         if not os.path.isfile(vocab_file):
+            import ipdb; ipdb.set_trace()
             raise ValueError(
                 "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained "
                 "model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`".format(vocab_file))
@@ -172,6 +204,7 @@ class BertTokenizer(object):
         Instantiate a PreTrainedBertModel from a pre-trained model file.
         Download and cache the pre-trained model file if needed.
         """
+        #import ipdb; ipdb.set_trace()
         if pretrained_model_name_or_path in PRETRAINED_VOCAB_ARCHIVE_MAP:
             vocab_file = PRETRAINED_VOCAB_ARCHIVE_MAP[pretrained_model_name_or_path]
             if '-cased' in pretrained_model_name_or_path and kwargs.get('do_lower_case', True):
@@ -185,37 +218,50 @@ class BertTokenizer(object):
                                "but you may want to check this behavior.")
                 kwargs['do_lower_case'] = True
         else:
-            vocab_file = pretrained_model_name_or_path
-        if os.path.isdir(vocab_file):
-            vocab_file = os.path.join(vocab_file, VOCAB_NAME)
-        # redirect to the cache, if necessary
-        try:
-            resolved_vocab_file = cached_path(vocab_file, cache_dir=cache_dir)
-        except EnvironmentError:
-            if pretrained_model_name_or_path in PRETRAINED_VOCAB_ARCHIVE_MAP:
-                logger.error(
-                    "Couldn't reach server at '{}' to download vocabulary.".format(
-                        vocab_file))
+            if os.path.exists(os.path.join(pretrained_model_name_or_path, TOKENIZER_NAME)):
+                tokenizer_json_path = os.path.join(pretrained_model_name_or_path, TOKENIZER_NAME)
+                vocab_file = transform_tokenizer_json_to_vocab(tokenizer_json_path)
             else:
-                logger.error(
-                    "Model name '{}' was not found in model name list ({}). "
-                    "We assumed '{}' was a path or url but couldn't find any file "
-                    "associated to this path or url.".format(
-                        pretrained_model_name_or_path,
-                        ', '.join(PRETRAINED_VOCAB_ARCHIVE_MAP.keys()),
-                        vocab_file))
-            return None
-        if resolved_vocab_file == vocab_file:
-            logger.info("loading vocabulary file {}".format(vocab_file))
-        else:
-            logger.info("loading vocabulary file {} from cache at {}".format(
-                vocab_file, resolved_vocab_file))
+                vocab_file = pretrained_model_name_or_path
+                if os.path.isdir(vocab_file):
+                    vocab_file = os.path.join(vocab_file, VOCAB_NAME)
+        if vocab_file is None:
+            raise ValueError(
+                "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained "
+                "model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`".format(pretrained_model_name_or_path))
+        # redirect to the cache, if necessary
+        # try:
+        #     resolved_vocab_file = cached_path(vocab_file, cache_dir=cache_dir)
+        # except EnvironmentError:
+        #     if pretrained_model_name_or_path in PRETRAINED_VOCAB_ARCHIVE_MAP:
+        #         logger.error(
+        #             "Couldn't reach server at '{}' to download vocabulary.".format(
+        #                 vocab_file))
+        #     else:
+        #         logger.error(
+        #             "Model name '{}' was not found in model name list ({}). "
+        #             "We assumed '{}' was a path or url but couldn't find any file "
+        #             "associated to this path or url.".format(
+        #                 pretrained_model_name_or_path,
+        #                 ', '.join(PRETRAINED_VOCAB_ARCHIVE_MAP.keys()),
+        #                 vocab_file))
+        #     return None
+        # if resolved_vocab_file == vocab_file:
+        #     logger.info("loading vocabulary file {}".format(vocab_file))
+        # else:
+        #     logger.info("loading vocabulary file {} from cache at {}".format(
+        #         vocab_file, resolved_vocab_file))
+        resolved_vocab_file = vocab_file
         if pretrained_model_name_or_path in PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP:
             # if we're using a pretrained model, ensure the tokenizer wont index sequences longer
             # than the number of positional embeddings
             max_len = PRETRAINED_VOCAB_POSITIONAL_EMBEDDINGS_SIZE_MAP[pretrained_model_name_or_path]
             kwargs['max_len'] = min(kwargs.get('max_len', int(1e12)), max_len)
+        else:
+            max_len = 512
+            kwargs['max_len'] = min(kwargs.get('max_len', int(1e12)), max_len)
         # Instantiate tokenizer.
+        import ipdb; ipdb.set_trace()
         tokenizer = cls(resolved_vocab_file, *inputs, **kwargs)
         return tokenizer
 
