@@ -224,23 +224,23 @@ class PregeneratedDataset(Dataset):
             input_ids = np.memmap(filename=self.working_dir / 'input_ids.memmap',
                                   mode='w+', dtype=np.int32, shape=(num_samples, seq_len))
             input_masks = np.memmap(filename=self.working_dir / 'input_masks.memmap',
-                                    shape=(num_samples, seq_len), mode='w+', dtype=np.bool)
+                                    shape=(num_samples, seq_len), mode='w+', dtype=bool)
             segment_ids = np.memmap(filename=self.working_dir / 'segment_ids.memmap',
-                                    shape=(num_samples, seq_len), mode='w+', dtype=np.bool)
+                                    shape=(num_samples, seq_len), mode='w+', dtype=bool)
             lm_label_ids = np.memmap(filename=self.working_dir / 'lm_label_ids.memmap',
                                      shape=(num_samples, seq_len), mode='w+', dtype=np.int32)
             lm_label_ids[:] = -1
             is_nexts = np.memmap(filename=self.working_dir / 'is_nexts.memmap',
-                                 shape=(num_samples,), mode='w+', dtype=np.bool)
+                                 shape=(num_samples,), mode='w+', dtype=bool)
             # add ngram level features
             ngram_ids = np.memmap(filename=self.working_dir / 'ngram_ids.memmap',
                                  mode='w+', dtype=np.int32, shape=(num_samples, max_ngram_in_sequence))
 
             ngram_masks = np.memmap(filename=self.working_dir / 'ngram_masks.memmap',
-                                   mode='w+', dtype=np.bool, shape=(num_samples, max_ngram_in_sequence))
+                                   mode='w+', dtype=bool, shape=(num_samples, max_ngram_in_sequence))
 
             ngram_positions = np.memmap(filename=self.working_dir / 'ngram_positions.memmap',
-                                      mode='w+', dtype=np.bool, shape=(num_samples, seq_len, max_ngram_in_sequence))
+                                      mode='w+', dtype=bool, shape=(num_samples, seq_len, max_ngram_in_sequence))
 
             # 暂时不需要ngram_starts和ngram_lengths
             ngram_starts = np.memmap(filename=self.working_dir / 'ngram_starts.memmap',
@@ -250,24 +250,24 @@ class PregeneratedDataset(Dataset):
                                      mode='w+', dtype=np.int32, shape=(num_samples, max_ngram_in_sequence))
 
             ngram_segment_ids = np.memmap(filename=self.working_dir / 'ngram_segment_ids.memmap',
-                                         mode='w+', dtype=np.bool, shape=(num_samples, max_ngram_in_sequence))
+                                         mode='w+', dtype=bool, shape=(num_samples, max_ngram_in_sequence))
 
         else:
             input_ids = np.zeros(shape=(num_samples, seq_len), dtype=np.int32)
-            input_masks = np.zeros(shape=(num_samples, seq_len), dtype=np.bool)
-            segment_ids = np.zeros(shape=(num_samples, seq_len), dtype=np.bool)
+            input_masks = np.zeros(shape=(num_samples, seq_len), dtype=bool)
+            segment_ids = np.zeros(shape=(num_samples, seq_len), dtype=bool)
             lm_label_ids = np.full(shape=(num_samples, seq_len), dtype=np.int32, fill_value=-1)
-            is_nexts = np.zeros(shape=(num_samples,), dtype=np.bool)
+            is_nexts = np.zeros(shape=(num_samples,), dtype=bool)
             # add ngram level features
 
             ngram_ids = np.zeros(shape=(num_samples, max_ngram_in_sequence), dtype=np.int32)
-            ngram_masks = np.zeros(shape=(num_samples, max_ngram_in_sequence), dtype=np.bool)
+            ngram_masks = np.zeros(shape=(num_samples, max_ngram_in_sequence), dtype=bool)
 
-            ngram_positions = np.zeros(shape=(num_samples, seq_len, max_ngram_in_sequence), dtype=np.bool)
+            ngram_positions = np.zeros(shape=(num_samples, seq_len, max_ngram_in_sequence), dtype=bool)
             ngram_starts = np.zeros(shape=(num_samples, max_ngram_in_sequence), dtype=np.int32)
             ngram_lengths = np.zeros(shape=(num_samples, max_ngram_in_sequence), dtype=np.int32)
 
-            ngram_segment_ids = np.zeros(shape=(num_samples, max_ngram_in_sequence), dtype=np.bool)
+            ngram_segment_ids = np.zeros(shape=(num_samples, max_ngram_in_sequence), dtype=bool)
 
         logging.info(f"Loading training examples form {data_file} for epoch {epoch}")
        
@@ -644,6 +644,7 @@ def prepare_pretrain_data(
             raise ValueError("模型初始化后没有可训练的参数，请检查模型结构")
     else:
         logger.info(f"加载预训练模型，复用已有参数: {bert_model}")
+        
         model = ZenForPreTraining.from_pretrained(bert_model)
         #model = ZenForPreTraining.from_pretrained("/home/zeq/bert-base-uncased")
         # 检查预训练模型是否正确加载

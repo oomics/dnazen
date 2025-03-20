@@ -11,11 +11,13 @@ dependencies = [
     "peft>=0.14.0,<0.15", 
     "click>=8.1.8,<9",
     "plotly==6.0.0",
-    "kaleido>=0.2.1"
+    "kaleido>=0.2.1",
+    # for ZEN
+    "boto3==1.37.*"
 ]
 description = "Ngram utilities for Large Language Model Pre-training."
 name = "dnazen"
-requires-python = "==3.12"
+requires-python = "==3.12.*"
 version = "0.2.2"
 
 [project.optional-dependencies]
