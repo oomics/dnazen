@@ -807,6 +807,15 @@ def acc_and_f1(preds, labels):
         "f1": f1,
         "acc_and_f1": (acc + f1) / 2,
     }
+def mcc_and_f1(preds, labels):
+    mcc = matthews_corrcoef(labels, preds)
+    acc = simple_accuracy(preds, labels)
+    f1 = f1_score(y_true=labels, y_pred=preds)
+    return {
+        "acc": acc,
+        "f1": f1,
+        "acc_and_f1": (acc + f1) / 2,
+    }
 
 
 def pearson_and_spearman(preds, labels):
@@ -821,8 +830,8 @@ def pearson_and_spearman(preds, labels):
 
 def compute_metrics(task_name, preds, labels):
     assert len(preds) == len(labels)
-    if task_name == "cola":
-        return {"mcc": matthews_corrcoef(labels, preds)}
+    if task_name == "DNAZEN":
+        return mcc_and_f1(preds, labels)
     # elif task_name == "sst-2":
     #     return {"acc": simple_accuracy(preds, labels)}
     # elif task_name == "mrpc":

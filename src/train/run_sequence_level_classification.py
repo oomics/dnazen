@@ -189,13 +189,13 @@ def evaluate(args, model, tokenizer, ngram_dict, processor, label_list):
     logger.info(f"Matthews相关系数 (MCC): {mcc:.4f}")
     
     # 计算其他评估指标（如准确率、精确率、召回率等）
-    result = compute_metrics(args.task_name, preds, out_label_ids)
+    result = compute_metrics("DNAZEN", preds, out_label_ids)
     logger.info("评估指标:")
     for key in sorted(result.keys()):
         logger.info(f"  {key} = {result[key]}")
     
     # 将MCC添加到评估结果字典中
-    result['mcc'] = mcc
+    result['mcc2'] = mcc
     
     return result
 

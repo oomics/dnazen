@@ -238,7 +238,7 @@ process_task() {
       --do_eval \
       --max_seq_length 128 \
       --train_batch_size 1024  \
-      --num_train_epochs 1 \
+      --num_train_epochs $num_epochs \
       --gradient_accumulation_steps 2 \
       --learning_rate 5e-5 \
       --output_dir $task_output_path \
