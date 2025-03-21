@@ -49,13 +49,12 @@ CMD="python ../src/train/run_pretrain_zen.py \
     --out ../data/ \
     --model ~/DNABERT-2-117M \
     --lr 5e-5 \
-    --epochs 5 \
-    --batch-size 1024 \
+    --epochs 2 \
+    --batch-size 512 \
     --grad-accum 2 \
     --warmup 0.1 \
     --num-workers 8 \
     --pin-memory True \
-    --scratch True \
     --prefetch-factor 2 "
 
 echo $CMD

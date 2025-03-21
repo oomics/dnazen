@@ -7,7 +7,7 @@
 EXPERIMENT_ID="exp1_pmi10"
 
 echo "===============================run.sh step0: 开始tokenize分词==============================================="
-#bash  ./prepare_pretrain_data.sh 
+bash  ./prepare_pretrain_data.sh 
 echo "===============================run.sh step0: tokenize分词完成==============================================="
 
 
