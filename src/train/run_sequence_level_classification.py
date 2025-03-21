@@ -257,14 +257,15 @@ def train(args, model, tokenizer, ngram_dict, processor, label_list):
     logger.info(f"  批次大小: {args.train_batch_size}")
     logger.info(f"  总步数: {num_train_optimization_steps}")
     logger.info(f"  训练轮数: {args.num_train_epochs}")
-
+    avg_loss = 0
+    
     for epoch_num in trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0]):
         model.train()
         tr_loss = 0
         nb_tr_examples, nb_tr_steps = 0, 0
         logger.info(f"开始第 {epoch_num + 1} 轮训练")
-        avg_loss = 0
-        for step, batch in enumerate(tqdm(train_dataloader, desc="epoch{}Iteration loss={:.4f}".format(epoch_num, avg_loss),mininterval=20, disable=args.local_rank not in [-1, 0])):
+        
+        for step, batch in enumerate(tqdm(train_dataloader, desc="epoch{}Iteration loss={:.4f}".format(epoch_num, loss.item()),mininterval=20, disable=args.local_rank not in [-1, 0])):
             batch = tuple(t.to(args.device) for t in batch)
             input_ids, input_mask, segment_ids, label_ids, ngram_ids, ngram_positions, \
             ngram_lengths, ngram_seg_ids, ngram_masks = batch
@@ -315,10 +316,10 @@ def train(args, model, tokenizer, ngram_dict, processor, label_list):
                     logger.info(f"保存模型检查点到: {output_dir}")
                     save_zen_model(output_dir, model, tokenizer, ngram_dict, args)
         
-        logger.info(f"全局步数: {global_step}, 当前损失: {loss.item():.4f}, 学习率: {optimizer.get_lr()[0]:.2e}")
-        output_dir = os.path.join(args.output_dir, "checkpoint-{}-{}-{}".format(epoch_num, global_step, tr_loss/nb_tr_steps))
-        save_zen_model(output_dir, model, tokenizer, ngram_dict, args)
-        logger.info(f"第 {epoch_num + 1} 轮训练完成，平均损失: {tr_loss/nb_tr_steps:.4f}")
+    logger.info(f"全局步数: {global_step}, 当前损失: {loss.item():.4f}, 学习率: {optimizer.get_lr()[0]:.2e}")
+    output_dir = os.path.join(args.output_dir, "checkpoint-{}-{}-{}".format(epoch_num, global_step, tr_loss/nb_tr_steps))
+    save_zen_model(output_dir, model, tokenizer, ngram_dict, args)
+    logger.info(f"第 {epoch_num + 1} 轮训练完成，平均损失: {tr_loss/nb_tr_steps:.4f}")
 
 
 def save_evaluate_results(args, results):
