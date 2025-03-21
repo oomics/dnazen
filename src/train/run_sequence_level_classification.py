@@ -182,7 +182,7 @@ def evaluate(args, model, tokenizer, ngram_dict, processor, label_list):
             
             # 计算平均评估损失
             avg_eval_loss = total_eval_loss / nb_eval_steps if nb_eval_steps > 0 else 0
-            logger.info(f"当前评估平均损失: {avg_eval_loss:.4f}")
+            logger.debug(f"当前评估平均损失: {avg_eval_loss:.4f}")
     
 
     # 将logits转换为预测标签（取最大概率的类别）
@@ -190,17 +190,17 @@ def evaluate(args, model, tokenizer, ngram_dict, processor, label_list):
     
     # 计算平均评估损失
     avg_eval_loss = total_eval_loss / nb_eval_steps if nb_eval_steps > 0 else 0
-    logger.info(f"评估完成，平均损失: {avg_eval_loss:.4f}")
+    logger.info(f"Task: {args.task_name}, 评估完成，平均损失: {avg_eval_loss:.4f}")
     
 
     # MCC计算公式：MCC = (TP*TN - FP*FN) / sqrt((TP+FP)(TP+FN)(TN+FP)(TN+FN))
     # 其中：TP(真阳性), TN(真阴性), FP(假阳性), FN(假阴性)
     mcc = matthews_corrcoef(out_label_ids, preds)
-    logger.info(f"Matthews相关系数 (MCC): {mcc:.4f}")
+    logger.info(f"Task: {args.task_name}, Matthews相关系数 (MCC): {mcc:.4f}")
     
     # 计算其他评估指标（如准确率、精确率、召回率等）
     result = compute_metrics("DNAZEN", preds, out_label_ids)
-    logger.info("评估指标:")
+    logger.info(f"Task: {args.task_name}, 评估指标:")
     for key in sorted(result.keys()):
         logger.info(f"  {key} = {result[key]}")
     
