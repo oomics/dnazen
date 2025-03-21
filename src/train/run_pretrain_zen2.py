@@ -566,7 +566,8 @@ def prepare_pretrain_data(
         try:
             logger.info("尝试从HuggingFace下载预训练模型...")
             #model = BertForMaskedLM.from_pretrained("zhihan1996/DNABERT-2-117M", config=zen_config)
-            model = ZenForPreTraining.from_pretrained("zhihan1996/DNABERT-2-117M")
+            #model = ZenForPreTraining.from_pretrained("zhihan1996/DNABERT-2-117M")
+            model = ZenForPreTraining.from_pretrained("/home/zeq/DNABERT-2-117M/")
             logger.info("成功加载预训练模型权重")
 
         except Exception as e:
@@ -617,14 +618,14 @@ def prepare_pretrain_data(
             # 添加以下参数以避免某些版本的问题
             remove_unused_columns=False,
             label_names=["lm_label_ids", "is_next"],  # 修改为与模型期望的参数名匹配
-            dynamic_batch_size=True,  # 启用动态批次大小
-            dynamic_learning_rate=True,  # 启用动态学习率
-            min_batch_size=8,  # 最小批次大小
-            max_batch_size=512,  # 最大批次大小
-            batch_size_step=4,  # 批次大小调整步长
-            min_learning_rate=1e-5,  # 最小学习率
-            max_learning_rate=5e-5,  # 最大学习率
-            learning_rate_step=1e-5,  # 学习率调整步长
+            # dynamic_batch_size=True,  # 启用动态批次大小
+            # dynamic_learning_rate=True,  # 启用动态学习率
+            # min_batch_size=8,  # 最小批次大小
+            # max_batch_size=512,  # 最大批次大小
+            # batch_size_step=4,  # 批次大小调整步长
+            # min_learning_rate=1e-5,  # 最小学习率
+            # max_learning_rate=5e-5,  # 最大学习率
+            # learning_rate_step=1e-5,  # 学习率调整步长
         )
 
         # 创建日志目录
