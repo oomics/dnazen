@@ -790,7 +790,7 @@ def prepare_pretrain_data(
         
         # 使用tqdm创建进度条，用于可视化训练进度
         logger.info("开始训练...")
-        with tqdm(total=len(train_dataloader), mininterval=60, desc="继续预训练Epoch{} loss={:.4f}".format(epoch, loss.item())) as pbar:
+        with tqdm(total=len(train_dataloader), mininterval=60, desc="继续预训练Epoch{} ".format(epoch)) as pbar:
             #ipdb.set_trace()
             # 遍历每个批次的数据
             for step, batch in enumerate(train_dataloader):
