@@ -13,12 +13,11 @@ echo "===============================run.sh step1: ngram抽取完成============
 
 
 echo "===============================run.sh step0: 开始tokenize分词==============================================="
-bash  ./prepare_pretrain_data.sh -e $EXPERIMENT_ID
+bash  ./prepare_pretrain_data.sh -e $EXPERIMENT_ID -t -d 
 echo "===============================run.sh step0: tokenize分词完成==============================================="
 
-
 echo "===============================run.sh step2: 准备数据集dataset==============================================="
-bash  ./prepare_pretrain_data.sh -e $EXPERIMENT_ID
+bash  ./prepare_pretrain_data.sh -e $EXPERIMENT_ID -p
 echo "===============================run.sh step2: 准备数据集dataset完成==============================================="
 
 echo "===============================run.sh step3: 开始预训练==============================================="

@@ -8,6 +8,10 @@
 # 实验名称参数
 EXPERIMENT_ID="exp1_pmi2"
 
+# 执行控制参数
+RUN_TOKENIZE_TRAIN=false  
+RUN_TOKENIZE_DEV=false
+RUN_PREPARE_DATASET=false
 
 # 显示帮助信息
 show_help() {
@@ -30,6 +34,18 @@ while [[ $# -gt 0 ]]; do
             EXPERIMENT_ID="$2"
             shift 2
             ;;
+        -t|--tokenize-train)
+            RUN_TOKENIZE_TRAIN=true
+            shift 1
+            ;;
+        -d|--tokenize-dev)
+            RUN_TOKENIZE_DEV=true
+            shift 1
+            ;;  
+        -p|--prepare-dataset)
+            RUN_PREPARE_DATASET=true
+            shift 1
+            ;;
         *)
             echo "未知参数: $1"
             show_help
@@ -45,10 +61,6 @@ NGRAM_ENCODER_PATH="${EXPERIMENT_DIR}/ngram_encoder.json" # NGram编码器路径
 echo "NGram编码器路径: ${NGRAM_ENCODER_PATH}"
 TRAIN_DATA="../../mspecies/train/train.txt"
 DEV_DATA="../../mspecies/dev/dev.txt"
-
-
-# 执行控制参数
-RUN_PREPARE_DATASET=true
 
 
 # 输出路径参数
@@ -75,6 +87,7 @@ DATA_SOURCE="tokenized"
 echo "使用实验: $EXPERIMENT_NAME (ID: $EXPERIMENT_ID)"
 echo "实验目录: $EXPERIMENT_DIR"
 
+echo "========== 运行脚本 $0 =========="
 
 # 打印参数函数
 print_parameters() {
@@ -114,7 +127,7 @@ print_parameters
 
 # Step2: 为训练数据生成tokenized数据
 if [[ "$RUN_TOKENIZE_TRAIN" == "true" ]]; then
-  echo "===== Step2 开始为训练数据生成tokenized数据 ====="
+  echo "=====$0 Step2 开始为train训练数据生成tokenized数据 ====="
   
   # 检查并删除已存在的train.pt文件
   if [[ -f "${TRAIN_OUTPUT}" ]]; then
@@ -134,13 +147,16 @@ if [[ "$RUN_TOKENIZE_TRAIN" == "true" ]]; then
   echo "  --max-length: ${MAX_LENGTH}"
   echo "  --resume"
   
-  python ../src/dataset/make_tokenized_dataset.py \
+  CMD="python ../src/dataset/make_tokenized_dataset.py \
     --data ${TRAIN_DATA} \
     --tok ${TOKENIZER} \
     --out ${TRAIN_OUTPUT} \
     --batch-size ${BATCH_SIZE} \
     --max-length ${MAX_LENGTH} \
-    --resume
+    --resume" 
+  
+  echo "执行命令: $CMD"
+  eval $CMD
 
   
   if [[ $? -ne 0 ]]; then
@@ -152,7 +168,7 @@ fi
 
 # Step3:  为验证数据生成tokenized数据
 if [[ "$RUN_TOKENIZE_DEV" == "true" ]]; then
-  echo "===== Step3 开始为验证数据生成tokenized数据 ====="
+  echo "=====$0 Step3 开始为dev验证数据生成tokenized数据 ====="
   
     # 检查并删除已存在的train.pt文件
   if [[ -f "${DEV_OUTPUT}" ]]; then
@@ -170,11 +186,15 @@ if [[ "$RUN_TOKENIZE_DEV" == "true" ]]; then
   echo "  --out: ${DEV_OUTPUT}"
   echo "  --max-length: ${MAX_LENGTH}"
   
-  python ../src/dataset/make_tokenized_dataset.py \
+  CMD="python ../src/dataset/make_tokenized_dataset.py \
     --data ${DEV_DATA} \
     --tok ${TOKENIZER} \
     --out ${DEV_OUTPUT} \
-    --max-length ${MAX_LENGTH}
+    --max-length ${MAX_LENGTH}"
+  
+  echo "执行命令: $CMD"
+  eval $CMD
+
   
   if [[ $? -ne 0 ]]; then
     echo "为验证数据生成tokenized数据失败"
@@ -185,7 +205,7 @@ fi
 
 # Step4:  准备预训练数据集，使用已经tokenized的数据
 if [[ "$RUN_PREPARE_DATASET" == "true" ]]; then
-  echo "===== Step4 开始准备预训练数据集 使用实验${EXPERIMENT_ID}的N-gram编码器 ====="
+  echo "=====$0 Step4 开始准备预训练数据集 使用实验${EXPERIMENT_ID}的N-gram编码器 ====="
   
   # 打印预训练数据集准备参数
   echo "预训练数据集准备参数:"
@@ -198,7 +218,7 @@ if [[ "$RUN_PREPARE_DATASET" == "true" ]]; then
   echo "  --out: ${PRETRAIN_OUTPUT_DIR}"
   echo "  --seed: ${SEED}"
   
-  python ../src/dataset/make_pretrain_dataset.py \
+  CMD="python ../src/dataset/make_pretrain_dataset.py \
     --data-source ${DATA_SOURCE} \
     --data ${PRETRAIN_TOKENIZED_DATA_DIR} \
     --tok-source ${TOK_SOURCE} \
@@ -206,8 +226,11 @@ if [[ "$RUN_PREPARE_DATASET" == "true" ]]; then
     --ngram ${NGRAM_ENCODER_PATH}  \
     --max-ngrams ${MAX_NGRAMS} \
     --out ${PRETRAIN_OUTPUT_DIR} \
-    --seed ${SEED}
+    --seed ${SEED}"
   
+  echo "执行命令: $CMD"
+  eval $CMD
+
   if [[ $? -ne 0 ]]; then
     echo "准备预训练数据集失败"
     exit 1
