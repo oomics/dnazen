@@ -291,6 +291,20 @@ if [[ "$RUN_NGRAM_ENCODER" == "true" ]]; then
     rm -f "${EXPERIMENT_DIR}/ngram_encoder.json"
   fi
   
+  # CMD="python ../src/train/train_ngram_encoder.py \
+  #   ${USE_GUE} \
+  #   ${USE_INPUT} \
+  #   --output ${EXPERIMENT_DIR}/ngram_encoder.json \
+  #   --tok zhihan1996/DNABERT-2-117M \
+  #   --min-ngram-len 2 \
+  #   --max-ngram-len 5 \
+  #   --max-ngrams 30 \
+  #   --min-pmi 2 \
+  #   --min-token-count 5 \
+  #   --min-ngram-freq 5 \
+  #   --method pmi \
+  #   --num-workers 4"
+  
   CMD="python ../src/train/train_ngram_encoder.py \
     ${USE_GUE} \
     ${USE_INPUT} \
@@ -299,12 +313,12 @@ if [[ "$RUN_NGRAM_ENCODER" == "true" ]]; then
     --min-ngram-len 2 \
     --max-ngram-len 5 \
     --max-ngrams 30 \
-    --min-pmi 2 \
-    --min-token-count 5 \
-    --min-ngram-freq 5 \
+    --min-pmi 10 \
+    --min-token-count 10 \
+    --min-ngram-freq 500 \
     --method pmi \
     --num-workers 4"
-  
+
   echo "执行命令: $CMD"
   eval $CMD
   
