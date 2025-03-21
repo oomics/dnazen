@@ -37,11 +37,14 @@ from transformers import (
     WEIGHTS_NAME,  # 模型权重文件名常量
     TrainingArguments,  # 训练参数配置
     Trainer,  # 训练器
+    BertForMaskedLM,  # 添加BertForMaskedLM导入
+    BertConfig,  # 添加BertConfig导入
 )
 
 # 导入ZEN模型相关组件
 from ZEN.modeling import ZenForPreTraining, ZenConfig
-
+#from dnazen.model.bert_config import ZenConfig
+from dnazen.model.bert_models import BertForMaskedLM
 # 导入自定义工具和模块
 from dnazen.ngram import NgramEncoder  # n-gram编码器模块，用于处理n-gram特征
 # 导入优化器和学习率调度器
@@ -315,6 +318,9 @@ class PregeneratedDataset(Dataset):
 @click.option("--fp16/--no-fp16", default=False, help="是否使用半精度(FP16)训练")
 @click.option("--scratch/--no-scratch", default=False, help="是否从零开始训练，不使用预训练模型")
 @click.option("--save-prefix", "save_name", type=str, default="dnazen_", help="保存模型的名称前缀")
+@click.option("--num-workers", type=int, default=4, help="数据加载的工作进程数")
+@click.option("--pin-memory", type=bool, default=True, help="是否使用固定内存")
+@click.option("--prefetch-factor", type=int, default=2, help="数据预加载因子")
 def main(
     data_source: Literal["raw", "tokenized"],
     data_dir: str,
@@ -338,6 +344,9 @@ def main(
     fp16: bool,
     scratch: bool,
     save_name: str,
+    num_workers: int,
+    pin_memory: bool,
+    prefetch_factor: int,
 ):
     """DNA序列预训练主程序
     
@@ -491,7 +500,85 @@ def prepare_pretrain_data(
 
         logger.info(f"加载预训练模型: {bert_model}")
         # 使用BertForMaskedLM替代ZenForPreTraining
-        model = ZenForPreTraining.from_pretrained(bert_model)
+        #model = ZenForPreTraining.from_pretrained(bert_model)
+        #model = BertForMaskedLM.from_pretrained(bert_model)
+    
+        # 3. 配置模型
+            # 模型参数
+        num_ngram_hidden_layer = 6
+        ngram_encoder = NgramEncoder.from_file(ngram_file)
+        ngram_vocab_size = ngram_encoder.get_vocab_size()
+        logger.info(f"N-gram词汇表大小: {ngram_vocab_size}")
+
+        logger.info("步骤4: 配置模型...")
+        model_config_start_time = time.time()
+        try:
+            # 尝试直接从Hugging Face加载预训练模型配置
+            logger.info("尝试从HuggingFace加载DNABERT-2-117M模型配置...")
+            bert_config = BertConfig.from_pretrained("zhihan1996/DNABERT-2-117M")
+            logger.info("成功从HuggingFace加载zhihan1996/DNABERT-2-117M模型BertConfig配置")
+        except Exception as e:
+            logger.warning(f"无法从HuggingFace加载模型配置: {e}")
+            # 如果无法从HuggingFace加载，创建一个基本的BERT配置
+            logger.info("创建基本的BERT配置")
+            bert_config = BertConfig(
+                vocab_size=len(tokenizer),
+                hidden_size=768,
+                num_hidden_layers=12,
+                num_attention_heads=12,
+                intermediate_size=3072,
+                model_type="bert",  # 确保设置model_type
+            )
+            # 保存到本地路径以便后续使用
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            bert_config_path = os.path.join(current_dir, "..", "resources", "DNABERT-2-117M")
+            os.makedirs(bert_config_path, exist_ok=True)
+            bert_config.save_pretrained(bert_config_path)
+    
+        
+        # 创建ZEN配置（扩展的BERT配置，包含Ngram信息）
+        vocab_size = ngram_encoder.get_vocab_size()
+        logger.info(f"加载预训练模型，复用已有参数: {bert_model}，vocab_size={vocab_size}")
+        
+        
+        logger.info("步骤6: 创建ZEN配置...")
+        zen_config = ZenConfig(vocab_size, 104089)  # 词汇表大小和n-gram大小
+        # zen_config = ZenConfig(
+        #     #num_word_hidden_layers=num_ngram_hidden_layer,
+        #     ngram_vocab_size=ngram_vocab_size,
+        #     **bert_config.to_dict(),
+        # )
+        
+        
+        # 打印ZEN配置信息
+        logger.info("ZEN配置详情:")
+        logger.info(f"  词汇表大小: {zen_config.vocab_size}")
+        logger.info(f"  隐藏层大小: {zen_config.hidden_size}")
+        logger.info(f"  注意力头数: {zen_config.num_attention_heads}")
+        logger.info(f"  隐藏层数量: {zen_config.num_hidden_layers}")
+        logger.info(f"  N-gram词汇表大小: {zen_config.type_vocab_size}")
+        logger.info(f"  N-gram隐藏层数量: {zen_config.num_hidden_layers}")
+        
+        # 加载预训练模型或从检查点恢复
+        logger.info("步骤7: 加载预训练模型...")
+        model_load_start_time = time.time()
+        logger.info("从预训练模型初始化...")
+        try:
+            logger.info("尝试从HuggingFace下载预训练模型...")
+            #model = BertForMaskedLM.from_pretrained("zhihan1996/DNABERT-2-117M", config=zen_config)
+            model = ZenForPreTraining.from_pretrained("zhihan1996/DNABERT-2-117M")
+            logger.info("成功加载预训练模型权重")
+
+        except Exception as e:
+            logger.error(f"无法从HuggingFace下载模型: {e}")
+            exit(1)
+
+
+
+
+
+
+
         logger.info(f"Total parameters: {sum(p.numel() for p in model.parameters())}")
         # 打印模型参数数量
         total_params = sum(p.numel() for p in model.parameters())
@@ -530,6 +617,14 @@ def prepare_pretrain_data(
             # 添加以下参数以避免某些版本的问题
             remove_unused_columns=False,
             label_names=["lm_label_ids", "is_next"],  # 修改为与模型期望的参数名匹配
+            dynamic_batch_size=True,  # 启用动态批次大小
+            dynamic_learning_rate=True,  # 启用动态学习率
+            min_batch_size=8,  # 最小批次大小
+            max_batch_size=512,  # 最大批次大小
+            batch_size_step=4,  # 批次大小调整步长
+            min_learning_rate=1e-5,  # 最小学习率
+            max_learning_rate=5e-5,  # 最大学习率
+            learning_rate_step=1e-5,  # 学习率调整步长
         )
 
         # 创建日志目录
@@ -548,20 +643,7 @@ def prepare_pretrain_data(
 
         # 定义数据整理函数
         def data_collator(features):
-            #ipdb.set_trace()
             batch = {
-                # "input_ids": torch.stack([f["input_ids"] for f in features]),
-                # "attention_mask": torch.stack([f["attention_mask"] for f in features]),
-                # "token_type_ids": torch.stack([f["token_type_ids"] for f in features]),
-                # "labels": torch.stack([f["labels"] for f in features]),
-                # "next_sentence_label": torch.stack([f["next_sentence_label"] for f in features]),
-                # "ngram_ids": torch.stack([f["ngram_ids"] for f in features]),
-                # "ngram_masks": torch.stack([f["ngram_masks"] for f in features]),
-                # "ngram_positions": torch.stack([f["ngram_positions"] for f in features]),
-                # "ngram_starts": torch.stack([f["ngram_starts"] for f in features]),
-                # "ngram_lengths": torch.stack([f["ngram_lengths"] for f in features]),
-                # "ngram_segment_ids": torch.stack([f["ngram_segment_ids"] for f in features])
-                
                 "input_ids": torch.stack([f["input_ids"] for f in features]),
                 "token_type_ids": torch.stack([f["token_type_ids"] for f in features]),
                 "attention_mask": torch.stack([f["attention_mask"] for f in features]),

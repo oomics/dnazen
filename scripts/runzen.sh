@@ -41,8 +41,8 @@ EXPERIMENT_ID="exp1_pmi5"
 #     --ngram_list_dir  ../../out/exp1_pmi5/  
 
 # # 运行预训练
-echo "===============================run.sh step5: 开始预训练==============================================="
-CMD="python ../src/train/run_pretrain_zen.py \
+echo "===============================$0 step5: 开始预训练==============================================="
+CMD="python ../src/train/run_pretrain_zen2.py \
     --data-source tokenized \
     --data ../data/ \
     --ngram ../../out/exp1_pmi5/ngram_encoder.json \
@@ -60,7 +60,7 @@ CMD="python ../src/train/run_pretrain_zen.py \
 echo $CMD
 eval $CMD
 
-echo "===============================run.sh step5: 预训练完成==============================================="
+echo "===============================$0 step5: 预训练完成==============================================="
 #MODEL_PATH=../../zen_train/data/dnazen_0319194420_epoch_0/
 MODEL_PATH=~/zen-model/
 #MODEL_PATH=~/DNABERT-2-117M
@@ -88,7 +88,7 @@ CMD="python ../src/train/run_sequence_level_classification.py \
      --ngram_list_dir $NGRAM_ENCODER_LIST_PATH  "
 
 echo $CMD
-eval $CMD
+#eval $CMD
 echo "===============================run.sh step6: 微调完成==============================================="
 
 #   MODEL_PATH=~/zen-model/
