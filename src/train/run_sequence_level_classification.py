@@ -264,7 +264,7 @@ def train(args, model, tokenizer, ngram_dict, processor, label_list):
         nb_tr_examples, nb_tr_steps = 0, 0
         logger.info(f"开始第 {epoch_num + 1} 轮训练")
         avg_loss = 0
-        for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration loss={:.4f}".format(avg_loss),mininterval=20, disable=args.local_rank not in [-1, 0])):
+        for step, batch in enumerate(tqdm(train_dataloader, desc="epoch{}Iteration loss={:.4f}".format(epoch_num, avg_loss),mininterval=20, disable=args.local_rank not in [-1, 0])):
             batch = tuple(t.to(args.device) for t in batch)
             input_ids, input_mask, segment_ids, label_ids, ngram_ids, ngram_positions, \
             ngram_lengths, ngram_seg_ids, ngram_masks = batch
