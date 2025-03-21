@@ -136,10 +136,15 @@ USE_FP16=true
 
 # 任务类型及其对应的训练轮数
 declare -A TASK_EPOCHS
-TASK_EPOCHS["emp"]=5
+# TASK_EPOCHS["emp"]=5
+# TASK_EPOCHS["pd"]=10
+# TASK_EPOCHS["tf"]=6
+# TASK_EPOCHS["mouse"]=6
+
+TASK_EPOCHS["emp"]=10
 TASK_EPOCHS["pd"]=10
-TASK_EPOCHS["tf"]=6
-TASK_EPOCHS["mouse"]=6
+TASK_EPOCHS["tf"]=10
+TASK_EPOCHS["mouse"]=10
 
 # 任务类型及其对应的数据路径
 declare -A TASK_PATHS

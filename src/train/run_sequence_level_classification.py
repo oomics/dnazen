@@ -80,6 +80,8 @@ def load_examples(args, tokenizer, ngram_dict, processor, label_list, mode):
 
 def save_zen_model(save_zen_model_path, model, tokenizer, ngram_dict, args):
     logger.info(f"开始保存模型到: {save_zen_model_path}")
+    if not os.path.exists(save_zen_model_path):
+        os.makedirs(save_zen_model_path)
     
     # Save a trained model, configuration and tokenizer
     model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
@@ -111,6 +113,13 @@ def save_zen_model(save_zen_model_path, model, tokenizer, ngram_dict, args):
     
     logger.info("模型保存完成")
 
+
+
+
+
+###################################
+# 评估模型
+###################################
 def evaluate(args, model, tokenizer, ngram_dict, processor, label_list):
     logger.info("开始准备评估数据...")
     eval_dataset = load_examples(args, tokenizer, ngram_dict, processor, label_list, mode="test")
@@ -135,7 +144,8 @@ def evaluate(args, model, tokenizer, ngram_dict, processor, label_list):
     nb_eval_steps = 0  # 评估步数
 
     logger.info("开始模型推理...")
-    for batch in tqdm(eval_dataloader, desc="Evaluating"):
+    #for batch in eval_dataloader:
+    for batch in tqdm(eval_dataloader, mininterval=20, desc="Evaluating loss={:.4f}".format(total_eval_loss/nb_eval_steps)):
         # 将数据移动到指定设备（CPU/GPU）
         batch = tuple(t.to(args.device) for t in batch)
         input_ids, input_mask, segment_ids, label_ids, input_ngram_ids, ngram_position_matrix, \
@@ -155,7 +165,7 @@ def evaluate(args, model, tokenizer, ngram_dict, processor, label_list):
             loss_fct = torch.nn.CrossEntropyLoss()
             loss = loss_fct(logits, label_ids.view(-1))
             
-            # 累加评估损失和步数
+            # 累加评估损失和步数                                                                                                                                                                                                                                                                                                                                                                                                                                                             
             total_eval_loss += loss.item()
             nb_eval_steps += 1
 
@@ -199,7 +209,16 @@ def evaluate(args, model, tokenizer, ngram_dict, processor, label_list):
     
     return result
 
+
+###################################
+# 训练模型
+###################################
 def train(args, model, tokenizer, ngram_dict, processor, label_list):
+    # 检查输出目录是否存在且不为空，且未设置覆盖标志
+    if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and not args.overwrite_output_dir:
+        logger.warning(f"输出目录 {args.output_dir} 已存在且不为空，且未设置覆盖标志，跳过训练")
+        return
+    
     global_step = 0
 
     if args.local_rank in [-1, 0]:
@@ -245,7 +264,7 @@ def train(args, model, tokenizer, ngram_dict, processor, label_list):
         nb_tr_examples, nb_tr_steps = 0, 0
         logger.info(f"开始第 {epoch_num + 1} 轮训练")
         
-        for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])):
+        for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration loss={:.4f}".format(tr_loss/nb_tr_steps),mininterval=20, disable=args.local_rank not in [-1, 0])):
             batch = tuple(t.to(args.device) for t in batch)
             input_ids, input_mask, segment_ids, label_ids, ngram_ids, ngram_positions, \
             ngram_lengths, ngram_seg_ids, ngram_masks = batch
@@ -254,7 +273,7 @@ def train(args, model, tokenizer, ngram_dict, processor, label_list):
                          ngram_ids,
                          ngram_positions,
                          labels=label_ids)
-            logger.info("loss: " + str(loss))
+            #logger.info("loss: " + str(loss))
             if args.n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu.
             if args.gradient_accumulation_steps > 1:
@@ -280,89 +299,34 @@ def train(args, model, tokenizer, ngram_dict, processor, label_list):
                 optimizer.zero_grad()
                 global_step += 1
                 
-                if args.local_rank in [-1, 0]:
+                #if args.local_rank in [-1, 0]:
+                if True:
                     tb_writer.add_scalar('lr', optimizer.get_lr()[0], global_step)
                     tb_writer.add_scalar('loss', loss.item(), global_step)
                     if global_step % 100 == 0:
                         logger.info(f"全局步数: {global_step}, 当前损失: {loss.item():.4f}, 学习率: {optimizer.get_lr()[0]:.2e}")
                 
-                if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
+                #if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
+                if False:
                     output_dir = os.path.join(args.output_dir, "checkpoint-{}".format(global_step))
                     if not os.path.exists(output_dir):
                         os.makedirs(output_dir)
                     logger.info(f"保存模型检查点到: {output_dir}")
                     save_zen_model(output_dir, model, tokenizer, ngram_dict, args)
         
+        logger.info(f"全局步数: {global_step}, 当前损失: {loss.item():.4f}, 学习率: {optimizer.get_lr()[0]:.2e}")
+        output_dir = os.path.join(args.output_dir, "checkpoint-{}-{}-{}".format(epoch_num, global_step, tr_loss/nb_tr_steps))
+        save_zen_model(output_dir, model, tokenizer, ngram_dict, args)
         logger.info(f"第 {epoch_num + 1} 轮训练完成，平均损失: {tr_loss/nb_tr_steps:.4f}")
 
 
-def evaluate_and_save_results(args, model, tokenizer, ngram_dict, processor, label_list):
-    
-     # 步骤11: 评估模型
-    logger.info("-------------------------------------------------------...")
-    logger.info("步骤11: 在测试集上评估模型...")
-    results = trainer.evaluate(test_dataset)
-
-    # 打印评估结果
-    logger.info(f"{DATA_PATH}测试集评估结果:")
-    logger.info("-" * 50)
-    logger.info(f"{'指标名称':<30}{'值':>15}")
-    logger.info("-" * 50)
-
-    # 按字母顺序排序指标并打印
-    for metric_name in sorted(results.keys()):
-        metric_value = results[metric_name]
-        if isinstance(metric_value, float):
-            logger.info(f"{metric_name:<30}{metric_value:>15.6f}")
-        else:
-            logger.info(f"{metric_name:<30}{metric_value:>15}")
-    logger.info("-" * 50)
-
+def save_evaluate_results(args, results):
     # 保存评估结果
-    results_path = os.path.join(RESULTS_PATH, "eval_results.json")
+    results_path = os.path.join(args.output_dir, "eval_results.json")
     logger.info(f"保存评估结果到: {results_path}")
     with open(results_path, "w") as f:
         json.dump(results, f, indent=2)  # 添加缩进使JSON文件更易读
 
-    # 步骤12: 在测试集上进行预测
-    logger.info("-------------------------------------------------------...")
-    logger.info("步骤12: 在测试集上进行预测...")
-    logger.info(f"测试数据集大小: {len(test_dataset)}个样本")
-    test_output = trainer.predict(test_dataset)
-    test_preds = test_output.predictions
-    logger.info(f"预测完成，获得{len(test_preds)}个预测结果")
-
-    # 步骤13: 整理预测结果
-    logger.info("步骤13: 整理预测结果...")
-    results = {
-        "text": [],
-        "actual_label": [],
-        "prediction_label": [],
-    }
-    for i in range(len(test_dataset)):
-        data = test_dataset[i]
-
-        input_ids = data["input_ids"]
-        actual_label = data["labels"]
-        texts = (
-            tokenizer.decode(input_ids).replace("[CLS] ", "").replace(" [SEP]", "").replace(" [PAD]", "")
-        )
-
-        results["text"].append(texts)
-        results["actual_label"].append(actual_label)
-        results["prediction_label"].append(test_preds[i])
-
-    logger.info("-------------------------------------------------------...")
-    # 步骤14: 保存预测结果
-    logger.info("步骤14: 保存预测结果...")
-    pred_results_path = os.path.join(RESULTS_PATH, "pred_results.csv")
-    logger.info(f"保存预测结果到: {pred_results_path}")
-    df = pd.DataFrame(results)
-    df.to_csv(pred_results_path, mode="w")
-    logger.info(f"已保存{len(df)}行预测结果")
-
-
-    logger.info("所有步骤完成")
     
 
 def main():
@@ -522,7 +486,7 @@ def main():
 
     logger.info(f"加载预训练模型: {args.bert_model}")
     tokenizer = AutoTokenizer.from_pretrained(args.bert_model, from_tf=True)
-    logger.info("Tokenizer加载完成")
+
 
     logger.info(f"加载N-gram字典: {args.ngram_list_dir}")
     ngram_dict = ZenNgramDict(args.ngram_list_dir, tokenizer=tokenizer)
@@ -535,7 +499,6 @@ def main():
         multift=args.multift,
         from_tf=True
     )
-    logger.info("分类模型加载完成")
 
     if args.local_rank == 0:
         torch.distributed.barrier()
@@ -544,20 +507,19 @@ def main():
         model.half()
         logger.info("使用FP16精度")
     model.to(args.device)
-    logger.info(f"模型已移动到设备: {args.device}")
-
-
     model = torch.nn.DataParallel(model)
-    logger.info("模型已包装为数据并行模型")
+  
 
     if args.do_train:
         logger.info("开始训练流程...")
         train(args, model, tokenizer, ngram_dict, processor, label_list)
+        
         logger.info("训练完成")
 
     if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
         logger.info("开始评估流程...")
         result = evaluate(args, model, tokenizer, ngram_dict, processor, label_list)
+        save_evaluate_results(args, result)
         logger.info("评估完成")
 
 if __name__ == "__main__":
