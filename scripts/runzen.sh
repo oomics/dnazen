@@ -41,20 +41,20 @@ EXPERIMENT_ID="exp1_pmi5"
 #     --ngram_list_dir  ../../out/exp1_pmi5/  
 
 # # 运行预训练
-# python ../src/train/run_pretrain_zen.py \
-#     --data-source tokenized \
-#     --data ../data/ \
-#     --ngram ../../out/exp1_pmi5/ngram_encoder.json \
-#     --out ../data/ \
-#     --model ~/DNABERT-2-117M \
-#     --lr 5e-5 \
-#     --epochs 5 \
-#     --batch-size 1024 \
-#     --grad-accum 2 \
-#     --warmup 0.1 \
-#     --num-workers 8 \
-#     --pin-memory True \
-#     --prefetch-factor 2 
+python ../src/train/run_pretrain_zen.py \
+    --data-source tokenized \
+    --data ../data/ \
+    --ngram ../../out/exp1_pmi5/ngram_encoder.json \
+    --out ../data/ \
+    --model ~/DNABERT-2-117M \
+    --lr 5e-5 \
+    --epochs 5 \
+    --batch-size 1024 \
+    --grad-accum 2 \
+    --warmup 0.1 \
+    --num-workers 8 \
+    --pin-memory True \
+    --prefetch-factor 2 
 
 
 #MODEL_PATH=../../zen_train/data/dnazen_0319194420_epoch_0/
@@ -73,7 +73,7 @@ python ../src/train/run_sequence_level_classification.py \
      --do_eval \
      --max_seq_length 128 \
      --train_batch_size 1024  \
-     --num_train_epochs 1 \
+     --num_train_epochs 2 \
      --gradient_accumulation_steps 2 \
      --learning_rate 5e-5 \
      --output_dir ../output/finetune/pd/$TASK_NAME \

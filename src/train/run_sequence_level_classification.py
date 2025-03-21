@@ -225,7 +225,7 @@ def train(args, model, tokenizer, ngram_dict, processor, label_list):
         tb_writer = SummaryWriter()
         logger.info("初始化TensorBoard写入器")
 
-    logger.info("开始准备训练数据...")
+    logger.info("开始准备微调的训练数据...")
     train_dataset = load_examples(args, tokenizer, ngram_dict, processor, label_list, mode="train")
     if args.local_rank == -1:
         train_sampler = RandomSampler(train_dataset)
