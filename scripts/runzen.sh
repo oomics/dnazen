@@ -41,7 +41,8 @@ EXPERIMENT_ID="exp1_pmi5"
 #     --ngram_list_dir  ../../out/exp1_pmi5/  
 
 # # 运行预训练
-python ../src/train/run_pretrain_zen.py \
+echo "===============================run.sh step5: 开始预训练==============================================="
+CMD="python ../src/train/run_pretrain_zen.py \
     --data-source tokenized \
     --data ../data/ \
     --ngram ../../out/exp1_pmi5/ngram_encoder.json \
@@ -54,9 +55,13 @@ python ../src/train/run_pretrain_zen.py \
     --warmup 0.1 \
     --num-workers 8 \
     --pin-memory True \
-    --prefetch-factor 2 
+    --scratch True \
+    --prefetch-factor 2 "
 
+echo $CMD
+eval $CMD
 
+echo "===============================run.sh step5: 预训练完成==============================================="
 #MODEL_PATH=../../zen_train/data/dnazen_0319194420_epoch_0/
 MODEL_PATH=~/zen-model/
 #MODEL_PATH=~/DNABERT-2-117M
@@ -65,7 +70,8 @@ NGRAM_ENCODER_LIST_PATH=../../out/exp1_pmi5/
 
 # 运行预训练
 TASK_NAME=prom_300_all
-python ../src/train/run_sequence_level_classification.py \
+echo "===============================run.sh step6: 开始微调==============================================="
+CMD="python ../src/train/run_sequence_level_classification.py \
      --data_dir ../../GUE/prom/$TASK_NAME \
      --bert_model $MODEL_PATH \
      --task_name $TASK_NAME \
@@ -80,9 +86,11 @@ python ../src/train/run_sequence_level_classification.py \
      --save_steps 1000 \
      --seed 42 \
      --warmup_proportion 0.1 \
-     --ngram_list_dir $NGRAM_ENCODER_LIST_PATH
+     --ngram_list_dir $NGRAM_ENCODER_LIST_PATH  "
 
-
+echo $CMD
+eval $CMD
+echo "===============================run.sh step6: 微调完成==============================================="
 
 #   MODEL_PATH=~/zen-model/
 #   #MODEL_PATH=~/DNABERT-2-117M

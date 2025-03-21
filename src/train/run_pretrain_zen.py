@@ -416,13 +416,6 @@ def main(
 
     tokenizer.model_max_length = 256
 
-    # 开始记录加载n-gram编码器的时间
-    start_time = time.time()
-    logger.info(f"加载n-gram编码器: {ngram_file}")
-    ngram_encoder = NgramEncoder.from_file(ngram_file)
-    ngram_encoder.set_max_ngram_match(max_ngrams=max_ngrams)
-    end_time = time.time()
-    logger.info("N-gram编码器加载耗时: %.2f秒", end_time - start_time)
     
     if data_source == "tokenized":
         
@@ -432,6 +425,7 @@ def main(
             tokenizer_source=tokenizer_source,
             tokenizer_cfg=tokenizer_cfg,
             ngram_file=ngram_file,
+            max_ngrams=max_ngrams,
             output_dir=output_dir,
             seed=seed,
             bert_model=bert_model,
@@ -490,6 +484,7 @@ def prepare_pretrain_data(
     tokenizer_source: Literal["file", "huggingface"],  # Tokenizer来源：文件或Huggingface
     tokenizer_cfg: str,  # Tokenizer配置，可以是模型名称或路径
     ngram_file: str,  # n-gram解码器配置文件路径
+    max_ngrams: int,  # 最大允许匹配的n-gram数量
     output_dir: str,  # 模型和数据保存的输出目录
     seed: int,  # 随机种子，用于确保实验可重复
     bert_model: str,  # 预训练BERT模型的路径或名称
@@ -589,12 +584,22 @@ def prepare_pretrain_data(
             logger.info(f"GPU {i}: {torch.cuda.get_device_name(i)}")
     logger.info("="*50)
     
-    logger.info("步骤3: 加载tokenizer")
+    logger.info("步骤3: 加载tokenizer 和 n-gram编码器")
     # 从Huggingface加载预训练的tokenizer
     logger.info(f"加载tokenizer: {tokenizer_cfg}")
     start_time = time.time()
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_cfg)
     logger.info(f"Tokenizer加载完成，耗时: {time.time() - start_time:.2f}秒")
+    
+    # 开始记录加载n-gram编码器的时间
+    start_time = time.time()
+    logger.info(f"加载n-gram编码器: {ngram_file}")
+    ngram_encoder = NgramEncoder.from_file(ngram_file)
+    ngram_encoder.set_max_ngram_match(max_ngrams=max_ngrams)
+    logger.info(f"N-gram编码器加载完成，包含 {len(ngram_encoder.get_vocab())} 个N-gram")
+    end_time = time.time()
+    logger.info("N-gram编码器加载耗时: %.2f秒", end_time - start_time)
+    
     
     logger.info("步骤4: 准备预训练数据")
     # 获取每个epoch的样本数，用于计算优化步数
@@ -637,14 +642,18 @@ def prepare_pretrain_data(
     # 模型初始化：从零开始或加载预训练模型
     if scratch:
         logger.info(f"从零开始训练，创建新的ZEN模型配置和模型实例")
-        config = ZenConfig(21128, 104089)  # 词汇表大小和n-gram大小
-        model = ZenForPreTraining(config)
+        # config = ZenConfig(21128, 104089)  # 词汇表大小和n-gram大小
+        # model = ZenForPreTraining(config)
+              
+        vocab_size = ngram_encoder.get_vocab_size()
+        logger.info(f"加载预训练模型，复用已有参数: {bert_model}，vocab_size={vocab_size}")
+        config = ZenConfig(16691, 104089)  # 词汇表大小和n-gram大小
+        
         # 检查模型是否有参数
         if not any(p.requires_grad for p in model.parameters()):
             raise ValueError("模型初始化后没有可训练的参数，请检查模型结构")
     else:
         logger.info(f"加载预训练模型，复用已有参数: {bert_model}")
-        
         model = ZenForPreTraining.from_pretrained(bert_model)
         #model = ZenForPreTraining.from_pretrained("/home/zeq/bert-base-uncased")
         # 检查预训练模型是否正确加载
