@@ -35,7 +35,7 @@ from ZEN import BertTokenizer, BertAdam, WarmupLinearSchedule
 from ZEN import ZenForSequenceClassification, ZenNgramDict
 from ZEN import WEIGHTS_NAME, CONFIG_NAME, NGRAM_DICT_NAME
 from transformers import AutoTokenizer
-import 'json'
+import json
 # 导入自定义工具和模块
 from dnazen.ngram import NgramEncoder  # n-gram编码器模块，用于处理n-gram特征
 
