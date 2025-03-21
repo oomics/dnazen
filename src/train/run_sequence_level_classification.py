@@ -142,10 +142,10 @@ def evaluate(args, model, tokenizer, ngram_dict, processor, label_list):
     out_label_ids = None  # 存储真实标签
     total_eval_loss = 0  # 总评估损失
     nb_eval_steps = 0  # 评估步数
-
+    avg_eval_loss =0
     logger.info("开始模型推理...")
     #for batch in eval_dataloader:
-    for batch in tqdm(eval_dataloader, mininterval=20, desc="Evaluating loss={:.4f}".format(total_eval_loss/nb_eval_steps)):
+    for batch in tqdm(eval_dataloader, mininterval=20, desc="Evaluating loss={:.4f}".format(avg_eval_loss)):
         # 将数据移动到指定设备（CPU/GPU）
         batch = tuple(t.to(args.device) for t in batch)
         input_ids, input_mask, segment_ids, label_ids, input_ngram_ids, ngram_position_matrix, \
@@ -263,8 +263,8 @@ def train(args, model, tokenizer, ngram_dict, processor, label_list):
         tr_loss = 0
         nb_tr_examples, nb_tr_steps = 0, 0
         logger.info(f"开始第 {epoch_num + 1} 轮训练")
-        
-        for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration loss={:.4f}".format(tr_loss/nb_tr_steps),mininterval=20, disable=args.local_rank not in [-1, 0])):
+        avg_loss = 0
+        for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration loss={:.4f}".format(avg_loss),mininterval=20, disable=args.local_rank not in [-1, 0])):
             batch = tuple(t.to(args.device) for t in batch)
             input_ids, input_mask, segment_ids, label_ids, ngram_ids, ngram_positions, \
             ngram_lengths, ngram_seg_ids, ngram_masks = batch
@@ -287,6 +287,7 @@ def train(args, model, tokenizer, ngram_dict, processor, label_list):
             tr_loss += loss.item()
             nb_tr_examples += input_ids.size(0)
             nb_tr_steps += 1
+            avg_loss = tr_loss/nb_tr_steps
             
             if (step + 1) % args.gradient_accumulation_steps == 0:
                 if args.fp16:
