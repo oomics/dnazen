@@ -273,7 +273,7 @@ class PregeneratedDataset(Dataset):
        
 
         with open(data_file, 'r') as f:
-            for i, line in enumerate(tqdm(f, total=num_samples, desc="Training examples, CPU内存: {} MB，GPU内存: {} MB".format(get_memory(), get_gpu_memory()))):
+            for i, line in enumerate(tqdm(f, total=num_samples,mininterval=30, desc="Training examples, CPU内存: {} MB，GPU内存: {} MB".format(get_memory(), get_gpu_memory()))):
                 line = line.strip()
                 example = json.loads(line)
                 features = convert_example_to_features(example, tokenizer, seq_len, max_ngram_in_sequence)
