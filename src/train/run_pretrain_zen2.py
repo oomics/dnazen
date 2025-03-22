@@ -185,9 +185,12 @@ class PregeneratedDataset(Dataset):
         self.working_dir = None
         self.fp16 = fp16
         
-        if reduce_memory:
-            self.temp_dir = "/tmp"
-            self.working_dir = Path(self.temp_dir)
+        #self.temp_dir = "../data/tmp"
+        self.temp_dir = os.path.join(training_path, "tmp")
+        self.working_dir = Path(self.temp_dir)
+        
+        if reduce_memory and os.path.exists(self.working_dir/ 'input_ids.memmap'):
+   
             input_ids = np.memmap(filename=self.working_dir / 'input_ids.memmap',
                                   mode='w+', dtype=np.int32, shape=(num_samples, seq_len))
             input_masks = np.memmap(filename=self.working_dir / 'input_masks.memmap',
@@ -482,6 +485,25 @@ def prepare_pretrain_data(
             
         logger.info(f"预训练数据路径: {pregenerated_data}")
         
+
+        logger.info("步骤3: 加载tokenizer 和 n-gram编码器")
+        # 从Huggingface加载预训练的tokenizer
+        logger.info(f"加载tokenizer: {tokenizer_cfg}")
+        start_time = time.time()
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_cfg)
+        logger.info(f"Tokenizer加载完成，耗时: {time.time() - start_time:.2f}秒")
+        
+        # 开始记录加载n-gram编码器的时间
+        start_time = time.time()
+        logger.info(f"加载n-gram编码器: {ngram_file}")
+        ngram_encoder = NgramEncoder.from_file(ngram_file)
+        ngram_encoder.set_max_ngram_match(max_ngrams=max_ngrams)
+        logger.info(f"N-gram编码器加载完成，包含 {len(ngram_encoder.get_vocab())} 个N-gram")
+        end_time = time.time()
+        logger.info("N-gram编码器加载耗时: %.2f秒", end_time - start_time)
+        
+
+
         # 获取每个epoch的样本数
         try:
             samples_per_epoch = get_samples_per_epoch(pregenerated_data, num_data_epochs)
@@ -495,92 +517,40 @@ def prepare_pretrain_data(
         # 计算总训练步数
         total_train_examples = sum(samples_per_epoch[i % len(samples_per_epoch)] for i in range(epochs))
         num_train_optimization_steps = int(total_train_examples / train_batch_size / gradient_accumulation_steps)
-        
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_cfg)
 
         logger.info(f"加载预训练模型: {bert_model}")
-        # 使用BertForMaskedLM替代ZenForPreTraining
-        #model = ZenForPreTraining.from_pretrained(bert_model)
-        #model = BertForMaskedLM.from_pretrained(bert_model)
-    
-        # 3. 配置模型
-            # 模型参数
-        num_ngram_hidden_layer = 6
-        ngram_encoder = NgramEncoder.from_file(ngram_file)
-        ngram_vocab_size = ngram_encoder.get_vocab_size()
-        logger.info(f"N-gram词汇表大小: {ngram_vocab_size}")
+        # 模型初始化：从零开始或加载预训练模型
+        if scratch:
+            logger.info(f"scratch={scratch} 从零开始训练，创建新的ZEN模型配置和模型实例")
+        
+            ngram_size = ngram_encoder.get_vocab_size()
+            vocab_size = tokenizer.vocab_size
 
-        logger.info("步骤4: 配置模型...")
-        model_config_start_time = time.time()
-        try:
-            # 尝试直接从Hugging Face加载预训练模型配置
-            logger.info("尝试从HuggingFace加载DNABERT-2-117M模型配置...")
-            bert_config = BertConfig.from_pretrained("zhihan1996/DNABERT-2-117M")
-            logger.info("成功从HuggingFace加载zhihan1996/DNABERT-2-117M模型BertConfig配置")
-        except Exception as e:
-            logger.warning(f"无法从HuggingFace加载模型配置: {e}")
-            # 如果无法从HuggingFace加载，创建一个基本的BERT配置
-            logger.info("创建基本的BERT配置")
-            bert_config = BertConfig(
-                vocab_size=len(tokenizer),
-                hidden_size=768,
-                num_hidden_layers=12,
-                num_attention_heads=12,
-                intermediate_size=3072,
-                model_type="bert",  # 确保设置model_type
-            )
-            # 保存到本地路径以便后续使用
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            bert_config_path = os.path.join(current_dir, "..", "resources", "DNABERT-2-117M")
-            os.makedirs(bert_config_path, exist_ok=True)
-            bert_config.save_pretrained(bert_config_path)
-    
+            logger.info(f"参数: {bert_model}，word_vocab_size={vocab_size}，ngram_vocab_size={ngram_size}")
+            #model = ZenConfig(21128, 104089)  # ZEN词汇表大小21128和n-gram大小104089
+            #model = ZenConfig(4096, 16691)  # DNABert词汇表大小4096和n-gram大小16691
+            config = ZenConfig(vocab_size, ngram_size)  # 词汇表大小和n-gram大小
+            model = ZenForPreTraining(config)
+            # 检查模型是否有参数
+
+        else:
+            logger.info(f"scratch={scratch} 加载预训练模型，复用已有参数: {bert_model}")
+            model = ZenForPreTraining.from_pretrained(bert_model)
         
-        # 创建ZEN配置（扩展的BERT配置，包含Ngram信息）
-        vocab_size = ngram_encoder.get_vocab_size()
-        logger.info(f"加载预训练模型，复用已有参数: {bert_model}，vocab_size={vocab_size}")
-        
-        
-        logger.info("步骤6: 创建ZEN配置...")
-        zen_config = ZenConfig(vocab_size, 104089)  # 词汇表大小和n-gram大小
-        # zen_config = ZenConfig(
-        #     #num_word_hidden_layers=num_ngram_hidden_layer,
-        #     ngram_vocab_size=ngram_vocab_size,
-        #     **bert_config.to_dict(),
-        # )
-        
-        
+        # 检查预训练模型是否正确加载
+        if not any(p.requires_grad for p in model.parameters()):
+            raise ValueError("模型初始化后没有可训练的参数，请检查模型结构")
         # 打印ZEN配置信息
         logger.info("ZEN配置详情:")
-        logger.info(f"  词汇表大小: {zen_config.vocab_size}")
-        logger.info(f"  隐藏层大小: {zen_config.hidden_size}")
-        logger.info(f"  注意力头数: {zen_config.num_attention_heads}")
-        logger.info(f"  隐藏层数量: {zen_config.num_hidden_layers}")
-        logger.info(f"  N-gram词汇表大小: {zen_config.type_vocab_size}")
-        logger.info(f"  N-gram隐藏层数量: {zen_config.num_hidden_layers}")
-        
-        # 加载预训练模型或从检查点恢复
-        logger.info("步骤7: 加载预训练模型...")
-        model_load_start_time = time.time()
-        logger.info("从预训练模型初始化...")
-        try:
-            logger.info("尝试从HuggingFace下载预训练模型...")
-            #model = BertForMaskedLM.from_pretrained("zhihan1996/DNABERT-2-117M", config=zen_config)
-            #model = ZenForPreTraining.from_pretrained("zhihan1996/DNABERT-2-117M")
-            model = ZenForPreTraining.from_pretrained("/home/zeq/DNABERT-2-117M/")
-            logger.info("成功加载预训练模型权重")
-
-        except Exception as e:
-            logger.error(f"无法从HuggingFace下载模型: {e}")
-            exit(1)
-
-
-
-
-
-
-
+        logger.info(f"  词汇表大小: {model.config.vocab_size}")
+        logger.info(f"  隐藏层大小: {model.config.hidden_size}")
+        logger.info(f"  注意力头数: {model.config.num_attention_heads}")
+        logger.info(f"  隐藏层数量: {model.config.num_hidden_layers}")
+        logger.info(f"  N-gram词汇表大小: {model.config.type_vocab_size}")
+        logger.info(f"  N-gram隐藏层数量: {model.config.num_hidden_layers}")
         logger.info(f"Total parameters: {sum(p.numel() for p in model.parameters())}")
+
         # 打印模型参数数量
         total_params = sum(p.numel() for p in model.parameters())
         trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)

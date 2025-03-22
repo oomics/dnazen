@@ -20,6 +20,9 @@ MAX_WORKERS=4
 GPU_IDS=""
 RETRY_COUNT=1
 EXPERIMENT_DIR="../data/pretrain/exp1_gue_mspecies"
+PRETRAINED_MODEL_PATH=~/zen-model/
+
+
 RESUME=false  # 添加断点继续训练的标志
 RESUME_FILE=""  # 添加断点记录文件路径
 # 首先处理选项参数
@@ -57,6 +60,10 @@ while [[ $# -gt 0 ]]; do
       RESUME_FILE="$2"
       shift 2
       ;;
+    --pretrained-model)
+      PRETRAINED_MODEL_PATH="$2"
+      shift 2
+      ;;
     -*)
       echo "未知选项: $1"
       echo "用法: bash finetune.sh [--experiment <id>] [--parent-experiment <name>] <任务类型> <子任务>"
@@ -64,8 +71,8 @@ while [[ $# -gt 0 ]]; do
       echo "      bash finetune.sh --experiment <id> --parallel --resume [--resume-file <file>]"
       echo "任务类型: emp, pd, tf, mouse"
       echo "例如: bash finetune.sh --experiment 1 emp H3K4me3"
-      echo "      bash finetune.sh --experiment 1 --parallel --max-workers 4 --gpu-ids 0,1,2,3"
-      echo "      bash finetune.sh --experiment 1 --parallel --resume"
+      echo "      bash finetune.sh --experiment 1 --parallel --max-workers 4 --gpu-ids 0,1,2,3 --pretrained-model ~/zen-model/"
+      echo "      bash finetune.sh --experiment 1 --parallel --resume --pretrained-model ~/zen-model/"
       exit 1
       ;;
     *)
@@ -229,15 +236,16 @@ process_task() {
   # 创建输出目录
   mkdir -p "$task_output_path"
 
-  MODEL_PATH=~/zen-model/
+  #MODEL_PATH=~/zen-model/
   #MODEL_PATH=~/DNABERT-2-117M
   NGRAM_ENCODER_PATH=~/zen-model/ngram_encoder.json
 
-  TASK_NAME=$task_type+"_"+$sub_task
+  TASK_NAME=$task_type"_"$sub_task
   # 运行预训练
+  echo "PRETRAINED_MODEL_PATH: $PRETRAINED_MODEL_PATH"
   CMD="python ../src/train/run_sequence_level_classification.py \
       --data_dir $data_path \
-      --bert_model $MODEL_PATH \
+      --bert_model $PRETRAINED_MODEL_PATH \
       --task_name $TASK_NAME \
       --do_train \
       --do_eval \

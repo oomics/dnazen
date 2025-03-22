@@ -38,7 +38,7 @@ from transformers import AutoTokenizer
 import json
 # 导入自定义工具和模块
 from dnazen.ngram import NgramEncoder  # n-gram编码器模块，用于处理n-gram特征
-
+from report import save_report_data_to_csv2, ReportData, data_in_parpare_dict
  # 计算Matthews相关系数(MCC)
 from sklearn.metrics import matthews_corrcoef
 
@@ -265,7 +265,7 @@ def train(args, model, tokenizer, ngram_dict, processor, label_list):
         nb_tr_examples, nb_tr_steps = 0, 0
         logger.info(f"开始第 {epoch_num + 1} 轮训练")
         
-        for step, batch in enumerate(tqdm(train_dataloader, desc="epoch{}Iteration loss={:.4f}".format(epoch_num, loss.item()),mininterval=20, disable=args.local_rank not in [-1, 0])):
+        for step, batch in enumerate(tqdm(train_dataloader, desc="epoch{}Iteration loss={:.4f}".format(epoch_num, avg_loss),mininterval=20, disable=args.local_rank not in [-1, 0])):
             batch = tuple(t.to(args.device) for t in batch)
             input_ids, input_mask, segment_ids, label_ids, ngram_ids, ngram_positions, \
             ngram_lengths, ngram_seg_ids, ngram_masks = batch
@@ -274,7 +274,7 @@ def train(args, model, tokenizer, ngram_dict, processor, label_list):
                          ngram_ids,
                          ngram_positions,
                          labels=label_ids)
-            #logger.info("loss: " + str(loss))
+            #logger.info("loss: " + str(loss.mean()))
             if args.n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu.
             if args.gradient_accumulation_steps > 1:
@@ -289,7 +289,8 @@ def train(args, model, tokenizer, ngram_dict, processor, label_list):
             nb_tr_examples += input_ids.size(0)
             nb_tr_steps += 1
             avg_loss = tr_loss/nb_tr_steps
-            
+            avg_loss = loss.mean()
+            #logger.info("avg_loss: " + str(avg_loss))
             if (step + 1) % args.gradient_accumulation_steps == 0:
                 if args.fp16:
                     # modify learning rate with special warm up BERT uses
@@ -319,7 +320,7 @@ def train(args, model, tokenizer, ngram_dict, processor, label_list):
     logger.info(f"全局步数: {global_step}, 当前损失: {loss.item():.4f}, 学习率: {optimizer.get_lr()[0]:.2e}")
     output_dir = os.path.join(args.output_dir, "checkpoint-{}-{}-{}".format(epoch_num, global_step, tr_loss/nb_tr_steps))
     save_zen_model(output_dir, model, tokenizer, ngram_dict, args)
-    logger.info(f"第 {epoch_num + 1} 轮训练完成，平均损失: {tr_loss/nb_tr_steps:.4f}")
+    logger.info(f"第 {epoch_num + 1} 轮训练完成，平均损失: {avg_loss:.4f}")
 
 
 def save_evaluate_results(args, results):
@@ -328,6 +329,36 @@ def save_evaluate_results(args, results):
     logger.info(f"保存评估结果到: {results_path}")
     with open(results_path, "w") as f:
         json.dump(results, f, indent=2)  # 添加缩进使JSON文件更易读
+
+    task_report_data = [];
+    for item in data_in_parpare_dict:
+        report_data = ReportData(data=item)
+        match_task = None
+    
+        if report_data.data_name.lower() == args.task_name.lower():
+            match_task=report_data 
+            mcc_paper = match_task.get('MCC_paper')
+            mcc_diff_rate = 100*(results.get('mcc')*100 - mcc_paper)/mcc_paper
+            logger.info(f"找到匹配任务: {match_task}, 论文MCC: {mcc_paper}, 实验结果偏差: {mcc_diff_rate:.2f}%")
+            report_data.mcc_diff_rate = mcc_diff_rate
+            report_data.mcc = results.get('mcc')
+            report_data.acc = results.get('acc')
+            report_data.f1 = results.get('f1')
+            report_data.acc_and_f1 = (results.get('acc') + results.get('f1')) / 2
+            task_report_data.append(report_data)
+            logger.info(f"生成报告: {report_data}")
+            break
+        
+        if match_task is None:
+            logger.info(f"未找到匹配任务,无法生成任何报告！！！！！！: {report_data.data_name}")
+            # 只在需要调试时取消注释下面的代码
+            # ipdb.set_trace()
+            return
+
+    day = datetime.datetime.now().strftime('%Y-%m-%d')
+    results_csv_path = os.path.join(args.output_dir, "eval_results_{}.csv".format(day))
+
+    save_report_data_to_csv2(task_report_data, results_csv_path)
 
     
 
