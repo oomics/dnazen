@@ -642,26 +642,30 @@ def prepare_pretrain_data(
     # 模型初始化：从零开始或加载预训练模型
     if scratch:
         logger.info(f"从零开始训练，创建新的ZEN模型配置和模型实例")
-        # config = ZenConfig(21128, 104089)  # 词汇表大小和n-gram大小
-        # model = ZenForPreTraining(config)
-              
-        vocab_size = ngram_encoder.get_vocab_size()
-        logger.info(f"加载预训练模型，复用已有参数: {bert_model}，vocab_size={vocab_size}")
-        config = ZenConfig(16691, 104089)  # 词汇表大小和n-gram大小
-        
+     
+        ngram_size = ngram_encoder.get_vocab_size()
+        vocab_size = tokenizer.vocab_size
+
+        logger.info(f"参数: {bert_model}，word_vocab_size={vocab_size}，ngram_vocab_size={ngram_size}")
+        #model = ZenConfig(21128, 104089)  # ZEN词汇表大小21128和n-gram大小104089
+        #model = ZenConfig(4096, 16691)  # DNABert词汇表大小4096和n-gram大小16691
+        config = ZenConfig(vocab_size, ngram_size)  # 词汇表大小和n-gram大小
+        model = ZenForPreTraining(config)
         # 检查模型是否有参数
         if not any(p.requires_grad for p in model.parameters()):
             raise ValueError("模型初始化后没有可训练的参数，请检查模型结构")
     else:
         logger.info(f"加载预训练模型，复用已有参数: {bert_model}")
         model = ZenForPreTraining.from_pretrained(bert_model)
+        #model = ZenConfig(16691, 104089)  # 词汇表大小和n-gram大小
+        
         #model = ZenForPreTraining.from_pretrained("/home/zeq/bert-base-uncased")
         # 检查预训练模型是否正确加载
         if not any(p.requires_grad for p in model.parameters()):
             raise ValueError("预训练模型加载失败，没有可训练的参数")
-        logger.info(f"Total parameters: {sum(p.numel() for p in model.parameters())}")
+    
+    logger.info(f"Total parameters: {sum(p.numel() for p in model.parameters())}")
       
-
     # 打印模型参数统计信息
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)

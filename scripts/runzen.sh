@@ -27,22 +27,28 @@ EXPERIMENT_ID="exp1_pmi5"
 # bash finetune2.sh -e $EXPERIMENT_ID
 # echo "===============================run.sh step4: 微调完成==============================================="
    
-# 创建预训练数据
-# python ../src/train/create_pre_train_data_zen.py     \
-#     --train_corpus ../../mspecies/train/train.txt     \
-#     --output_dir ../data/     \
-#     --bert_model zhihan1996/DNABERT-2-117M     \
-#     --ngram_list_dir  ../../out/exp1_pmi5/  
+# # 创建预训练数据
+# CMD="python ../src/train/create_pre_train_data_zen.py \
+#     --train_corpus ../../mspecies/train/train.txt \
+#     --output_dir ../data/ \
+#     --bert_model zhihan1996/DNABERT-2-117M \
+#     --ngram_list_dir  ../../out/exp1_pmi5/"  
 
-# python ../src/train/create_pre_train_data_zen.py     \
-#     --train_corpus ../../mspecies/dev/dev.txt     \
-#     --output_dir ../data/     \
-#     --bert_model zhihan1996/DNABERT-2-117M     \
-#     --ngram_list_dir  ../../out/exp1_pmi5/  
+# echo $CMD
+# eval $CMD
+
+# CMD="python ../src/train/create_pre_train_data_zen.py \
+#     --train_corpus ../../mspecies/dev/dev.txt \
+#     --output_dir ../data/ \
+#     --bert_model zhihan1996/DNABERT-2-117M \
+#     --ngram_list_dir  ../../out/exp1_pmi5/"  
+
+# echo $CMD
+# eval $CMD
 
 # # 运行预训练
 echo "===============================$0 step5: 开始预训练==============================================="
-CMD="python ../src/train/run_pretrain_zen2.py \
+CMD="python ../src/train/run_pretrain_zen.py \
     --data-source tokenized \
     --data ../data/ \
     --ngram ../../out/exp1_pmi5/ngram_encoder.json \
@@ -55,7 +61,8 @@ CMD="python ../src/train/run_pretrain_zen2.py \
     --warmup 0.1 \
     --num-workers 8 \
     --pin-memory True \
-    --prefetch-factor 2 "
+    --prefetch-factor 2 \
+    --scratch "
 
 echo $CMD
 eval $CMD

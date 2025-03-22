@@ -4,8 +4,8 @@
 ###################################################################################
 #EXPERIMENT_ID="exp1_pmi2"
 #EXPERIMENT_ID="exp1_pmi5"
-EXPERIMENT_ID="exp1_pmi10"
-
+# EXPERIMENT_ID="exp1_pmi10"
+EXPERIMENT_ID="exp1_pmi10_gue_train"
 
 echo "===============================run.sh step1: ngram抽取==============================================="
 bash ./prepare_ngram.sh -e $EXPERIMENT_ID
