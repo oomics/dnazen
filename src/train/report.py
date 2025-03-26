@@ -464,6 +464,29 @@ class ReportData:
             self.dnabert2_mcc = None
             self.bias = None
 
+def save_report_data_to_csv2(report_data_list, output_path):
+    if os.path.exists(output_path):
+        csv_data = pd.read_csv(output_path)
+        # 找到匹配的行，写入
+        for report_data in report_data_list:
+            csv_data = csv_data[csv_data["数据集"] == report_data.data_name]
+            if len(csv_data) > 0:
+                csv_data.loc[csv_data["数据集"] == report_data.data_name, "实验MCC"] = report_data.mcc
+                csv_data.loc[csv_data["数据集"] == report_data.data_name, "MCC差异"] = report_data.mcc_diff_rate
+                csv_data.loc[csv_data["数据集"] == report_data.data_name, "MCC(GUE)差异"] = report_data.mcc_gue_diff_rate
+                #保存CSV
+                csv_data.to_csv(output_path, index=False)
+            else:
+                logger.info(f"未找到匹配任务: {report_data.data_name}")
+                #直接添加到最后一行
+                csv_data = pd.concat([csv_data, pd.DataFrame([report_data.to_dict()])], ignore_index=True)
+                csv_data.to_csv(output_path, index=False)
+    else:
+        csv_data = pd.DataFrame(columns=["数据集", "任务", "指标", "训练集大小", "验证集大小", "测试集大小", "论文MCC", "论文MCC(GUE)", "DNABERT准确率", "DNABERT2 复现MCC", "复现偏差", "实验MCC", "MCC差异", "MCC(GUE)差异"])
+        csv_data.to_csv(output_path, index=False)
+    
+  
+
 
 def save_report_data_to_csv(report_data_list, output_path):
     """
@@ -475,19 +498,16 @@ def save_report_data_to_csv(report_data_list, output_path):
     """
     logger.info(f"将报告数据保存到CSV文件: {output_path}")
     logger.info(f"report_data_list: len{len(report_data_list)}")
-    
+    # 准备CSV数据
+    csv_data = []
     # 定义CSV表头
     headers = [
         "数据集", "任务", "指标", "训练集大小", "验证集大小", "测试集大小", 
         "论文MCC", "论文MCC(GUE)", "DNABERT准确率", "DNABERT2 复现MCC", "复现偏差",
         "实验MCC", "MCC差异", "MCC(GUE)差异"
     ]
-    
-    # 准备CSV数据
-    csv_data = []
     for report_data in report_data_list:
         # 获取实验MCC和差异值
-
         experiment_mcc = 0.0
         mcc_diff = ""
         mcc_gue_diff = ""
@@ -526,7 +546,7 @@ def save_report_data_to_csv(report_data_list, output_path):
         ]
         logger.info(f"row: {row}")
         csv_data.append(row)
-    
+
     # 写入CSV文件
     try:
         with open(output_path, "w", newline="", encoding="utf-8") as f:

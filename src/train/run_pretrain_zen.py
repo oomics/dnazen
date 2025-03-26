@@ -214,11 +214,12 @@ class PregeneratedDataset(Dataset):
         self.working_dir = None
         self.fp16 = fp16
         
-        if reduce_memory:
-            
-            self.temp_dir = "./tmp"
-            self.working_dir = Path(self.temp_dir)
-            
+        #self.temp_dir = "../data/tmp"
+        self.temp_dir = os.path.join(training_path, "tmp")
+        self.working_dir = Path(self.temp_dir)
+        
+        if reduce_memory and os.path.exists(self.working_dir/ 'input_ids.memmap'):
+   
             logger.info("启用内存优化: 使用内存映射文件来存储数据,{}".format(self.working_dir))
             #input_ids, input_mask, segment_ids, lm_label_ids, is_next, ngram_ids, ngram_masks, ngram_positions, ngram_segment_ids = batch
             input_ids = np.memmap(filename=self.working_dir / 'input_ids.memmap',
@@ -663,9 +664,9 @@ def prepare_pretrain_data(
         # 检查预训练模型是否正确加载
         if not any(p.requires_grad for p in model.parameters()):
             raise ValueError("预训练模型加载失败，没有可训练的参数")
-    
-    logger.info(f"Total parameters: {sum(p.numel() for p in model.parameters())}")
+        logger.info(f"Total parameters: {sum(p.numel() for p in model.parameters())}")
       
+
     # 打印模型参数统计信息
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -800,10 +801,11 @@ def prepare_pretrain_data(
         # 初始化当前epoch的训练损失和样本计数
         tr_loss = 0  # 累计训练损失
         nb_tr_examples, nb_tr_steps = 0, 0  # 训练样本数和步数
+        avg_loss = 0
         
         # 使用tqdm创建进度条，用于可视化训练进度
         logger.info("开始训练...")
-        with tqdm(total=len(train_dataloader), mininterval=60, desc="继续预训练Epoch{} ".format(epoch)) as pbar:
+        with tqdm(total=len(train_dataloader), mininterval=60, desc="继续预训练Epoch{} avg_loss={:.4f}".format(epoch, avg_loss)) as pbar:
             #ipdb.set_trace()
             # 遍历每个批次的数据
             for step, batch in enumerate(train_dataloader):
@@ -831,12 +833,13 @@ def prepare_pretrain_data(
                     lm_label_ids,  # 语言模型标签IDs
                     is_next  # 下一句预测标签
                 )
-                logger.info("loss: " + str(loss))
+                #logger.info("loss: " + str(loss))
                 forward_time = time.time() - forward_start_time
 
                 # 多GPU训练时，需要对损失取平均
                 if n_gpu > 1:
                     loss = loss.mean()  # 多GPU平均损失
+                    avg_loss = loss.mean()
                 
                 # 梯度累积：将损失除以累积步数
                 if gradient_accumulation_steps > 1:
@@ -912,6 +915,8 @@ def prepare_pretrain_data(
 
         # 基础保存路径
         saving_path = output_dir
+        if not os.path.exists(saving_path):
+            os.makedirs(saving_path)
         
         # 创建模型保存目录，包含时间戳和轮次信息
         model_save_dir = Path(os.path.join(saving_path, save_name + st + "_epoch_" + str(epoch + already_trained_epoch)))
