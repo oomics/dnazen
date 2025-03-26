@@ -160,3 +160,15 @@ pip uninstall apex
 git clone https://github.com/NVIDIA/apex
 cd apex
 pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation ./
+
+
+
+## Data 目录结构：
+./data/downloads : 原始下载的DNABert2数据，dnabert_2_pretrain.zip为ms数据集，GUE.zip 为GUE数据集合
+./data/pretrain_model: 预训练模型保存目录
+./data/output/finetune: 为微调数据和模型输出目录
+./data/epoch_x_metrics.json 和./data/epoch_x.json: 为zen模型中用到的经过ngram和dnabert2模型tokenized的数据
+./data/exp1_pmi5/ngram_encoder.json 和./data/exp1_pmi5/ngram_list.txt 为使用PMI=5，对GUE数据集+ms的dev数据抽取ngram的到的ngram code
+
+
+

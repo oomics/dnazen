@@ -62,10 +62,12 @@ EXPERIMENT_ID="exp1_pmi5"
 #     --num-workers 8 \
 #     --reduce-mem  "
 
+NGRAM_ENCODER_PATH=../data/exp1_pmi5/ngram_encoder.json
+
 CMD="python ../src/train/run_pretrain_zen.py \
     --data-source tokenized \
     --data ../data/ \
-    --ngram ../../out/exp1_pmi5/ngram_encoder.json \
+    --ngram $NGRAM_ENCODER_PATH \
     --out ../data/pretrain_model/ \
     --model ~/DNABERT-2-117M \
     --lr 5e-5 \
