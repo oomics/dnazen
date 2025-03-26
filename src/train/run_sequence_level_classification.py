@@ -144,6 +144,7 @@ def evaluate(args, model, tokenizer, ngram_dict, processor, label_list):
     nb_eval_steps = 0  # 评估步数
     avg_eval_loss =0
     logger.info("开始模型推理...")
+    #import ipdb; ipdb.set_trace()
     #for batch in eval_dataloader:
     for batch in tqdm(eval_dataloader, mininterval=20, desc="Evaluating loss={:.4f}".format(avg_eval_loss)):
         # 将数据移动到指定设备（CPU/GPU）
@@ -164,6 +165,7 @@ def evaluate(args, model, tokenizer, ngram_dict, processor, label_list):
             # 计算损失
             loss_fct = torch.nn.CrossEntropyLoss()
             loss = loss_fct(logits, label_ids.view(-1))
+            logger.info(f"当前评估损失: {loss.item():.4f}")
             
             # 累加评估损失和步数                                                                                                                                                                                                                                                                                                                                                                                                                                                             
             total_eval_loss += loss.item()
@@ -180,9 +182,10 @@ def evaluate(args, model, tokenizer, ngram_dict, processor, label_list):
             # 将logits转换为预测标签（取最大概率的类别）
             #predsx = np.argmax(preds[0], axis=1)
             
-            # 计算平均评估损失
-            avg_eval_loss = total_eval_loss / nb_eval_steps if nb_eval_steps > 0 else 0
-            logger.debug(f"当前评估平均损失: {avg_eval_loss:.4f}")
+        # 计算平均评估损失
+        #avg_eval_loss = total_eval_loss / nb_eval_steps if nb_eval_steps > 0 else 0
+        avg_eval_loss = loss.item()
+        logger.debug(f"当前评估平均损失: {avg_eval_loss:.4f}")
     
 
     # 将logits转换为预测标签（取最大概率的类别）
@@ -334,10 +337,11 @@ def save_evaluate_results(args, results):
     for item in data_in_parpare_dict:
         report_data = ReportData(data=item)
         match_task = None
-    
+        
         if report_data.data_name.lower() == args.task_name.lower():
+            #import ipdb; ipdb.set_trace()
             match_task=report_data 
-            mcc_paper = match_task.get('MCC_paper')
+            mcc_paper = match_task.mcc_paper
             mcc_diff_rate = 100*(results.get('mcc')*100 - mcc_paper)/mcc_paper
             logger.info(f"找到匹配任务: {match_task}, 论文MCC: {mcc_paper}, 实验结果偏差: {mcc_diff_rate:.2f}%")
             report_data.mcc_diff_rate = mcc_diff_rate
@@ -349,11 +353,11 @@ def save_evaluate_results(args, results):
             logger.info(f"生成报告: {report_data}")
             break
         
-        if match_task is None:
-            logger.info(f"未找到匹配任务,无法生成任何报告！！！！！！: {report_data.data_name}")
-            # 只在需要调试时取消注释下面的代码
-            # ipdb.set_trace()
-            return
+    if match_task is None:
+        logger.info(f"未找到匹配任务,无法生成任何报告！！！！！！: {report_data.data_name}")
+        # 只在需要调试时取消注释下面的代码
+        # ipdb.set_trace()
+        return
 
     day = datetime.datetime.now().strftime('%Y-%m-%d')
     results_csv_path = os.path.join(args.output_dir, "eval_results_{}.csv".format(day))

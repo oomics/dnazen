@@ -420,7 +420,7 @@ class ReportData:
         # 确保eval_results不为None
         self.eval_results = eval_results if eval_results is not None else {}
         
-        if eval_results is None:
+        if eval_results is not None:
             # 从eval_results中提取指标
             self.accuracy = self.eval_results.get("eval_accuracy")
             self.f1 = self.eval_results.get("eval_f1")
@@ -463,6 +463,10 @@ class ReportData:
             self.dnabert_accuracy = None
             self.dnabert2_mcc = None
             self.bias = None
+
+    def get(self, key, default=None):
+        """获取属性值，如果不存在则返回默认值"""
+        return getattr(self, key, default)
 
 def save_report_data_to_csv2(report_data_list, output_path):
     if os.path.exists(output_path):
