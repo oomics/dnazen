@@ -47,7 +47,7 @@ EXPERIMENT_ID="exp1_pmi5"
 # eval $CMD
 
 # # 运行预训练
-# echo "===============================$0 step5: 开始预训练==============================================="
+echo "===============================$0 step5: 开始预训练==============================================="
 # CMD="python ../src/train/run_pretrain_zen.py \
 #     --data-source tokenized \
 #     --data ../data/ \
@@ -80,7 +80,7 @@ CMD="python ../src/train/run_pretrain_zen.py \
     --scratch "
 
 echo $CMD
-eval $CMD
+#eval $CMD
 
 echo "===============================$0 step5: 预训练完成==============================================="
 #MODEL_PATH=../../zen_train/data/dnazen_0319194420_epoch_0/
