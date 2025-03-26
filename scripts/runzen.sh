@@ -47,12 +47,26 @@ EXPERIMENT_ID="exp1_pmi5"
 # eval $CMD
 
 # # 运行预训练
-echo "===============================$0 step5: 开始预训练==============================================="
+# echo "===============================$0 step5: 开始预训练==============================================="
+# CMD="python ../src/train/run_pretrain_zen.py \
+#     --data-source tokenized \
+#     --data ../data/ \
+#     --ngram ../../out/exp1_pmi5/ngram_encoder.json \
+#     --out ../data/pretrain_model/ \
+#     --model ~/DNABERT-2-117M \
+#     --lr 5e-5 \
+#     --epochs 2 \
+#     --batch-size 512 \
+#     --grad-accum 2 \
+#     --warmup 0.1 \
+#     --num-workers 8 \
+#     --reduce-mem  "
+
 CMD="python ../src/train/run_pretrain_zen.py \
     --data-source tokenized \
     --data ../data/ \
     --ngram ../../out/exp1_pmi5/ngram_encoder.json \
-    --out ../data/ \
+    --out ../data/pretrain_model/ \
     --model ~/DNABERT-2-117M \
     --lr 5e-5 \
     --epochs 2 \
@@ -60,8 +74,7 @@ CMD="python ../src/train/run_pretrain_zen.py \
     --grad-accum 2 \
     --warmup 0.1 \
     --num-workers 8 \
-    --pin-memory True \
-    --prefetch-factor 2 \
+    --reduce-mem \
     --scratch "
 
 echo $CMD
@@ -69,7 +82,13 @@ eval $CMD
 
 echo "===============================$0 step5: 预训练完成==============================================="
 #MODEL_PATH=../../zen_train/data/dnazen_0319194420_epoch_0/
-MODEL_PATH=~/zen-model/
+#PRETRAINED_MODEL_PATH=~/zen-model/
+
+#PRETRAINED_MODEL_PATH=../../zen_train/data/dnazen_0319194420_epoch_0/
+PRETRAINED_MODEL_NAME=$(ls -t ../data/pretrain_model/ | head -n 1)
+PRETRAINED_MODEL_PATH=../data/pretrain_model/$PRETRAINED_MODEL_NAME
+echo "PRETRAINED_MODEL_PATH: "$PRETRAINED_MODEL_PATH
+
 #MODEL_PATH=~/DNABERT-2-117M
 NGRAM_ENCODER_PATH=~/zen-model/ngram_encoder.json
 NGRAM_ENCODER_LIST_PATH=../../out/exp1_pmi5/
@@ -79,7 +98,7 @@ TASK_NAME=prom_300_all
 echo "===============================run.sh step6: 开始微调==============================================="
 CMD="python ../src/train/run_sequence_level_classification.py \
      --data_dir ../../GUE/prom/$TASK_NAME \
-     --bert_model $MODEL_PATH \
+     --bert_model $PRETRAINED_MODEL_PATH \
      --task_name $TASK_NAME \
      --do_train \
      --do_eval \
@@ -96,11 +115,14 @@ CMD="python ../src/train/run_sequence_level_classification.py \
 
 echo $CMD
 #eval $CMD
+
+
+# 运行全部微调任务
+CMD="bash finetune_zen.sh --experiment 1 --parallel --max-workers 4 --pretrained-model $PRETRAINED_MODEL_PATH"
+echo $CMD
+eval $CMD
 echo "===============================run.sh step6: 微调完成==============================================="
 
-#   MODEL_PATH=~/zen-model/
-#   #MODEL_PATH=~/DNABERT-2-117M
-#   NGRAM_ENCODER_PATH=~/zen-model/ngram_encoder.json
 
 
 
