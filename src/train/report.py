@@ -420,7 +420,7 @@ class ReportData:
         # 确保eval_results不为None
         self.eval_results = eval_results if eval_results is not None else {}
         
-        if eval_results is not None:
+        if eval_results is None:
             # 从eval_results中提取指标
             self.accuracy = self.eval_results.get("eval_accuracy")
             self.f1 = self.eval_results.get("eval_f1")

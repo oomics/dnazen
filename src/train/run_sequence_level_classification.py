@@ -165,11 +165,12 @@ def evaluate(args, model, tokenizer, ngram_dict, processor, label_list):
             # 计算损失
             loss_fct = torch.nn.CrossEntropyLoss()
             loss = loss_fct(logits, label_ids.view(-1))
-            logger.info(f"当前评估损失: {loss.item():.4f}")
+            #logger.info(f"当前评估损失: {loss.item():.4f}")
             
             # 累加评估损失和步数                                                                                                                                                                                                                                                                                                                                                                                                                                                             
             total_eval_loss += loss.item()
             nb_eval_steps += 1
+            avg_eval_loss = loss.item()
 
         if len(preds) == 0:
             preds.append(logits.detach().cpu().numpy())
@@ -184,8 +185,8 @@ def evaluate(args, model, tokenizer, ngram_dict, processor, label_list):
             
         # 计算平均评估损失
         #avg_eval_loss = total_eval_loss / nb_eval_steps if nb_eval_steps > 0 else 0
-        avg_eval_loss = loss.item()
-        logger.debug(f"当前评估平均损失: {avg_eval_loss:.4f}")
+        #avg_eval_loss = loss.item()
+        #logger.debug(f"当前评估平均损失: {avg_eval_loss:.4f}")
     
 
     # 将logits转换为预测标签（取最大概率的类别）
