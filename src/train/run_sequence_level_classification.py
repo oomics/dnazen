@@ -144,9 +144,10 @@ def evaluate(args, model, tokenizer, ngram_dict, processor, label_list):
     nb_eval_steps = 0  # 评估步数
     avg_eval_loss =0
     logger.info("开始模型推理...")
+    batch_index = 0
     #import ipdb; ipdb.set_trace()
     #for batch in eval_dataloader:
-    for batch in tqdm(eval_dataloader, mininterval=20, desc="Evaluating loss={:.4f}".format(avg_eval_loss)):
+    for batch in tqdm(eval_dataloader, mininterval=20, desc="Evaluating batch={}, loss={:.4f}".format(batch_index, avg_eval_loss)):
         # 将数据移动到指定设备（CPU/GPU）
         batch = tuple(t.to(args.device) for t in batch)
         input_ids, input_mask, segment_ids, label_ids, input_ngram_ids, ngram_position_matrix, \
@@ -182,11 +183,12 @@ def evaluate(args, model, tokenizer, ngram_dict, processor, label_list):
             
             # 将logits转换为预测标签（取最大概率的类别）
             #predsx = np.argmax(preds[0], axis=1)
-            
+        
         # 计算平均评估损失
         #avg_eval_loss = total_eval_loss / nb_eval_steps if nb_eval_steps > 0 else 0
         #avg_eval_loss = loss.item()
-        #logger.debug(f"当前评估平均损失: {avg_eval_loss:.4f}")
+        batch_index += 1
+        logger.debug(f"当前评估平均损失: {avg_eval_loss:.4f}")
     
 
     # 将logits转换为预测标签（取最大概率的类别）
@@ -220,7 +222,26 @@ def evaluate(args, model, tokenizer, ngram_dict, processor, label_list):
 def train(args, model, tokenizer, ngram_dict, processor, label_list):
     # 检查输出目录是否存在且不为空，且未设置覆盖标志
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and not args.overwrite_output_dir:
+        logger.info(f"===================Attention===============================")
         logger.warning(f"输出目录 {args.output_dir} 已存在且不为空，且未设置覆盖标志，跳过训练")
+        output_dir = args.output_dir
+
+        # 获取该目录下所有名称以 checkpoint- 开头的目录
+        checkpoint_dirs = [
+            os.path.join(output_dir, dirname) for dirname in os.listdir(output_dir)
+            if dirname.startswith("checkpoint-") and os.path.isdir(os.path.join(output_dir, dirname))
+        ]
+        # 找到最新的 checkpoint 目录
+        latest_model_path = max(checkpoint_dirs, key=lambda d: int(d.split('-')[1]), default=None)
+        model_path = os.path.join(latest_model_path, "pytorch_model.bin")
+        logger.info(f"最新模型文件路径: {model_path}")
+        if os.path.exists(model_path):
+            logger.info(f"模型文件 {model_path} 已存在，直接加载模型")
+            model=ZenForSequenceClassification.from_pretrained(model_path,from_tf=True);
+            return
+        else:
+            logger.info(f"模型文件 {model_path} 不存在，继续训练")
+        logger.info(f"===========================================================")
         return
     
     global_step = 0
@@ -344,7 +365,7 @@ def save_evaluate_results(args, results):
             match_task=report_data 
             mcc_paper = match_task.mcc_paper
             mcc_diff_rate = 100*(results.get('mcc')*100 - mcc_paper)/mcc_paper
-            logger.info(f"找到匹配任务: {match_task}, 论文MCC: {mcc_paper}, 实验结果偏差: {mcc_diff_rate:.2f}%")
+            logger.info(f"找到匹配任务: {match_task.data_name}, 论文MCC: {mcc_paper}, 实验结果偏差: {mcc_diff_rate:.2f}%")
             report_data.mcc_diff_rate = mcc_diff_rate
             report_data.mcc = results.get('mcc')
             report_data.acc = results.get('acc')
