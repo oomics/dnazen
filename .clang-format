@@ -1,5 +1,0 @@
----
-Language:        Cpp
-BasedOnStyle:  google
-IndentWidth:     4
-SortIncludes: true
