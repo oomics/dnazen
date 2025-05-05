@@ -1,9 +1,6 @@
 # Copyright 2022 MosaicML Examples authors
 # SPDX-License-Identifier: Apache-2.0
 
-# Adapted from https://github.com/HazyResearch/flash-attention/blob/main/flash_attn/bert_padding.py
-# Which was adapted from https://github.com/mlcommons/training_results_v1.1/blob/main/NVIDIA/benchmarks/bert/implementations/pytorch/padding.py
-
 
 from typing import Tuple, cast
 
