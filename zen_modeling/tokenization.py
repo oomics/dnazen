@@ -295,30 +295,3 @@ class NgramTokenizer(PreTrainedTokenizer):
         )
 
 
-# Example usage
-def main():
-    pretrained = "/data1/user1/llm/DNABERT-2-117M"
-    ngram_file = "/data1/user1/project/zen_train/data/pretrain/human_ms_gue/ngram_encoders/pmi_1_all_union_ngram_encoder.json"
-
-    tokenizer = NgramTokenizer(pretrained, ngram_file)
-
-    tokens = "A GGTT AAATA GGGGTT GAGA TA TGATG CTCA GGAGAA GCGCTT TCTT TCGC GAGCA CCCTGAA CCA GACC".split()
-    outputs = tokenizer(tokens, is_split_into_words=True, max_seq_length=20)
-    print("Original outputs:")
-    print("input_ids:", outputs["input_ids"])
-    print("attention_mask:", outputs["attention_mask"])
-    print("ngram_input_ids:", outputs["ngram_input_ids"])
-    print("ngram_attention_match:", outputs["ngram_attention_match"])
-    print("ngram_attention_mask:", outputs["ngram_attention_mask"])
-
-    masked = tokenizer.masking(outputs, mask_prob=0.15)
-    print("\nAfter whole n-gram masking:")
-    print("input_ids:", masked["input_ids"])
-    print("attention_mask:", masked["attention_mask"])
-    print("labels:", masked["labels"])
-    print("ngram_input_ids:", masked["ngram_input_ids"])
-    print("ngram_attention_match:", masked["ngram_attention_match"])
-    print("ngram_attention_mask:", masked["ngram_attention_mask"])
-
-if __name__ == "__main__":
-    main()
