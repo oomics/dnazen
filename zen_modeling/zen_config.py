@@ -130,18 +130,3 @@ class ZenConfig(BertConfig):
         print("\nZenConfig JSON string:")
         print(zen_config.to_json_string())
         return zen_config
-
-# --------------------- 测试调用 ---------------------
-if __name__ == "__main__":
-    from .tokenization import NgramTokenizer
-    # 例如，使用 "bert-base-uncased" 作为 BERT 模型路径
-    bert_model_path = "/data1/user1/llm/DNABERT-2-117M"
-    ngram_json_file = "/data1/user1/project/zen_train/data/pretrain/human_ms_gue/ngram_encoders/pmi_1_all_union_ngram_encoder.json"
-    tokenizer = NgramTokenizer(bert_model_path, ngram_json_file)
-    # 明确传入 Zen 模型额外参数
-    zen_config = ZenConfig.from_pretrained_bert(
-        bert_model_path=bert_model_path,
-        max_ngram_count=tokenizer.max_ngram_count,
-        num_hidden_ngram_layers=6,
-        ngram_vocab_size=tokenizer.ngram_size
-    )
