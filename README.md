@@ -1,63 +1,38 @@
 # DNAZEN
 
-DNAZEN is a project aimed at providing tools and resources for DNA sequence analysis with pretraining and finetuning
+DNAZEN is a pretrained representation model for gene sequence.
 
-## Installation
+## Requirements
 
-This project managed in the form of a library. To install this project:
+The code works with the following environment.
 
-```bash
-pip install -e .
+```text
+python==3.11
+transformers==4.51.3
+deepspeed==0.16.7
 ```
 
-Or install with setup.py:
-```
-python setup.py install
-```
+## Pretrained Models
 
-## Directory Layout
+The base model can be downloaded from [here](oomics/DNAZEN-1.0-base). The large and x-large models will come soon.
 
-`src`: the source code of `dnazen` library
-
-`tests`: the tests of our library
-
-`scripts`: the scripts you need to do pretraining, finetuning, making datasets, etc.
-
-`resources`: directory for keeping various resources.
-
-`results`: results from experiments
-
-
-## Usage
-
-We keep all scripts you might find useful in `scripts` directory. The usage of script is self-explanatory. Here are some scripts you might find most helpful:
-
-- `run_pretrain.py`: Run the pretraining process.
-
-    - You need to prepare for the dataset first.
-
-- `run_finetune.py` Run the finetuning process.
-
-    - You need to have a pretrained model first.
+| Parameter                                    |  Base |          Large | X-Large |
+|----------------------------------------------|------:|---------------:|--------:|
+| `token_encoder_num_hidden_layers`            |    12 |             24 |      28 |
+| `token_encoder_hidden_size`                  |   768 |           1024 |    1536 |
+| `token_encoder_num_attention_heads`          |    12 |             16 |      12 |
+| `token_encoder_intermediate_size`            |  3072 |           4096 |    8960 |
+| `token_encoder_vocab_size`                   |  4096 |           4096 |    4096 |
+| `geneseq_encoder_num_hidden_layers`          |     6 |              6 |      12 |
+| `geneseq_encoder_hidden_size`                |   768 |           1024 |    1536 |
+| `geneseq_encoder_num_attention_heads`        |    12 |             16 |      12 |
+| `geneseq_encoder_intermediate_size`          |  3072 |           4096 |    8960 |
+| `geneseq_encoder_vocab_size`                 |162708 |         162708 |  162708 |
+| `total_number_of_parameters`                 |  285M |           650M |    2.1B |
 
 
-## Getting Started (for Development)
 
-- __1. install `pixi` and `makefile` if you haven't ready (optional)__
-    > We use `pixi` to manage the project. The reason we don't use `conda` is it has some issue managing `gcc`. If you insist using `conda` for development, make sure don't editable install this package.
 
-    > We are also using `makefile` in favor of the `task` feature from `pixi`. This is because some of our tasks is too complex to use `pixi-task` and we would like to keep an hierarchal structure of tasks.
 
-- __2. install the package__
-    > Do `pixi install` if you want to use `pixi`.
 
-    > Otherwise, do `pip install -e .`
 
-    > Specifically do `pip install .` if you are using `conda` (see `1` for the reason)
-
-- __3. install pre-commit hook__
-    > Do `pre-commit install`.
-
-## Train DNAZEN
-
-See [this document](./scripts/README.md) for detail.
