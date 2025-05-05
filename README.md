@@ -14,7 +14,7 @@ deepspeed==0.16.7
 
 ## Pretrained Models
 
-The base model can be downloaded from [here](oomics/DNAZEN-1.0-base). The large and x-large models will come soon.
+The base model can be downloaded from [HuggingFace](https://huggingface.co/oomics/DNAZEN-1.0-base). The large and x-large models will come soon.
 
 | Parameter                                    |  Base |          Large | X-Large |
 |----------------------------------------------|------:|---------------:|--------:|
