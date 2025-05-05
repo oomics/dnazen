@@ -318,7 +318,7 @@ def train():
         args=training_args,
         compute_metrics=compute_metrics,
         train_dataset=train_dataset,
-        eval_dataset=test_dataset  # 如果想在评估时使用 dev/test 数据，这里请根据需求调整
+        eval_dataset=val_dataset  # 如果想在评估时使用 dev/test 数据，这里请根据需求调整
     )
 
     # 添加自定义回调，将评估结果累积保存到同一个文件中
