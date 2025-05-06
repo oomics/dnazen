@@ -18,6 +18,11 @@ transformers==4.51.3
 deepspeed==0.16.7
 ```
 
+## Data
+
+DNAZEN is fine-tuned on GUE benchmarks. You can find the data from [here](https://github.com/MAGICS-LAB/DNABERT_2).
+
+
 ## Pretrained Models
 
 The base model can be downloaded from [HuggingFace](https://huggingface.co/oomics/DNAZEN-1.0-base). The large and x-large models will come soon.
