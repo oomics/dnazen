@@ -2,6 +2,12 @@
 
 DNAZEN is a pretrained representation model for gene sequence.
 
+
+## Citation
+
+If you use or extend our work, please cite the following [paper](https://arxiv.org/abs/2505.02206).
+
+
 ## Requirements
 
 The code works with the following environment.
