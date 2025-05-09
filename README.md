@@ -7,6 +7,14 @@ DNAZEN is a pretrained representation model for gene sequence.
 
 If you use or extend our work, please cite the following [paper](https://arxiv.org/abs/2505.02206).
 
+```text
+@article{mao2025dnazen,
+  title={DNAZEN: Enhanced Gene Sequence Representations via Mixed Granularities of Coding Units},
+  author={Mao, Lei and Tian, Yuanhe and Song, Yan},
+  journal={arXiv preprint arXiv:2505.02206},
+  year={2025}
+}
+```
 
 ## Requirements
 
@@ -40,7 +48,6 @@ The base model can be downloaded from [HuggingFace](https://huggingface.co/oomic
 | `geneseq_encoder_intermediate_size`          |  3072 |           4096 |    8960 |
 | `geneseq_encoder_vocab_size`                 |162708 |         162708 |  162708 |
 | `total_number_of_parameters`                 |  285M |           650M |    2.1B |
-
 
 
 
