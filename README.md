@@ -62,14 +62,17 @@ python finetune.py \
     --per_device_eval_batch_size 8 \
     --gradient_accumulation_steps 1 \
     --learning_rate 5e-5 \
-    --num_train_epochs 5 \
-    --save_total_limit 5 \
+    --num_train_epochs 8 \
+    --save_total_limit 1 \
     --fp16 \
     --output_dir $output_path \
     --eval_strategy epoch \
     --save_strategy epoch \
     --warmup_steps 50 \
-    --overwrite_output_dir True
+    --overwrite_output_dir True \
+    --greater_is_better True \
+    --metric_for_best_model matthews_correlation \
+    --load_best_model_at_end True
 ```
 
 
