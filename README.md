@@ -50,7 +50,27 @@ The base model can be downloaded from [HuggingFace](https://huggingface.co/oomic
 | `total_number_of_parameters`                 |  285M |           650M |    2.1B |
 
 
+## Fine-tune DNAZEN on GUE
 
+Run the following command the fine-tune DNAZEN on downstream tasks. You may want to change the value of `$model_path`, `$data_path`, and `$output_path` accordingly.
+
+```bash
+python finetune.py \
+    --model_name_or_path $model_path \
+    --data_path  $data_path/prom/prom_300_all \
+    --per_device_train_batch_size 8 \
+    --per_device_eval_batch_size 8 \
+    --gradient_accumulation_steps 1 \
+    --learning_rate 5e-5 \
+    --num_train_epochs 5 \
+    --save_total_limit 5 \
+    --fp16 \
+    --output_dir $output_path \
+    --eval_strategy epoch \
+    --save_strategy epoch \
+    --warmup_steps 50 \
+    --overwrite_output_dir True
+```
 
 
 
